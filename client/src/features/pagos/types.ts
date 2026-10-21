@@ -61,6 +61,16 @@ export interface CuotaPorPagar {
   devuelto_por: string | null
   /** La mora vigente de la cuota o, si no hay, la última rechazada. */
   mora: MoraResumen | null
+  /** El pedido pendiente del gerente para pagarla. */
+  pedido: PedidoResumen | null
+}
+
+export interface PedidoResumen {
+  id: string
+  asistente_id: string
+  asistente: string
+  nota: string | null
+  pedido_en: string
 }
 
 export interface MoraResumen {
@@ -155,4 +165,23 @@ export interface NuevoPago {
 export interface BloqueoPagos {
   asistente_id: string
   bloqueado_en: string
+}
+
+/** El gerente pidió a una asistente pagar una cuota; sigue pendiente mientras falte pagarla. */
+export interface Pedido extends PedidoResumen {
+  deuda_id: string
+  concepto: string
+  cuota: number
+  cuotas: number
+  /** En soles: el importe de la cuota. */
+  importe: string
+  vence_el: string
+  vencida_hace: number | null
+}
+
+export interface NuevoPedido {
+  deuda_id: string
+  cuota: number
+  asistente_id: string
+  nota: string | null
 }
