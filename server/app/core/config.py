@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Actualizaciones de «Mi cuenta» (datos y usuario), que pueden pedir la contraseña actual.
     limite_actualizacion_cuenta: int = Field(default=10, ge=1)
     ventana_actualizacion_cuenta_segundos: int = Field(default=900, ge=1)
+    # Altas, bloqueos, eliminaciones y recuperaciones de asistentes de un mismo gerente.
+    limite_gestion_equipo: int = Field(default=30, ge=1)
+    ventana_gestion_equipo_segundos: int = Field(default=3600, ge=1)
 
     @field_validator("clave_cifrado_datos", "clave_huella_datos")
     @classmethod

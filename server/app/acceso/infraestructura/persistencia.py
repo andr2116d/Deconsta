@@ -13,13 +13,18 @@ from app.acceso.dominio.cuenta import FichaPersonal
 from app.acceso.dominio.datos_personales import DatosPersonales, TipoDocumento
 from app.acceso.dominio.errores import DatosDuplicados
 from app.acceso.dominio.incorporacion import DocumentoLegal, Seccion, TipoDocumentoLegal
-from app.acceso.dominio.modelos import EventoAuditoria, Rol, Sesion, Usuario
+from app.acceso.dominio.modelos import CausaBloqueo, EventoAuditoria, Rol, Sesion, Usuario
 from app.acceso.infraestructura.cifrado import CifradorDatos
 
 COLUMNAS_USUARIO = """
     id, rol, gerente_id, nombre_usuario, nombres_cifrado, contrasena_hash,
     debe_cambiar_contrasena, contrasena_actualizada_en, ultimo_ingreso_en,
-    intentos_fallidos, bloqueada_en
+    intentos_fallidos, bloqueada_en, causa_bloqueo, eliminada_en, datos_confirmados_en
+"""
+
+COLUMNAS_FICHA = """
+    nombres_cifrado, apellidos_cifrado, correo_cifrado, telefono_cifrado, tipo_documento,
+    numero_documento_cifrado, nombre_recibos_cifrado, cargo
 """
 
 CAMPOS_DUPLICADOS = {
@@ -66,6 +71,9 @@ class RepositorioUsuariosSql:
             ultimo_ingreso_en=fila.ultimo_ingreso_en,
             intentos_fallidos=fila.intentos_fallidos,
             bloqueada_en=fila.bloqueada_en,
+            causa_bloqueo=CausaBloqueo(fila.causa_bloqueo) if fila.causa_bloqueo else None,
+            eliminada_en=fila.eliminada_en,
+            datos_confirmados_en=fila.datos_confirmados_en,
         )
 
     def _buscar(self, condicion: str, parametros: dict[str, Any], bloquear: bool) -> Usuario | None:
@@ -97,7 +105,10 @@ class RepositorioUsuariosSql:
                     contrasena_actualizada_en = :contrasena_actualizada_en,
                     ultimo_ingreso_en = :ultimo_ingreso_en,
                     intentos_fallidos = :intentos_fallidos,
-                    bloqueada_en = :bloqueada_en
+                    bloqueada_en = :bloqueada_en,
+                    causa_bloqueo = :causa_bloqueo,
+                    eliminada_en = :eliminada_en,
+                    datos_confirmados_en = :datos_confirmados_en
                 WHERE id = :id
                 """
             ),
@@ -109,8 +120,38 @@ class RepositorioUsuariosSql:
                 "ultimo_ingreso_en": usuario.ultimo_ingreso_en,
                 "intentos_fallidos": usuario.intentos_fallidos,
                 "bloqueada_en": usuario.bloqueada_en,
+                "causa_bloqueo": usuario.causa_bloqueo.value if usuario.causa_bloqueo else None,
+                "eliminada_en": usuario.eliminada_en,
+                "datos_confirmados_en": usuario.datos_confirmados_en,
             },
         )
+
+    def por_documento(self, tipo: TipoDocumento, numero: str) -> list[Usuario]:
+        filas = self._conexion.execute(
+            text(
+                f"SELECT {COLUMNAS_USUARIO} FROM usuario"
+                " WHERE tipo_documento = :tipo AND numero_documento_huella = :huella"
+                " ORDER BY creado_en DESC"
+            ),
+            {"tipo": tipo.value, "huella": self._cifrador.huella(f"{tipo.value}:{numero}")},
+        ).all()
+        return [u for u in map(self._usuario, filas) if u is not None]
+
+    def asistentes_de(self, gerente_id: UUID) -> list[tuple[Usuario, FichaPersonal]]:
+        filas = self._conexion.execute(
+            text(
+                f"SELECT {COLUMNAS_USUARIO}, {COLUMNAS_FICHA} FROM usuario"
+                " WHERE gerente_id = :gerente_id AND eliminada_en IS NULL"
+                " ORDER BY creado_en"
+            ),
+            {"gerente_id": gerente_id},
+        ).all()
+        resultado = []
+        for fila in filas:
+            usuario = self._usuario(fila)
+            assert usuario is not None
+            resultado.append((usuario, self._ficha_de(fila, usuario.id)))
+        return resultado
 
     def _cifrar(self, campo: str, valor: str | None, usuario_id: UUID) -> bytes | None:
         return self._cifrador.cifrar(valor, contexto(campo, usuario_id)) if valor else None
@@ -122,7 +163,7 @@ class RepositorioUsuariosSql:
             "nombres": self._cifrar("nombres", datos.nombres, usuario_id),
             "apellidos": self._cifrar("apellidos", datos.apellidos, usuario_id),
             "correo": self._cifrar("correo", datos.correo, usuario_id),
-            "correo_huella": self._cifrador.huella(datos.correo),
+            "correo_huella": self._cifrador.huella(datos.correo) if datos.correo else None,
             "telefono": self._cifrar("telefono", datos.telefono, usuario_id),
             "tipo_documento": datos.tipo_documento.value,
             "numero_documento": self._cifrar(
@@ -144,13 +185,14 @@ class RepositorioUsuariosSql:
                         nombres_cifrado, apellidos_cifrado, correo_cifrado, correo_huella,
                         telefono_cifrado, tipo_documento, numero_documento_cifrado,
                         numero_documento_huella, nombre_recibos_cifrado, cargo,
-                        debe_cambiar_contrasena, contrasena_actualizada_en
+                        debe_cambiar_contrasena, contrasena_actualizada_en, datos_confirmados_en
                     ) VALUES (
                         :id, :rol, :gerente_id, :nombre_usuario, :contrasena_hash,
                         :nombres, :apellidos, :correo, :correo_huella,
                         :telefono, :tipo_documento, :numero_documento,
                         :numero_documento_huella, :nombre_recibos, :cargo,
-                        :debe_cambiar_contrasena, :contrasena_actualizada_en
+                        :debe_cambiar_contrasena, :contrasena_actualizada_en,
+                        :datos_confirmados_en
                     )
                     """
                 ),
@@ -163,6 +205,7 @@ class RepositorioUsuariosSql:
                     "cargo": cargo,
                     "debe_cambiar_contrasena": usuario.debe_cambiar_contrasena,
                     "contrasena_actualizada_en": usuario.contrasena_actualizada_en,
+                    "datos_confirmados_en": usuario.datos_confirmados_en,
                     **self._columnas_datos(usuario.id, datos),
                 },
             )
@@ -172,20 +215,7 @@ class RepositorioUsuariosSql:
                 raise
             raise duplicado from error
 
-    def ficha(self, usuario_id: UUID) -> FichaPersonal | None:
-        fila = self._conexion.execute(
-            text(
-                """
-                SELECT nombres_cifrado, apellidos_cifrado, correo_cifrado, telefono_cifrado,
-                    tipo_documento, numero_documento_cifrado, nombre_recibos_cifrado, cargo
-                FROM usuario WHERE id = :id
-                """
-            ),
-            {"id": usuario_id},
-        ).one_or_none()
-        if fila is None:
-            return None
-
+    def _ficha_de(self, fila: Row[Any], usuario_id: UUID) -> FichaPersonal:
         def descifrar(campo: str, valor: bytes | None) -> str | None:
             return self._cifrador.descifrar(valor, contexto(campo, usuario_id)) if valor else None
 
@@ -193,13 +223,19 @@ class RepositorioUsuariosSql:
         datos = DatosPersonales(
             nombres=descifrar("nombres", fila.nombres_cifrado) or "",
             apellidos=descifrar("apellidos", fila.apellidos_cifrado) or "",
-            correo=descifrar("correo", fila.correo_cifrado) or "",
+            correo=descifrar("correo", fila.correo_cifrado),
             tipo_documento=TipoDocumento(fila.tipo_documento),
             numero_documento=descifrar("numero_documento", fila.numero_documento_cifrado) or "",
             telefono=descifrar("telefono", fila.telefono_cifrado),
             nombre_recibos=descifrar("nombre_recibos", fila.nombre_recibos_cifrado),
         )
         return FichaPersonal(datos, fila.cargo)
+
+    def ficha(self, usuario_id: UUID) -> FichaPersonal | None:
+        fila = self._conexion.execute(
+            text(f"SELECT {COLUMNAS_FICHA} FROM usuario WHERE id = :id"), {"id": usuario_id}
+        ).one_or_none()
+        return None if fila is None else self._ficha_de(fila, usuario_id)
 
     def actualizar_datos(self, usuario_id: UUID, datos: DatosPersonales) -> None:
         try:

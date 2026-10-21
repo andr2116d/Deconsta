@@ -10,13 +10,11 @@ Con un paso pendiente, las rutas de trabajo responden 403 INCORPORACION_PENDIENT
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Request, Response, status
 
 from app.acceso.infraestructura.http.dependencias import (
     ContenedorDep,
-    GerenteDep,
     OrigenDep,
     SesionDep,
     SesionHabilitadaDep,
@@ -24,8 +22,6 @@ from app.acceso.infraestructura.http.dependencias import (
 from app.acceso.infraestructura.http.esquemas import (
     AceptacionEntrada,
     CambioContrasenaEntrada,
-    DesbloqueoEntrada,
-    DesbloqueoSalida,
     DocumentoSalida,
     ErrorSalida,
     EspacioSalida,
@@ -106,17 +102,3 @@ def espacio(sesion: SesionHabilitadaDep) -> EspacioSalida:
     """Punto de entrada al espacio de trabajo. Solo responde a cuentas que completaron su
     incorporación; los módulos de pagos todavía no están disponibles."""
     return EspacioSalida(usuario=UsuarioSalida.desde(sesion.usuario), disponible=False)
-
-
-@router.post("/asistentes/{asistente_id}/desbloqueo", responses=ERRORES)
-def desbloquear_asistente(
-    asistente_id: UUID,
-    sesion: GerenteDep,
-    contenedor: ContenedorDep,
-    datos: DesbloqueoEntrada | None = None,
-) -> DesbloqueoSalida:
-    motivo = datos.motivo if datos else None
-    asistente = contenedor.desbloquear_asistente.ejecutar(sesion, asistente_id, motivo)
-    return DesbloqueoSalida(
-        id=asistente.id, nombre_usuario=asistente.nombre_usuario, bloqueada=asistente.bloqueada
-    )

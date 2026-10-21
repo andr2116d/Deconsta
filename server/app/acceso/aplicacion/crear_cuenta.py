@@ -15,7 +15,12 @@ from app.acceso.dominio.modelos import (
     nombre_usuario_valido,
     normalizar_nombre_usuario,
 )
-from app.acceso.dominio.puertos import FabricaUnidadDeTrabajo, ProtectorContrasenas, Reloj
+from app.acceso.dominio.puertos import (
+    FabricaUnidadDeTrabajo,
+    ProtectorContrasenas,
+    Reloj,
+    UnidadDeTrabajo,
+)
 
 # Sin caracteres que se confunden al dictarlos o copiarlos (0/O, 1/l/I).
 ALFABETO_TEMPORAL = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -43,6 +48,25 @@ def sugerir_nombre_usuario(nombres: str, apellidos: str) -> str:
         return "".join(c for c in sin_tildes.lower() if c.isalnum())
 
     return f"{simple(nombres.split()[0])}.{simple(apellidos.split()[0])}"[:36]
+
+
+def elegir_nombre_usuario(
+    uow: UnidadDeTrabajo, solicitado: str | None, datos: DatosPersonales
+) -> str:
+    """El usuario pedido (validado y libre) o uno generado a partir del nombre."""
+    if solicitado:
+        nombre = normalizar_nombre_usuario(solicitado)
+        if not nombre_usuario_valido(nombre):
+            raise DatosInvalidos(campos={"nombre_usuario": REGLA_NOMBRE_USUARIO})
+        if uow.usuarios.existe_nombre_usuario(nombre):
+            raise DatosInvalidos(campos={"nombre_usuario": "Ese usuario ya está en uso."})
+        return nombre
+    base = sugerir_nombre_usuario(datos.nombres, datos.apellidos)
+    nombre, sufijo = base, 1
+    while uow.usuarios.existe_nombre_usuario(nombre):
+        sufijo += 1
+        nombre = f"{base}{sufijo}"
+    return nombre
 
 
 class CrearCuenta:
@@ -78,19 +102,7 @@ class CrearCuenta:
                     )
                 gerente_id = gerente.id
 
-            if nombre_usuario:
-                nombre = normalizar_nombre_usuario(nombre_usuario)
-                if not nombre_usuario_valido(nombre):
-                    raise DatosInvalidos(campos={"nombre_usuario": REGLA_NOMBRE_USUARIO})
-                if uow.usuarios.existe_nombre_usuario(nombre):
-                    raise DatosInvalidos(campos={"nombre_usuario": "Ese usuario ya está en uso."})
-            else:
-                base = sugerir_nombre_usuario(datos.nombres, datos.apellidos)
-                nombre, sufijo = base, 1
-                while uow.usuarios.existe_nombre_usuario(nombre):
-                    sufijo += 1
-                    nombre = f"{base}{sufijo}"
-
+            nombre = elegir_nombre_usuario(uow, nombre_usuario, datos)
             contrasena = generar_contrasena_temporal(nombre)
             ahora = self._reloj()
             usuario = Usuario(
@@ -105,6 +117,8 @@ class CrearCuenta:
                 ultimo_ingreso_en=None,
                 intentos_fallidos=0,
                 bloqueada_en=None,
+                # Quien la crea por comando ya registra todos sus datos, correo incluido.
+                datos_confirmados_en=ahora,
             )
             uow.usuarios.agregar(usuario, datos, cargo=cargo)
             uow.auditoria.registrar(

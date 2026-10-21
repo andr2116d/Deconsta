@@ -1,5 +1,6 @@
 from app.acceso.aplicacion.autenticar import SesionActiva
 from app.acceso.aplicacion.limites import LimitesAcceso, exigir_cupo
+from app.acceso.aplicacion.pasos import pasos_de
 from app.acceso.dominio import politica_contrasena
 from app.acceso.dominio.errores import (
     ContrasenaActualIncorrecta,
@@ -8,7 +9,6 @@ from app.acceso.dominio.errores import (
     ErrorAcceso,
     NoAutenticado,
 )
-from app.acceso.dominio.incorporacion import pasos_pendientes
 from app.acceso.dominio.modelos import Accion, EventoAuditoria
 from app.acceso.dominio.puertos import (
     FabricaUnidadDeTrabajo,
@@ -40,7 +40,7 @@ class CambiarContrasena:
         with self._unidad() as uow:
             ahora = self._reloj()
             usuario = uow.usuarios.por_id(sesion.usuario.id, bloquear=True)
-            if usuario is None or usuario.bloqueada:
+            if usuario is None or usuario.bloqueada or usuario.eliminada:
                 raise NoAutenticado()
             incumplidos = politica_contrasena.evaluar(nueva, nombre_usuario=usuario.nombre_usuario)
             if not self._contrasenas.verificar(usuario.contrasena_hash, actual):
@@ -73,7 +73,7 @@ class CambiarContrasena:
                         detalle={"era_inicial": era_inicial, "sesiones_cerradas": cerradas},
                     )
                 )
-                pasos = pasos_pendientes(uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+                pasos = pasos_de(uow, usuario, ahora)
         if fallo is not None:
             raise fallo
         return SesionActiva(sesion.sesion_id, usuario, pasos)

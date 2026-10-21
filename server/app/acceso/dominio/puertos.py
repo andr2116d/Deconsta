@@ -8,7 +8,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from app.acceso.dominio.cuenta import FichaPersonal
-from app.acceso.dominio.datos_personales import DatosPersonales
+from app.acceso.dominio.datos_personales import DatosPersonales, TipoDocumento
 from app.acceso.dominio.incorporacion import DocumentoLegal
 from app.acceso.dominio.modelos import EventoAuditoria, Sesion, Usuario
 
@@ -23,12 +23,22 @@ class RepositorioUsuarios(Protocol):
     def existe_nombre_usuario(self, nombre_usuario: str) -> bool: ...
 
     def guardar(self, usuario: Usuario) -> None:
-        """Persiste el estado de acceso: contraseña, indicadores, contador y bloqueo."""
+        """Persiste el estado de acceso: contraseña, indicadores, contador, bloqueo, eliminación y
+        confirmación de datos."""
         ...
 
     def agregar(
         self, usuario: Usuario, datos: DatosPersonales, *, cargo: str | None = None
     ) -> None: ...
+
+    def por_documento(self, tipo: TipoDocumento, numero: str) -> list[Usuario]:
+        """Todas las cuentas con ese documento, incluidas las eliminadas, de la más reciente a la
+        más antigua."""
+        ...
+
+    def asistentes_de(self, gerente_id: UUID) -> list[tuple[Usuario, FichaPersonal]]:
+        """Asistentes no eliminadas del gerente, con sus datos descifrados."""
+        ...
 
     def ficha(self, usuario_id: UUID) -> FichaPersonal | None:
         """Datos personales descifrados y el cargo de la cuenta."""

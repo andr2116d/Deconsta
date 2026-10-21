@@ -52,7 +52,7 @@ class CuentaPropia:
 
 def _usuario_vigente(uow: UnidadDeTrabajo, sesion: SesionActiva) -> Usuario:
     usuario = uow.usuarios.por_id(sesion.usuario.id, bloquear=True)
-    if usuario is None or usuario.bloqueada:
+    if usuario is None or usuario.bloqueada or usuario.eliminada:
         raise NoAutenticado()
     return usuario
 
@@ -118,7 +118,7 @@ class ConsultarCuenta(_OperacionCuenta):
     def ejecutar(self, sesion: SesionActiva) -> CuentaPropia:
         with self._unidad() as uow:
             usuario = uow.usuarios.por_id(sesion.usuario.id, bloquear=False)
-            if usuario is None or usuario.bloqueada:
+            if usuario is None or usuario.bloqueada or usuario.eliminada:
                 raise NoAutenticado()
             return CuentaPropia(
                 usuario, _ficha(uow, usuario), _cupo(uow, usuario, self._reloj(), self._zona)
