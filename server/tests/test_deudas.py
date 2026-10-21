@@ -286,3 +286,72 @@ def test_cada_cuenta_marca_solo_sus_notificaciones(
 def test_el_flujo_de_avisos_exige_sesion(cliente: TestClient) -> None:
     respuesta = cliente.get("/api/v1/notificaciones/flujo")
     assert (respuesta.status_code, respuesta.json()["code"]) == (401, "NO_AUTENTICADO")
+
+
+CALENDARIO = f"{DEUDAS}/calendario"
+
+
+def calendario(cliente: TestClient, desde: date, hasta: date) -> httpx.Response:
+    return cliente.get(CALENDARIO, params={"desde": desde.isoformat(), "hasta": hasta.isoformat()})
+
+
+def test_el_calendario_muestra_cada_cuota_en_su_dia_y_no_lo_que_ya_no_se_paga(
+    cliente: TestClient, asistente: TestClient, gerente: TestClient
+) -> None:
+    hoy = date.today()
+    ayer, en_un_mes = hoy - timedelta(days=1), hoy + timedelta(days=30)
+    cuotas = [
+        {"vence_el": ayer.isoformat(), "importe": "350.00"},
+        {"vence_el": en_un_mes.isoformat(), "importe": "362.75"},
+    ]
+    prestamo = nueva(asistente, 20, concepto="Préstamo", cuotas=cuotas)["deuda"]
+    dobles(cliente).revisor.datos = replace(LEIDO, periodo="2026-10")
+    anulada = nueva(asistente, 21, concepto="Luz anulada")["deuda"]
+    gerente.post(f"{DEUDAS}/{anulada['id']}/anulacion", json={"motivo": "Ya se pagó"})
+
+    respuesta = calendario(gerente, hoy - timedelta(days=7), hoy + timedelta(days=31))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["hoy"] == hoy.isoformat()
+    assert [(v["concepto"], v["vence_el"], v["importe"], v["cuota"], v["cuotas"])
+            for v in cuerpo["vencimientos"]] == [
+        ("Préstamo", ayer.isoformat(), "350.00", 1, 2),
+        ("Préstamo", en_un_mes.isoformat(), "362.75", 2, 2),
+    ]  # fmt: skip
+    assert cuerpo["vencimientos"][0]["deuda_id"] == prestamo["id"]
+    # Fuera del rango no aparece la otra cuota.
+    solo_pasado = calendario(gerente, hoy - timedelta(days=7), hoy).json()["vencimientos"]
+    assert [v["cuota"] for v in solo_pasado] == [1]
+
+
+def test_cada_cuenta_ve_en_el_calendario_solo_lo_que_le_corresponde(
+    cliente: TestClient, asistente: TestClient, gerente: TestClient, equipo: Equipo
+) -> None:
+    nueva(asistente, 22, concepto="De la asistente")
+    dobles(cliente).revisor.datos = replace(LEIDO, periodo="2026-10")
+    nueva(gerente, 23, concepto="Del gerente")
+    otro = sesion(cliente, equipo.otro_gerente)
+    desde, hasta = date.today(), date.today() + timedelta(days=30)
+
+    def conceptos(cuenta: TestClient) -> set[str]:
+        return {v["concepto"] for v in calendario(cuenta, desde, hasta).json()["vencimientos"]}
+
+    assert conceptos(gerente) == {"De la asistente", "Del gerente"}
+    assert conceptos(asistente) == {"De la asistente"}
+    assert conceptos(otro) == set()
+
+
+def test_el_calendario_exige_un_rango_valido_y_sesion(
+    cliente: TestClient, gerente: TestClient
+) -> None:
+    hoy = date.today()
+    invertido = calendario(gerente, hoy, hoy - timedelta(days=1))
+    assert (invertido.status_code, invertido.json()["code"]) == (422, "DATOS_INVALIDOS")
+    assert set(invertido.json()["fields"]) == {"hasta"}
+    largo = calendario(gerente, hoy, hoy + timedelta(days=62))
+    assert (largo.status_code, set(largo.json()["fields"])) == (422, {"hasta"})
+    sin_fechas = gerente.get(CALENDARIO)
+    assert (sin_fechas.status_code, sin_fechas.json()["code"]) == (422, "CAMPOS_OBLIGATORIOS")
+    gerente.cookies.clear()
+    assert calendario(gerente, hoy, hoy).status_code == 401
