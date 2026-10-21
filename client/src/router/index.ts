@@ -41,7 +41,8 @@ const router = createRouter({
       meta: { titulo: 'Tu espacio', requiereSesion: true },
       children: [{ path: '', redirect: { name: 'inicio' } }, ...rutasDelEspacio()],
     },
-    { path: '/:ruta(.*)*', redirect: { name: 'inicio' } },
+    // Con params vacíos: si no, Vue Router lleva el de la ruta desconocida a «inicio» y avisa.
+    { path: '/:ruta(.*)*', redirect: { name: 'inicio', params: {} } },
   ],
 })
 
