@@ -15,6 +15,10 @@ export default defineConfig({
     },
   },
   server: {
+    // Siempre el mismo puerto: si está ocupado (otro Vite viejo), falla en vez de mudarse a otro y
+    // dejar la pantalla apuntando a lo que ya corría.
+    port: 5173,
+    strictPort: true,
     // La API se sirve en el mismo origen que la SPA: la cookie de sesión es SameSite=Strict y
     // en producción el proxy (Caddy) cumple el mismo papel. vite preview hereda este proxy.
     proxy: {
