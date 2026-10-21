@@ -3,23 +3,37 @@ import { descargar, enviarFormulario, enviarJson, solicitar } from '@/shared/api
 import type {
   BloqueoPagos,
   Comprobante,
+  EstadoMora,
   EstadoPago,
+  Mora,
+  MoraDetalle,
+  NuevaMora,
   NuevoPago,
   Pago,
   PagoDetalle,
   PorPagar,
+  Proposito,
 } from '../types'
 
 const comprobante = (id: string) => `/pagos/comprobantes/${encodeURIComponent(id)}`
 
 export const listarPorPagar = () => solicitar<PorPagar>('/pagos/por-pagar')
 
-/** Sube el voucher de una cuota; el backend responde «analizando» y lo compara con la cuota. */
-export function subirComprobante(archivo: File, deudaId: string, cuota: number) {
+/**
+ * Sube el voucher de una cuota o, con el propósito mora, la prueba de su mora. El backend responde
+ * «analizando» y lo compara con la cuota.
+ */
+export function subirComprobante(
+  archivo: File,
+  deudaId: string,
+  cuota: number,
+  proposito: Proposito = 'pago',
+) {
   const datos = new FormData()
   datos.append('archivo', archivo, archivo.name)
   datos.append('deuda_id', deudaId)
   datos.append('cuota', String(cuota))
+  datos.append('proposito', proposito)
   return enviarFormulario<Comprobante>('/pagos/comprobantes', datos)
 }
 
@@ -47,3 +61,18 @@ export const listarBloqueosPagos = () => solicitar<BloqueoPagos[]>('/registro-pa
 
 export const levantarBloqueoPagos = (asistenteId: string) =>
   enviarJson<void>(`/registro-pagos/bloqueos/${encodeURIComponent(asistenteId)}/levantamiento`)
+
+const mora = (id: string, accion = '') =>
+  `/pagos/moras/${encodeURIComponent(id)}${accion ? `/${accion}` : ''}`
+
+export const declararMora = (datos: NuevaMora) => enviarJson<Mora>('/pagos/moras', datos)
+
+export const listarMoras = (estado?: EstadoMora) =>
+  solicitar<Mora[]>(estado ? `/pagos/moras?estado=${estado}` : '/pagos/moras')
+
+export const consultarMora = (id: string) => solicitar<MoraDetalle>(mora(id))
+
+export const aprobarMora = (id: string) => enviarJson<MoraDetalle>(mora(id, 'aprobacion'))
+
+export const rechazarMora = (id: string, motivo: string) =>
+  enviarJson<MoraDetalle>(mora(id, 'rechazo'), { motivo })

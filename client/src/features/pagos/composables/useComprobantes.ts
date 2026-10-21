@@ -4,7 +4,7 @@ import { errorArchivo } from '@/features/deudas/composables/useAnalisisDocumento
 import { ErrorApi } from '@/shared/api/http'
 
 import { consultarComprobante, subirComprobante } from '../api/pagos'
-import type { Comprobante } from '../types'
+import type { Comprobante, Proposito } from '../types'
 
 export type EtapaVoucher = 'subiendo' | 'analizando' | 'terminado' | 'error'
 
@@ -39,7 +39,11 @@ function errorDe(causa: unknown): ErrorApi {
  * Los vouchers de una cuota: cada uno se sube y se espera su análisis por separado. Quitar uno o
  * salir de la pantalla deja de esperarlo: su respuesta tardía nunca pisa a otro.
  */
-export function useComprobantes(deudaId: () => string, cuota: () => number) {
+export function useComprobantes(
+  deudaId: () => string,
+  cuota: () => number,
+  proposito: Proposito = 'pago',
+) {
   const vouchers = reactive<Voucher[]>([])
   const vigentes = new Set<number>()
   let siguiente = 0
@@ -96,7 +100,7 @@ export function useComprobantes(deudaId: () => string, cuota: () => number) {
       return
     }
     try {
-      const subido = await subirComprobante(archivo, deudaId(), cuota())
+      const subido = await subirComprobante(archivo, deudaId(), cuota(), proposito)
       if (!vigentes.has(clave)) return
       voucher.comprobante = subido
       voucher.etapa = subido.estado === 'analizando' ? 'analizando' : 'terminado'

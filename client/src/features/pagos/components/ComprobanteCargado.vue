@@ -15,7 +15,7 @@ import type { Voucher } from '../composables/useComprobantes'
  * orienta; el backend decide con las mismas señales al registrar el pago.
  */
 const props = defineProps<{ voucher: Voucher; numero: number; bloqueado?: boolean }>()
-const emit = defineEmits<{ quitar: [] }>()
+const emit = defineEmits<{ quitar: []; 'declarar-mora': [] }>()
 
 type Tono = 'proceso' | 'bien' | 'aviso' | 'mal'
 
@@ -70,6 +70,10 @@ const detalle = computed(() => {
     return 'No pudimos terminar de revisarlo. Quítalo y súbelo otra vez en unos minutos.'
   return null
 })
+// Pagó por más en una cuota vencida: el voucher puede servir de prueba de la mora.
+const posibleMora = computed(
+  () => comprobante.value?.senales.some((s) => s.codigo === 'POSIBLE_MORA') ?? false,
+)
 // Lo que conviene que vea: primero lo que impide usarlo, después los avisos.
 const senales = computed(() => {
   const orden: Record<Riesgo, number> = { alto: 0, medio: 1, bajo: 2 }
@@ -153,7 +157,15 @@ const senales = computed(() => {
       </li>
     </ul>
 
-    <div class="mt-2 flex justify-end">
+    <div class="mt-2 flex flex-wrap justify-end gap-2">
+      <BaseBoton
+        v-if="posibleMora"
+        variante="secundario"
+        :deshabilitado="bloqueado"
+        @click="emit('declarar-mora')"
+      >
+        Declarar la mora con este voucher
+      </BaseBoton>
       <BaseBoton
         variante="discreto"
         :deshabilitado="bloqueado"

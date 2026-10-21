@@ -45,6 +45,17 @@ const cuando = computed(() => cuandoVence(props.cuota.vence_el, props.hoy))
         <p class="mt-0.5 text-[11px] text-secundario">
           Se paga en: {{ nombresLugares(cuota.lugares_pago) }}
         </p>
+        <p
+          v-if="cuota.mora && cuota.mora.estado !== 'rechazada'"
+          class="mt-1.5 text-[12px] font-bold"
+          :class="cuota.mora.estado === 'aprobada' ? 'text-exito' : 'text-aviso'"
+        >
+          {{
+            cuota.mora.estado === 'aprobada'
+              ? `Mora aprobada: + ${formatearSoles(cuota.mora.importe)}`
+              : `Mora de ${formatearSoles(cuota.mora.importe)} esperando al gerente`
+          }}
+        </p>
         <p v-if="cuota.devuelto_por" class="mt-1.5 text-[12px] text-error">
           Tu gerente devolvió el pago: {{ cuota.devuelto_por }}
         </p>
