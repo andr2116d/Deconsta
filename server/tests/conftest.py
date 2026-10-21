@@ -2,7 +2,7 @@ import base64
 import os
 import uuid
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import psycopg
@@ -17,6 +17,11 @@ os.environ["MIGRAR_AL_INICIAR"] = "false"
 os.environ["COOKIE_SEGURA"] = "false"
 os.environ["CLAVE_CIFRADO_DATOS"] = base64.b64encode(os.urandom(32)).decode()
 os.environ["CLAVE_HUELLA_DATOS"] = base64.b64encode(os.urandom(32)).decode()
+os.environ["CLAVE_CIFRADO_ARCHIVOS"] = base64.b64encode(os.urandom(32)).decode()
+os.environ["S3_ACCESS_KEY"] = "dev"
+os.environ["S3_SECRET_KEY"] = "devsecret"
+# Ninguna prueba llama a la API de Claude, aunque haya una clave en el entorno.
+os.environ["ANTHROPIC_API_KEY"] = ""
 REDIS_PRUEBAS = os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/15")
 os.environ["REDIS_URL"] = REDIS_PRUEBAS
 
@@ -28,10 +33,21 @@ os.environ["DATABASE_URL"] = URL_PRUEBAS
 
 from app.acceso.dominio.datos_personales import DatosPersonales  # noqa: E402
 from app.acceso.dominio.modelos import Rol  # noqa: E402
-from app.contenedor import Contenedor  # noqa: E402
+from app.contenedor import Contenedor, ahora_utc  # noqa: E402
 from app.core.config import Settings  # noqa: E402
+from app.core.database import crear_motor  # noqa: E402
 from app.core.migraciones import aplicar_pendientes, conninfo  # noqa: E402
+from app.documentos.aplicacion.documentos import AnalizarDocumento  # noqa: E402
+from app.documentos.infraestructura.componentes import Componentes  # noqa: E402
 from app.main import crear_app  # noqa: E402
+from tests.dobles import (  # noqa: E402
+    AlmacenEnMemoria,
+    ColaInmediata,
+    Dobles,
+    LectorDePrueba,
+    PublicadorEnMemoria,
+    RevisorDePrueba,
+)
 
 
 def _admin() -> psycopg.Connection:
@@ -95,6 +111,8 @@ LIMITES_AMPLIOS = {
     "limite_gestion_equipo": 1000,
     "limite_gestion_categorias": 1000,
     "limite_gestion_reglas": 1000,
+    "limite_subida_documentos": 1000,
+    "limite_gestion_deudas": 1000,
 }
 
 FabricaCliente = Callable[..., TestClient]
@@ -103,16 +121,47 @@ FabricaCliente = Callable[..., TestClient]
 @pytest.fixture
 def crear_cliente(base: str, redis_limpio: Redis) -> Iterator[FabricaCliente]:
     contenedores: list[Contenedor] = []
+    motores = []
 
     def fabricar(**ajustes: Any) -> TestClient:
         config = Settings(database_url=base, **{**LIMITES_AMPLIOS, **ajustes})
-        contenedor = Contenedor.crear(config)
+        motor = crear_motor(config.database_url)
+        motores.append(motor)
+        dobles = Dobles(
+            AlmacenEnMemoria(config.clave_archivos),
+            LectorDePrueba(),
+            RevisorDePrueba(),
+            PublicadorEnMemoria(),
+            ColaInmediata(),
+        )
+        componentes = replace(
+            Componentes.crear(config, motor, redis_limpio),
+            almacen=dobles.almacen,
+            lector=dobles.lector,
+            revisor=dobles.revisor,
+            publicador=dobles.publicador,
+        )
+        dobles.cola.analizar = AnalizarDocumento(
+            componentes.unidad,
+            ahora_utc,
+            componentes.publicador,
+            almacen=componentes.almacen,
+            inspector=componentes.inspector,
+            lector=componentes.lector,
+            revisor=componentes.revisor,
+            huellero=componentes.cifrador,
+        )
+        contenedor = Contenedor.crear(config, componentes=componentes, cola=dobles.cola)
         contenedores.append(contenedor)
-        return TestClient(crear_app(config, contenedor))
+        app = crear_app(config, contenedor)
+        app.state.dobles = dobles
+        return TestClient(app)
 
     yield fabricar
     for contenedor in contenedores:
         contenedor.cerrar()
+    for motor in motores:
+        motor.dispose()
 
 
 @pytest.fixture
