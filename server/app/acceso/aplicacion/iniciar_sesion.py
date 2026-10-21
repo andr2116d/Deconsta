@@ -114,7 +114,7 @@ class IniciarSesion:
                         Accion.INGRESO_EXITOSO, actor_id=usuario.id, cuenta_id=usuario.id
                     )
                 )
-                pasos = pasos_pendientes(usuario, uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+                pasos = pasos_pendientes(uow.documentos.hay_sin_aceptar(usuario.id, ahora))
                 resultado = SesionIniciada(token, sesion.expira_en, usuario, primer_ingreso, pasos)
         # El error se lanza después de confirmar: el contador y la auditoría deben quedar guardados.
         if fallo is not None:

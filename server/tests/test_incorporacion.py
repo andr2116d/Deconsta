@@ -1,4 +1,4 @@
-"""Flujo del primer ingreso: contraseña temporal, documentos legales y entrada al espacio."""
+"""Primer ingreso: documentos legales, recordatorio de la contraseña y entrada al espacio."""
 
 from fastapi.testclient import TestClient
 
@@ -44,23 +44,16 @@ def pendiente(respuesta) -> list[str]:
     return respuesta.json()["pending_steps"]
 
 
-def test_el_primer_ingreso_exige_cada_paso_en_orden(cliente: TestClient, equipo: Equipo) -> None:
+def test_el_primer_ingreso_exige_los_documentos_y_solo_recuerda_la_contrasena(
+    cliente: TestClient, equipo: Equipo
+) -> None:
     asistente = equipo.asistente
     ingreso = ingresar(cliente, asistente.usuario, asistente.contrasena)
-    assert ingreso["pasos_pendientes"] == ["cambiar_contrasena"]
+    assert ingreso["pasos_pendientes"] == ["aceptar_documentos"]
+    assert ingreso["debe_cambiar_contrasena"] is True
     assert asistente.contrasena not in str(ingreso)
 
-    # Ni el espacio ni la aceptación se alcanzan llamando a la API directamente.
-    assert pendiente(cliente.get(ESPACIO)) == ["cambiar_contrasena"]
-    assert pendiente(cliente.post(ACEPTACION, json=VIGENTES)) == ["cambiar_contrasena"]
-
-    # Un cambio rechazado no avanza el paso.
-    assert cambiar(cliente, asistente.contrasena, "corta1").status_code == 422
-    assert cliente.get("/api/v1/auth/me").json()["pasos_pendientes"] == ["cambiar_contrasena"]
-
-    cambio = cambiar(cliente, asistente.contrasena)
-    assert cambio.status_code == 200
-    assert cambio.json()["pasos_pendientes"] == ["aceptar_documentos"]
+    # El espacio no se alcanza llamando a la API directamente.
     assert pendiente(cliente.get(ESPACIO)) == ["aceptar_documentos"]
 
     # Leer los documentos no cuenta como aceptarlos.
@@ -72,14 +65,23 @@ def test_el_primer_ingreso_exige_cada_paso_en_orden(cliente: TestClient, equipo:
     assert all(d["secciones"] for d in documentos)
     assert pendiente(cliente.get(ESPACIO)) == ["aceptar_documentos"]
 
+    # Con la contraseña temporal se acepta y se entra; el cambio queda como recordatorio.
     aceptacion = cliente.post(ACEPTACION, json=VIGENTES)
     assert aceptacion.status_code == 200
     assert aceptacion.json()["pasos_pendientes"] == []
+    assert aceptacion.json()["debe_cambiar_contrasena"] is True
     assert cliente.get(ESPACIO).json() == {
         "usuario": ingreso["usuario"],
         "disponible": False,
     }
     assert all(d["aceptado_en"] for d in cliente.get(DOCUMENTOS).json())
+
+    # Cambiarla después apaga el recordatorio sin volver a pedir nada.
+    cambio = cambiar(cliente, asistente.contrasena)
+    assert cambio.status_code == 200
+    assert cambio.json()["debe_cambiar_contrasena"] is False
+    assert cambio.json()["pasos_pendientes"] == []
+    assert cliente.get(ESPACIO).status_code == 200
 
 
 def test_la_aceptacion_queda_registrada_una_sola_vez(cliente: TestClient, equipo: Equipo) -> None:

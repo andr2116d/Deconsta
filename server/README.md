@@ -60,10 +60,12 @@ Imprime el id, el usuario y una contraseña temporal. `--tipo-documento` acepta 
 
 ## Primer ingreso
 
-Antes de entrar a su espacio, cada cuenta completa en orden: cambiar la contraseña temporal y
-aceptar los términos de uso y la política de privacidad vigentes. La sesión informa lo que falta
-en `pasos_pendientes`; mientras quede algo, las rutas de trabajo (`GerenteDep`,
-`SesionHabilitadaDep`) responden 403 `INCORPORACION_PENDIENTE`.
+Antes de entrar a su espacio, cada cuenta acepta los términos de uso y la política de privacidad
+vigentes. La sesión informa lo que falta en `pasos_pendientes`; mientras quede algo, las rutas de
+trabajo (`GerenteDep`, `SesionHabilitadaDep`) responden 403 `INCORPORACION_PENDIENTE`.
+
+Cambiar la contraseña temporal no bloquea el espacio: la sesión lo indica con
+`debe_cambiar_contrasena` y el client lo recuerda en cada ingreso hasta que se cambie.
 
 Los documentos viven en `documento_legal` con su versión y no se editan. Para cambiar un texto,
 crea una migración que inserte la versión siguiente (puede llevar `vigente_desde` futura): desde
