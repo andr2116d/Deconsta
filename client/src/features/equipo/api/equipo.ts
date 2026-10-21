@@ -20,3 +20,6 @@ export const eliminarAsistente = (id: string, motivo: string | null) =>
 
 export const recuperarAsistente = (id: string) =>
   enviarJson<Credenciales>(ruta(id, 'recuperacion'), {})
+
+export const restablecerContrasena = (id: string, motivo: string | null) =>
+  enviarJson<Credenciales>(ruta(id, 'restablecimiento'), { motivo })

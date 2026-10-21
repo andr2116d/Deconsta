@@ -48,6 +48,12 @@ export const useEquipoStore = defineStore('equipo', () => {
     return credenciales
   }
 
+  async function restablecer(id: string, motivo: string | null): Promise<Credenciales> {
+    const credenciales = await api.restablecerContrasena(id, motivo)
+    reemplazar(credenciales.asistente)
+    return credenciales
+  }
+
   const bloquear = async (id: string, motivo: string | null) =>
     reemplazar(await api.bloquearAsistente(id, motivo))
 
@@ -70,6 +76,7 @@ export const useEquipoStore = defineStore('equipo', () => {
     cargar,
     registrar,
     recuperar,
+    restablecer,
     bloquear,
     desbloquear,
     eliminar,

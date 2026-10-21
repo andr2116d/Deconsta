@@ -7,13 +7,23 @@ import BaseDialogo from '@/shared/components/BaseDialogo.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 import { useCopiar } from '@/shared/composables/useCopiar'
 
-import type { Credenciales } from '../types'
+import type { Credenciales, MotivoCredenciales } from '../types'
 
 /**
- * Entrega el usuario y la contraseña temporal de una asistente nueva o recuperada. Es la única vez
+ * Entrega el usuario y la contraseña temporal de una asistente nueva, recuperada o con la contraseña
+ * restablecida. Es la única vez
  * que se muestran: Deconsta solo guarda el hash de la contraseña.
  */
-const props = defineProps<{ credenciales: Credenciales | null; recuperada?: boolean }>()
+const props = withDefaults(
+  defineProps<{ credenciales: Credenciales | null; motivo?: MotivoCredenciales }>(),
+  { motivo: 'creada' },
+)
+
+const TITULOS: Record<MotivoCredenciales, string> = {
+  creada: 'Cuenta creada.',
+  recuperada: 'Cuenta recuperada.',
+  restablecida: 'Contraseña restablecida.',
+}
 const emit = defineEmits<{ cerrar: [] }>()
 
 const { copiado, fallo, copiar } = useCopiar()
@@ -31,16 +41,16 @@ const ambos = computed(() =>
 </script>
 
 <template>
-  <BaseDialogo
-    :abierto="credenciales !== null"
-    :titulo="recuperada ? 'Cuenta recuperada.' : 'Cuenta creada.'"
-    @cerrar="emit('cerrar')"
-  >
+  <BaseDialogo :abierto="credenciales !== null" :titulo="TITULOS[motivo]" @cerrar="emit('cerrar')">
     <template #icono>
       <BaseIcono nombre="check" class="size-5" />
     </template>
     <template v-if="credenciales">
-      <p class="mt-2 text-[13px] text-secundario">
+      <p v-if="motivo === 'restablecida'" class="mt-2 text-[13px] text-secundario">
+        Entrega a <strong class="text-tinta">{{ nombre }}</strong> su nueva contraseña temporal. La
+        anterior ya no sirve y, al ingresar, se le pedirá cambiarla.
+      </p>
+      <p v-else class="mt-2 text-[13px] text-secundario">
         Entrega a <strong class="text-tinta">{{ nombre }}</strong> estos datos para su primer
         ingreso. Al entrar aceptará las políticas, se le pedirá cambiar la contraseña y confirmará
         sus datos.

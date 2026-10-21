@@ -8,7 +8,7 @@ import { formatearCelular } from '../credenciales'
 import type { Asistente } from '../types'
 
 const props = defineProps<{ asistente: Asistente; ocupada: boolean }>()
-const emit = defineEmits<{ bloquear: []; desbloquear: []; eliminar: [] }>()
+const emit = defineEmits<{ bloquear: []; desbloquear: []; eliminar: []; restablecer: [] }>()
 
 const nombre = computed(() => `${props.asistente.nombres} ${props.asistente.apellidos}`)
 const inicial = computed(() => props.asistente.nombres.trim().slice(0, 1).toUpperCase())
@@ -102,6 +102,10 @@ const ultimoIngreso = computed(() =>
     <p v-if="detalleBloqueo" class="mt-3 text-[12px] text-error">{{ detalleBloqueo }}</p>
 
     <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
+      <BaseBoton variante="discreto" :deshabilitado="ocupada" @click="emit('restablecer')">
+        <BaseIcono nombre="reloj" class="size-4" />
+        Restablecer contraseña
+      </BaseBoton>
       <BaseBoton
         v-if="asistente.bloqueada"
         variante="secundario"
