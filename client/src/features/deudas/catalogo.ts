@@ -52,8 +52,10 @@ export const TIPOS_DOCUMENTO: Record<TipoDocumento, string> = {
   boleta: 'Boleta',
   factura: 'Factura',
   cronograma: 'Cronograma de pagos',
+  estado_cuenta: 'Estado de cuenta',
   papeleta: 'Papeleta',
   tributo: 'Tributo',
+  comprobante_pago: 'Comprobante de pago',
   otro: 'Documento',
 }
 

@@ -1,10 +1,18 @@
 import type { TipoDocumentoTitular } from '@/features/reglas/types'
 
 export type EstadoDocumento =
-  'analizando' | 'listo' | 'ilegible' | 'repetido' | 'rechazado' | 'fallido'
+  'analizando' | 'listo' | 'ilegible' | 'repetido' | 'rechazado' | 'no_es_deuda' | 'fallido'
 
 export type TipoDocumento =
-  'recibo_servicio' | 'boleta' | 'factura' | 'cronograma' | 'papeleta' | 'tributo' | 'otro'
+  | 'recibo_servicio'
+  | 'boleta'
+  | 'factura'
+  | 'cronograma'
+  | 'estado_cuenta'
+  | 'papeleta'
+  | 'tributo'
+  | 'comprobante_pago'
+  | 'otro'
 
 export type Riesgo = 'bajo' | 'medio' | 'alto'
 
