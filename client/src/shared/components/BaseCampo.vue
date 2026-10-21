@@ -4,11 +4,15 @@ import { computed, ref, useId } from 'vue'
 const props = withDefaults(
   defineProps<{
     etiqueta: string
-    tipo?: 'text' | 'password'
+    tipo?: 'text' | 'password' | 'email' | 'tel'
     autocompletar?: string
     error?: string
     ayuda?: string
     deshabilitado?: boolean
+    soloLectura?: boolean
+    /** Nombres propios: el teclado del móvil empieza cada palabra en mayúscula. */
+    capitalizar?: boolean
+    maximo?: number
   }>(),
   {
     tipo: 'text',
@@ -16,6 +20,9 @@ const props = withDefaults(
     error: undefined,
     ayuda: undefined,
     deshabilitado: false,
+    soloLectura: false,
+    capitalizar: false,
+    maximo: undefined,
   },
 )
 
@@ -25,7 +32,7 @@ const entrada = ref<HTMLInputElement>()
 const visible = ref(false)
 
 const tipoActual = computed(() =>
-  props.tipo === 'password' && !visible.value ? 'password' : 'text',
+  props.tipo === 'password' ? (visible.value ? 'text' : 'password') : props.tipo,
 )
 const descripcion = computed(
   () =>
@@ -47,13 +54,15 @@ defineExpose({ enfocar: () => entrada.value?.focus() })
         :type="tipoActual"
         :autocomplete="autocompletar"
         :disabled="deshabilitado"
+        :readonly="soloLectura"
+        :maxlength="maximo"
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="descripcion"
         spellcheck="false"
-        autocapitalize="none"
-        class="min-h-[46px] w-full rounded-[7px] border bg-white px-3 py-2.5 text-[14px] text-tinta transition-colors duration-200 placeholder:text-secundario disabled:bg-fondo"
+        :autocapitalize="capitalizar ? 'words' : 'none'"
+        class="min-h-[46px] w-full rounded-[7px] border bg-white px-3 py-2.5 text-[14px] text-tinta transition-colors duration-200 placeholder:text-secundario read-only:border-borde read-only:bg-fondo read-only:text-secundario disabled:bg-fondo"
         :class="[
-          error ? 'border-error' : 'border-control hover:border-tinta',
+          error ? 'border-error' : 'border-control enabled:read-write:hover:border-tinta',
           tipo === 'password' ? 'pr-20' : '',
         ]"
       />
