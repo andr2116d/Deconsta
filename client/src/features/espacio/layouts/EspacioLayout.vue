@@ -9,7 +9,6 @@ import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 
 import CabeceraEspacio from '../components/CabeceraEspacio.vue'
-import ContextoRol from '../components/ContextoRol.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -113,7 +112,6 @@ onMounted(async () => {
       tabindex="-1"
       class="mx-auto w-full max-w-[1440px] flex-1 min-[1920px]:max-w-[1680px] px-4 pt-6 pb-16 focus:outline-none sm:px-6 lg:px-10 lg:pt-8"
     >
-      <ContextoRol :rol="sesion.usuario.rol" />
       <BaseAviso v-if="aviso" tono="exito" class="mb-6">{{ aviso }}</BaseAviso>
       <RouterView v-slot="{ Component, route: actual }">
         <Transition name="vista" mode="out-in" @after-enter="enfocarTitulo">
