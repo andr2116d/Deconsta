@@ -87,4 +87,12 @@ def analizar_documento(tarea: Task, documento_id: str) -> str | None:
             identificador
         )
         return None
+    except Exception:
+        # Un fallo del motor de lectura o de la IA que no se espera: se registra y el documento
+        # queda «fallido» para que se vuelva a subir, en vez de esperar para siempre.
+        logger.exception("El análisis del documento %s falló de forma inesperada", documento_id)
+        MarcarAnalisisFallido(componentes().unidad, ahora_utc, componentes().publicador).ejecutar(
+            identificador
+        )
+        return None
     return estado.value if estado else None
