@@ -32,13 +32,18 @@ import InsigniaCategoria from './InsigniaCategoria.vue'
  * Crea una categoría (vacía o a partir de una sugerencia) o edita una existente. Avisa antes de
  * enviar lo que puede saberse en el navegador; el backend vuelve a validar todo y decide.
  */
-const props = defineProps<{
-  abierto: boolean
-  /** Categoría a editar; sin ella, se crea una nueva. */
-  categoria?: Categoria | null
-  /** Datos con los que empieza una categoría nueva (una sugerencia). */
-  inicial?: DatosCategoria | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    abierto: boolean
+    /** Categoría a editar; sin ella, se crea una nueva. */
+    categoria?: Categoria | null
+    /** Datos con los que empieza una categoría nueva (una sugerencia). */
+    inicial?: DatosCategoria | null
+    /** Solo el gerente reactiva una categoría archivada con el mismo nombre. */
+    puedeReactivar?: boolean
+  }>(),
+  { categoria: null, inicial: null, puedeReactivar: true },
+)
 const emit = defineEmits<{
   guardada: [categoria: Categoria, creada: boolean]
   reactivar: [id: string]
@@ -199,7 +204,7 @@ const iconosDisponibles = Object.entries(ICONOS) as Array<[IconoCategoria, strin
         ayuda="Por ejemplo: Agua, Luz del local o Tarjeta Visa."
       >
         <BaseBoton
-          v-if="existente"
+          v-if="existente && puedeReactivar"
           variante="secundario"
           class="mt-1 self-start"
           @click="emit('reactivar', existente.id)"

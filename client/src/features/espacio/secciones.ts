@@ -141,11 +141,11 @@ export const SECCIONES: readonly Seccion[] = [
     nombre: 'registrar-deuda',
     ruta: 'registrar-deuda',
     etiqueta: 'Registrar deuda',
-    descripcion:
-      'Registrarás una deuda con su documento, el importe en soles y su fecha de vencimiento.',
+    descripcion: 'Una deuda desde su documento: lo leemos, lo revisamos y llenamos los datos.',
     icono: 'mas',
     ubicacion: 'accion',
     roles: AMBOS,
+    vista: () => import('@/features/deudas/views/RegistrarDeudaView.vue'),
   },
   {
     nombre: 'notificaciones',
