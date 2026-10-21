@@ -57,13 +57,16 @@ const ultimoIngreso = computed(() =>
         </h2>
         <p class="text-[12px] text-secundario">{{ asistente.cargo ?? 'Asistente' }}</p>
       </div>
-      <span
-        class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-bold"
-        :class="estado.clase"
-      >
-        <span aria-hidden="true" class="size-1.5 rounded-full bg-current" />
-        {{ estado.texto }}
-      </span>
+      <!-- En pantallas angostas el estado baja a su propia línea para no cortar el nombre. -->
+      <div class="w-full pl-14 sm:w-auto sm:pl-0">
+        <span
+          class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-bold"
+          :class="estado.clase"
+        >
+          <span aria-hidden="true" class="size-1.5 rounded-full bg-current" />
+          {{ estado.texto }}
+        </span>
+      </div>
     </div>
 
     <dl class="mt-4 grid gap-x-6 gap-y-3 border-y border-borde py-4 text-[12px] sm:grid-cols-2">
