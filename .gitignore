@@ -26,3 +26,10 @@ htmlcov/
 
 # Especificaciones y diseños locales: fuente de verdad en Notion.
 docs/
+
+# Terraform: el estado guarda secretos y nunca va al repositorio.
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/*.tfvars
+infra/**/codigo.tar.gz
