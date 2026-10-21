@@ -18,6 +18,7 @@ src/
     incorporacion/   primer ingreso: aceptación de términos y privacidad, la ventana de la
                      contraseña temporal y, para una asistente nueva, la confirmación de sus datos
     equipo/          Mi equipo: lista, registro, bloqueo, eliminación y recuperación de asistentes
+    categorias/      categorías del espacio: catálogo de colores, íconos y sugerencias
     espacio/         espacio de trabajo: cabecera, pestañas por rol y tarjeta de la cuenta
       layouts/         EspacioLayout, ruta padre de todas las secciones
       secciones.ts     secciones de cada rol; de aquí salen rutas, pestañas y menú
@@ -65,6 +66,17 @@ actualizan la lista al momento.
 En su primer ingreso, la asistente acepta las políticas, puede cambiar su contraseña o posponerlo
 y, como paso obligatorio, confirma sus datos (completa su correo y revisa lo que registró su
 gerente). Hasta entonces no entra a su espacio.
+
+## Categorías
+
+Solo para gerencia, desde «Límites y categorías» en el menú de la cuenta (`/configuracion`). El
+gerente crea categorías desde cero o a partir de una sugerencia (agua, luz, tarjetas…), con nombre,
+descripción opcional (qué recibos van ahí), color e ícono, y ve una vista previa. Puede editarlas,
+archivarlas con un motivo y reactivarlas desde «Archivadas». El formulario avisa mientras se
+escribe si el nombre es muy corto o ya existe, y no deja escribir signos inválidos; el backend
+vuelve a validar todo y su respuesta (por ejemplo, un nombre repetido de una categoría archivada,
+con la opción de reactivarla) se muestra junto al campo. El límite de autorización aún no está
+disponible.
 
 ## Validación de datos personales
 

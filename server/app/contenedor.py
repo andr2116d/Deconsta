@@ -36,6 +36,14 @@ from app.acceso.infraestructura.cifrado import CifradorDatos
 from app.acceso.infraestructura.contrasenas import ProtectorArgon2
 from app.acceso.infraestructura.limitador_redis import LimitadorRedis
 from app.acceso.infraestructura.persistencia import UnidadDeTrabajoSql
+from app.categorias.aplicacion.categorias import (
+    ArchivarCategoria,
+    CrearCategoria,
+    EditarCategoria,
+    ListarCategorias,
+    ReactivarCategoria,
+)
+from app.categorias.infraestructura.persistencia import UnidadCategoriasSql
 from app.core.config import Settings
 from app.core.database import crear_motor
 
@@ -98,6 +106,11 @@ class Contenedor:
     eliminar_asistente: EliminarAsistente
     recuperar_asistente: RecuperarAsistente
     restablecer_contrasena: RestablecerContrasena
+    listar_categorias: ListarCategorias
+    crear_categoria: CrearCategoria
+    editar_categoria: EditarCategoria
+    archivar_categoria: ArchivarCategoria
+    reactivar_categoria: ReactivarCategoria
 
     @classmethod
     def crear(cls, config: Settings) -> "Contenedor":
@@ -115,6 +128,16 @@ class Contenedor:
             return UnidadDeTrabajoSql(motor, cifrador)
 
         equipo = (unidad, contrasenas, limitador, limites, reloj)
+        categorias = (
+            lambda: UnidadCategoriasSql(motor),
+            limitador,
+            Limite(
+                "gestion_categorias",
+                config.limite_gestion_categorias,
+                config.ventana_gestion_categorias_segundos,
+            ),
+            reloj,
+        )
 
         return cls(
             config=config,
@@ -149,6 +172,11 @@ class Contenedor:
             eliminar_asistente=EliminarAsistente(*equipo),
             recuperar_asistente=RecuperarAsistente(*equipo),
             restablecer_contrasena=RestablecerContrasena(*equipo),
+            listar_categorias=ListarCategorias(*categorias),
+            crear_categoria=CrearCategoria(*categorias),
+            editar_categoria=EditarCategoria(*categorias),
+            archivar_categoria=ArchivarCategoria(*categorias),
+            reactivar_categoria=ReactivarCategoria(*categorias),
         )
 
     def cerrar(self) -> None:

@@ -199,6 +199,7 @@ export const SECCIONES: readonly Seccion[] = [
     icono: 'configuracion',
     ubicacion: 'cuenta',
     roles: ['gerente'],
+    vista: () => import('@/features/categorias/views/CategoriasView.vue'),
   },
 ]
 
