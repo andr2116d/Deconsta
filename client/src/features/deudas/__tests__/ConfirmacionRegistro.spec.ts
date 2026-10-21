@@ -12,7 +12,7 @@ const DEUDA: Deuda = {
   tipo_documento: 'recibo_servicio',
   importe: '182.40',
   vence_el: '2026-10-10',
-  cuotas: [{ numero: 1, vence_el: '2026-10-10', importe: '182.40' }],
+  cuotas: [{ numero: 1, vence_el: '2026-10-10', importe: '182.40', pago: null }],
   lugares_pago: ['agente', 'billetera'],
   titular_nombre: null,
   titular_tipo_documento: null,
