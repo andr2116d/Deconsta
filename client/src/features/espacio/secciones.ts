@@ -68,6 +68,7 @@ export const SECCIONES: readonly Seccion[] = [
     icono: 'escudo',
     ubicacion: 'pestana',
     roles: ['gerente'],
+    vista: () => import('@/features/deudas/views/PorAutorizarView.vue'),
   },
   {
     nombre: 'por-verificar',
