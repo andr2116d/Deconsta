@@ -9,18 +9,33 @@ export type Etapa = 'vacio' | 'subiendo' | 'analizando' | 'terminado' | 'error'
 
 export const TAMANO_MAXIMO = 10 * 1024 * 1024
 export const TIPOS_ACEPTADOS = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+const EXTENSIONES_ACEPTADAS = ['pdf', 'jpg', 'jpeg', 'png', 'webp']
+/** Para el selector de archivos: por tipo y por extensión, por si el sistema no informa el tipo. */
+export const ACEPTAR = [...TIPOS_ACEPTADOS, ...EXTENSIONES_ACEPTADAS.map((e) => `.${e}`)].join(',')
+const extension = (nombre: string) => nombre.split('.').pop()?.toLowerCase() ?? ''
 const INTERVALO_MS = 1200
 const ESPERA_MAXIMA_MS = 120_000
 
 const espera = (ms: number) => new Promise((resolver) => setTimeout(resolver, ms))
 
-/** Revisión rápida antes de subir, para no esperar al servidor por un error evidente. */
+/**
+ * Revisión rápida antes de subir, para no esperar al servidor por un error evidente. Algunos
+ * sistemas no informan el tipo del archivo: entonces vale su extensión. El backend lo decide por
+ * su contenido.
+ */
 export function errorArchivo(archivo: File): string | null {
   if (archivo.size === 0) return 'El archivo está vacío. Elige el documento otra vez.'
-  if (archivo.size > TAMANO_MAXIMO)
-    return 'El archivo supera los 10 MB. Sube una foto o un PDF más liviano.'
-  if (!TIPOS_ACEPTADOS.includes(archivo.type))
-    return 'Sube una imagen JPG, PNG o WebP, o un PDF del documento.'
+  if (archivo.size > TAMANO_MAXIMO) {
+    const megas = (archivo.size / 1024 / 1024).toFixed(1)
+    return `El archivo pesa ${megas} MB y el máximo es 10 MB. Sube una foto o un PDF más liviano.`
+  }
+  const ext = extension(archivo.name)
+  if (['heic', 'heif'].includes(ext) || /image\/hei[cf]/.test(archivo.type))
+    return 'Las fotos HEIC del iPhone aún no se aceptan. Compártela como JPG (o toma una captura) y vuelve a subirla.'
+  const aceptado = archivo.type
+    ? TIPOS_ACEPTADOS.includes(archivo.type)
+    : EXTENSIONES_ACEPTADAS.includes(ext)
+  if (!aceptado) return 'Sube una imagen JPG, PNG o WebP, o un PDF del documento.'
   return null
 }
 

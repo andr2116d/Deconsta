@@ -4,7 +4,7 @@ import { computed, ref, useId } from 'vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
-import { TIPOS_ACEPTADOS, type Etapa } from '../composables/useAnalisisDocumento'
+import { ACEPTAR, type Etapa } from '../composables/useAnalisisDocumento'
 
 /**
  * Escenario del documento: se suelta o se elige el archivo, se ve tal cual se subió y, mientras
@@ -23,7 +23,9 @@ const entrada = ref<HTMLInputElement>()
 const encima = ref(false)
 const idAyuda = useId()
 
-const esPdf = computed(() => props.archivo?.type === 'application/pdf')
+const esPdf = computed(
+  () => props.archivo?.type === 'application/pdf' || /\.pdf$/i.test(props.archivo?.name ?? ''),
+)
 const trabajando = computed(() => props.etapa === 'subiendo' || props.etapa === 'analizando')
 const tamano = computed(() => {
   const bytes = props.archivo?.size ?? 0
@@ -60,7 +62,7 @@ function alElegir(evento: Event) {
       class="sr-only"
       tabindex="-1"
       aria-hidden="true"
-      :accept="TIPOS_ACEPTADOS.join(',')"
+      :accept="ACEPTAR"
       @change="alElegir"
     />
 
