@@ -6,6 +6,7 @@ import DialogoCategoria from '@/features/categorias/components/DialogoCategoria.
 import InsigniaCategoria from '@/features/categorias/components/InsigniaCategoria.vue'
 import { useCategoriasStore } from '@/features/categorias/stores/categorias'
 import type { Categoria, DatosCategoria, IconoCategoria } from '@/features/categorias/types'
+import { diasEntre, hoyLocal } from '@/features/calendario/fechas'
 import CampoDocumentoTitular from '@/features/reglas/components/CampoDocumentoTitular.vue'
 import { avisoImporte, filtrarImporte, normalizarImporte } from '@/features/reglas/importes'
 import type { TipoDocumentoTitular } from '@/features/reglas/types'
@@ -16,7 +17,7 @@ import BaseCampo from '@/shared/components/BaseCampo.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
 import { registrarDeuda } from '../api/deudas'
-import { LUGARES_PAGO, TIPOS_DOCUMENTO } from '../catalogo'
+import { LUGARES_PAGO, textoVencida, TIPOS_DOCUMENTO } from '../catalogo'
 import { cuotasPropuestas } from '../cuotas'
 import type { CuotaNueva, Documento, LugarPago, RegistroDeuda } from '../types'
 import TablaCuotas from './TablaCuotas.vue'
@@ -98,6 +99,12 @@ const origen = computed(() => {
   const tipo = TIPOS_DOCUMENTO[propuesta.tipo].toLowerCase()
   const emisor = propuesta.emisor?.replace(/\.+$/, '')
   return emisor ? `tu ${tipo} de ${emisor}` : `tu ${tipo}`
+})
+// Solo orienta: el backend cuenta los días en la zona del espacio.
+const vencidaHace = computed(() => {
+  const vence = datos.en_cuotas ? datos.cuotas[0]?.vence_el : datos.vence_el
+  const dias = vence ? diasEntre(vence, hoyLocal()) : 0
+  return dias > 0 ? dias : null
 })
 const categoriaElegida = computed(() => categorias.activas.find((c) => c.id === datos.categoria_id))
 
@@ -263,6 +270,10 @@ async function enviar() {
           </div>
         </Transition>
       </div>
+      <BaseAviso v-if="vencidaHace" tono="aviso" :titulo="textoVencida(vencidaHace)">
+        Puedes registrarla y pagarla igual. Antes de pagar, confirma con la empresa si cobra mora
+        por los días de retraso.
+      </BaseAviso>
     </section>
 
     <section class="border-b border-borde py-5">

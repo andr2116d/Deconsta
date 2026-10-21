@@ -112,6 +112,8 @@ export interface Deuda {
   creado_en: string
   decidida_en: string | null
   motivo_decision: string | null
+  /** Días desde que venció su primera cuota, contados por el backend; null si no está vencida. */
+  vencida_hace: number | null
 }
 
 export interface DeudaDetalle extends Deuda {

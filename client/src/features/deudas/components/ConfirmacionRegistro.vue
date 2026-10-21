@@ -8,7 +8,7 @@ import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
-import { ESTADOS, formatearFecha, MOTIVOS } from '../catalogo'
+import { ESTADOS, formatearFecha, MOTIVOS, textoVencida } from '../catalogo'
 import type { RegistroDeuda } from '../types'
 
 /** Cierre del registro: qué quedó, en qué estado y qué sigue. */
@@ -62,7 +62,12 @@ const texto = computed(() => {
           {{ deuda.cuotas.length > 1 ? `${deuda.cuotas.length} cuotas` : 'Importe' }}
         </dt>
         <dd class="text-[14px] font-bold">{{ formatearSoles(deuda.importe) }}</dd>
-        <dd class="text-[11px] text-secundario">Vence el {{ formatearFecha(deuda.vence_el) }}</dd>
+        <dd v-if="deuda.vencida_hace" class="text-[11px] font-bold text-error">
+          {{ textoVencida(deuda.vencida_hace) }} · {{ formatearFecha(deuda.vence_el) }}
+        </dd>
+        <dd v-else class="text-[11px] text-secundario">
+          Vence el {{ formatearFecha(deuda.vence_el) }}
+        </dd>
       </div>
       <div>
         <dt class="text-[11px] text-secundario">Estado</dt>
@@ -86,6 +91,15 @@ const texto = computed(() => {
         {{ MOTIVOS[motivo] }}
       </li>
     </ul>
+    <BaseAviso
+      v-if="deuda.vencida_hace && deuda.estado === 'registrada'"
+      tono="aviso"
+      class="mb-6 text-left"
+      titulo="Ya venció: revisa la mora"
+    >
+      Se puede pagar igual. Antes de pagarla, confirma con la empresa si cobra mora por los días de
+      retraso.
+    </BaseAviso>
     <BaseAviso
       v-if="registro.avisos.length"
       tono="aviso"

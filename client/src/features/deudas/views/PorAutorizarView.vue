@@ -12,7 +12,7 @@ import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
 import { consultarDeuda, listarPendientes } from '../api/deudas'
-import { formatearFecha, MOTIVOS } from '../catalogo'
+import { formatearFecha, MOTIVOS, textoVencida } from '../catalogo'
 import DetalleDecision from '../components/DetalleDecision.vue'
 import type { Deuda, DeudaDetalle } from '../types'
 
@@ -162,7 +162,11 @@ onMounted(() => {
                   </span>
                 </span>
                 <small class="mt-1 block text-[11px] text-secundario">
-                  {{ deuda.registrada_por.nombre }} · vence {{ formatearFecha(deuda.vence_el) }}
+                  {{ deuda.registrada_por.nombre }} ·
+                  <span v-if="deuda.vencida_hace" class="font-bold text-error">
+                    {{ textoVencida(deuda.vencida_hace).toLowerCase() }}
+                  </span>
+                  <template v-else>vence {{ formatearFecha(deuda.vence_el) }}</template>
                 </small>
                 <span v-if="deuda.motivos.length" class="mt-2 flex flex-wrap gap-1">
                   <span

@@ -119,6 +119,23 @@ describe('FormularioDeuda', () => {
     expect(formulario.text()).toContain('tu gerente deberá autorizar esta deuda')
   })
 
+  it('una deuda ya vencida se registra igual, con el aviso de la posible mora', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 21, 12))
+    try {
+      const formulario = montar()
+      expect(formulario.text()).not.toContain('mora')
+
+      await formulario.get('#vence-el').setValue('2026-10-10')
+
+      expect(formulario.text()).toContain('Venció hace 11 días')
+      expect(formulario.text()).toContain('si cobra mora')
+      expect(formulario.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('un cronograma abre las cuotas con sus importes distintos', () => {
     const formulario = montar(
       documento({

@@ -14,6 +14,7 @@ import {
   formatearFecha,
   MOTIVOS,
   nombresLugares,
+  textoVencida,
   TIPOS_DOCUMENTO,
 } from '../catalogo'
 import type { DeudaDetalle } from '../types'
@@ -138,7 +139,10 @@ function confirmarMotivo(texto: string) {
         >
           {{ espera ? 'Solo tú puedes autorizarla' : 'Revisión pendiente' }}
         </span>
-        <span>Vence el {{ formatearFecha(deuda.vence_el) }}</span>
+        <span v-if="deuda.vencida_hace" class="font-bold text-error">
+          {{ textoVencida(deuda.vencida_hace) }} · {{ formatearFecha(deuda.vence_el) }}
+        </span>
+        <span v-else>Vence el {{ formatearFecha(deuda.vence_el) }}</span>
       </div>
       <h2
         :id="`deuda-${deuda.id}`"

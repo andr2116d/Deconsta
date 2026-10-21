@@ -95,3 +95,7 @@ const fecha = new Intl.DateTimeFormat('es-PE', {
 
 /** «28 oct 2026». Las fechas de la deuda son días, sin hora: se leen en UTC. */
 export const formatearFecha = (dia: string) => fecha.format(new Date(`${dia}T00:00:00Z`))
+
+/** «Venció ayer», «Venció hace 11 días». */
+export const textoVencida = (dias: number) =>
+  dias === 1 ? 'Venció ayer' : `Venció hace ${dias} días`
