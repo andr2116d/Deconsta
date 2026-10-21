@@ -8,6 +8,7 @@ const anio = new Date().getFullYear()
 
 <template>
   <div
+    data-fondo="acceso"
     class="relative flex min-h-dvh flex-col items-center overflow-hidden bg-acceso px-4 py-6 sm:px-10 sm:py-8"
   >
     <header class="relative z-10 flex w-full items-center justify-between gap-4">

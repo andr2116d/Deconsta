@@ -55,8 +55,16 @@
 
 @layer base {
   html {
+    /* El lienzo toma el color de la pantalla: en macOS e iOS el rebote al final del scroll lo
+       deja ver, y con otro color aparecía una franja blanca. */
+    background-color: var(--color-fondo);
+    overscroll-behavior-y: none;
     font-synthesis: none;
     -webkit-font-smoothing: antialiased;
+  }
+
+  html:has([data-fondo='acceso']) {
+    background-color: var(--color-acceso);
   }
 
   body {
