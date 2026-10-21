@@ -76,15 +76,20 @@ from app.notificaciones.dominio.puertos import SuscriptorAvisos
 from app.notificaciones.infraestructura.avisos_redis import SuscriptorRedis
 from app.notificaciones.infraestructura.persistencia import UnidadNotificacionesSql
 from app.pagos.aplicacion.pagos import (
+    AprobarMora,
     ConfirmarPago,
     ConsultarComprobante,
+    ConsultarMora,
     ConsultarPago,
+    DeclararMora,
     DevolverPago,
     LeerComprobante,
     LevantarBloqueoPagos,
     ListarBloqueosPagos,
+    ListarMoras,
     ListarPagos,
     ListarPorPagar,
+    RechazarMora,
     RegistrarPago,
     SubirComprobante,
 )
@@ -200,6 +205,11 @@ class Contenedor:
     consultar_pago: ConsultarPago
     confirmar_pago: ConfirmarPago
     devolver_pago: DevolverPago
+    declarar_mora: DeclararMora
+    listar_moras: ListarMoras
+    consultar_mora: ConsultarMora
+    aprobar_mora: AprobarMora
+    rechazar_mora: RechazarMora
 
     @classmethod
     def crear(
@@ -371,6 +381,11 @@ class Contenedor:
             consultar_pago=ConsultarPago(*pagos),
             confirmar_pago=ConfirmarPago(*pagos),
             devolver_pago=DevolverPago(*pagos),
+            declarar_mora=DeclararMora(*pagos),
+            listar_moras=ListarMoras(*pagos),
+            consultar_mora=ConsultarMora(*pagos),
+            aprobar_mora=AprobarMora(*pagos),
+            rechazar_mora=RechazarMora(*pagos),
         )
 
     def cerrar(self) -> None:

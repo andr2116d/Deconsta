@@ -36,23 +36,30 @@ from app.pagos.dominio.modelos import (
     Comprobante,
     DatosComprobante,
     EstadoComprobante,
+    EstadoMora,
     Moneda,
+    Mora,
     Pago,
+    Proposito,
     ResultadoComprobacion,
 )
 
 COLUMNAS_COMPROBANTE = """
     id, gerente_id, subido_por, deuda_id, cuota, tipo_archivo, tamano, paginas,
     nombre_archivo_cifrado, clave_objeto, huella_archivo, huella_operacion, estado,
-    analisis_cifrado, subido_en, analizado_en, pago_id
+    analisis_cifrado, subido_en, analizado_en, pago_id, proposito
 """
 COLUMNAS_PAGO = """
     id, gerente_id, deuda_id, cuota, registrado_por, importe, comision, lugar_pago, pagado_el,
-    estado, confianza, comprobaciones, registrado_en
+    estado, confianza, comprobaciones, registrado_en, mora
+"""
+COLUMNAS_MORA = """
+    id, gerente_id, deuda_id, cuota, declarada_por, importe, prueba_id, nota, estado, confianza,
+    comprobaciones, declarada_en, decidida_por, decidida_en, motivo_decision
 """
 COMPROBANTE_USADO = {"uq_comprobante_pago_archivo_usado", "uq_comprobante_pago_operacion_usada"}
 TEXTOS = ("medio", "empresa", "codigo_pago", "titular", "numero_operacion")
-IMPORTES = ("importe", "comision", "total")
+IMPORTES = ("importe", "comision", "total", "mora")
 
 
 def contexto(campo: str, comprobante_id: UUID) -> str:
@@ -117,6 +124,8 @@ def analisis_de_json(texto: str) -> AnalisisComprobante:
             importe=_decimal(datos["importe"]),
             comision=_decimal(datos["comision"]),
             total=_decimal(datos["total"]),
+            # Los análisis anteriores a la mora no la traen.
+            mora=_decimal(datos.get("mora")),
         ),
         senales,
     )
@@ -152,6 +161,7 @@ class RepositorioComprobantesSql:
             else None,
             analizado_en=fila.analizado_en,
             pago_id=fila.pago_id,
+            proposito=Proposito(fila.proposito),
         )
 
     def agregar(self, comprobante: Comprobante) -> None:
@@ -159,9 +169,9 @@ class RepositorioComprobantesSql:
             text(
                 "INSERT INTO comprobante_pago (id, gerente_id, subido_por, deuda_id, cuota,"
                 " tipo_archivo, tamano, paginas, nombre_archivo_cifrado, clave_objeto,"
-                " huella_archivo, estado, subido_en) VALUES (:id, :gerente_id, :subido_por,"
-                " :deuda_id, :cuota, :tipo_archivo, :tamano, :paginas, :nombre, :clave_objeto,"
-                " :huella_archivo, :estado, :subido_en)"
+                " huella_archivo, estado, subido_en, proposito) VALUES (:id, :gerente_id,"
+                " :subido_por, :deuda_id, :cuota, :tipo_archivo, :tamano, :paginas, :nombre,"
+                " :clave_objeto, :huella_archivo, :estado, :subido_en, :proposito)"
             ),
             {
                 "id": comprobante.id,
@@ -179,6 +189,7 @@ class RepositorioComprobantesSql:
                 "huella_archivo": comprobante.huella_archivo,
                 "estado": comprobante.estado.value,
                 "subido_en": comprobante.subido_en,
+                "proposito": comprobante.proposito.value,
             },
         )
 
@@ -228,6 +239,16 @@ class RepositorioComprobantesSql:
     def operacion_usada(self, gerente_id: UUID, huella: bytes) -> bool:
         return self._usado("huella_operacion", gerente_id, huella)
 
+    def prueba_usada(self, gerente_id: UUID, huella: bytes) -> bool:
+        fila = self._conexion.execute(
+            text(
+                "SELECT 1 FROM comprobante_pago c JOIN mora ON mora.prueba_id = c.id"
+                " WHERE c.gerente_id = :gerente_id AND c.huella_archivo = :huella LIMIT 1"
+            ),
+            {"gerente_id": gerente_id, "huella": huella},
+        ).first()
+        return fila is not None
+
     def del_pago(self, pago_id: UUID) -> list[Comprobante]:
         filas = self._conexion.execute(
             text(
@@ -267,7 +288,7 @@ class RepositorioPagosSql:
         sentencia = text(
             f"INSERT INTO pago ({COLUMNAS_PAGO}) VALUES (:id, :gerente_id, :deuda_id, :cuota,"
             " :registrado_por, :importe, :comision, :lugar_pago, :pagado_el, :estado, :confianza,"
-            " :comprobaciones, :registrado_en)"
+            " :comprobaciones, :registrado_en, :mora)"
         ).bindparams(bindparam("comprobaciones", type_=JSONB))
         try:
             with self._conexion.begin_nested():
@@ -287,6 +308,7 @@ class RepositorioPagosSql:
                         "confianza": pago.confianza,
                         "comprobaciones": _comprobaciones(pago.comprobaciones),
                         "registrado_en": pago.registrado_en,
+                        "mora": pago.mora,
                     },
                 )
         except IntegrityError as error:
@@ -316,17 +338,10 @@ class RepositorioPagosSql:
                 pagado_el=fila.pagado_el,
                 estado=EstadoPago(fila.estado),
                 confianza=fila.confianza,
-                comprobaciones=tuple(
-                    Comprobacion(
-                        c["codigo"],
-                        c["titulo"],
-                        ResultadoComprobacion(c["resultado"]),
-                        c["detalle"],
-                    )
-                    for c in fila.comprobaciones
-                ),
+                comprobaciones=_comprobaciones_de(fila.comprobaciones),
                 registrado_en=fila.registrado_en,
                 comprobantes=tuple(fila.comprobantes),
+                mora=fila.mora,
                 decidido_por=fila.decidido_por,
                 decidido_en=fila.decidido_en,
                 motivo_decision=fila.motivo_decision,
@@ -374,6 +389,123 @@ class RepositorioPagosSql:
             {"gerente_id": gerente_id},
         ).all()
         return {(fila.deuda_id, fila.cuota): fila.motivo_decision for fila in filas}
+
+
+def _comprobaciones_de(crudas: list[dict[str, str]]) -> tuple[Comprobacion, ...]:
+    return tuple(
+        Comprobacion(c["codigo"], c["titulo"], ResultadoComprobacion(c["resultado"]), c["detalle"])
+        for c in crudas
+    )
+
+
+class RepositorioMorasSql:
+    def __init__(self, conexion: Connection) -> None:
+        self._conexion = conexion
+
+    @staticmethod
+    def _mora(fila: Row[Any]) -> Mora:
+        return Mora(
+            id=fila.id,
+            gerente_id=fila.gerente_id,
+            deuda_id=fila.deuda_id,
+            cuota=fila.cuota,
+            declarada_por=fila.declarada_por,
+            importe=fila.importe,
+            prueba_id=fila.prueba_id,
+            nota=fila.nota,
+            estado=EstadoMora(fila.estado),
+            confianza=fila.confianza,
+            comprobaciones=_comprobaciones_de(fila.comprobaciones),
+            declarada_en=fila.declarada_en,
+            decidida_por=fila.decidida_por,
+            decidida_en=fila.decidida_en,
+            motivo_decision=fila.motivo_decision,
+        )
+
+    def agregar(self, mora: Mora) -> None:
+        sentencia = text(
+            f"INSERT INTO mora ({COLUMNAS_MORA}) VALUES (:id, :gerente_id, :deuda_id, :cuota,"
+            " :declarada_por, :importe, :prueba_id, :nota, :estado, :confianza, :comprobaciones,"
+            " :declarada_en, NULL, NULL, NULL)"
+        ).bindparams(bindparam("comprobaciones", type_=JSONB))
+        try:
+            with self._conexion.begin_nested():
+                self._conexion.execute(
+                    sentencia,
+                    {
+                        "id": mora.id,
+                        "gerente_id": mora.gerente_id,
+                        "deuda_id": mora.deuda_id,
+                        "cuota": mora.cuota,
+                        "declarada_por": mora.declarada_por,
+                        "importe": mora.importe,
+                        "prueba_id": mora.prueba_id,
+                        "nota": mora.nota,
+                        "estado": mora.estado.value,
+                        "confianza": mora.confianza,
+                        "comprobaciones": _comprobaciones(mora.comprobaciones),
+                        "declarada_en": mora.declarada_en,
+                    },
+                )
+        except IntegrityError as error:
+            restriccion = _restriccion(error)
+            if restriccion == "uq_mora_cuota_vigente":
+                raise CuotaNoPagable("MORA_YA_DECLARADA") from error
+            if restriccion == "uq_mora_prueba_id":
+                raise ComprobanteNoUsable("PRUEBA_YA_USADA") from error
+            raise
+
+    def _moras(self, condicion: str, parametros: dict[str, Any], resto: str = "") -> list[Mora]:
+        filas = self._conexion.execute(
+            text(f"SELECT {COLUMNAS_MORA} FROM mora WHERE {condicion}{resto}"), parametros
+        ).all()
+        return [self._mora(fila) for fila in filas]
+
+    def por_id(self, mora_id: UUID, *, bloquear: bool = False) -> Mora | None:
+        moras = self._moras("id = :id", {"id": mora_id}, " FOR UPDATE" if bloquear else "")
+        return moras[0] if moras else None
+
+    def guardar(self, mora: Mora) -> None:
+        self._conexion.execute(
+            text(
+                "UPDATE mora SET estado = :estado, decidida_por = :decidida_por,"
+                " decidida_en = :decidida_en, motivo_decision = :motivo WHERE id = :id"
+            ),
+            {
+                "id": mora.id,
+                "estado": mora.estado.value,
+                "decidida_por": mora.decidida_por,
+                "decidida_en": mora.decidida_en,
+                "motivo": mora.motivo_decision,
+            },
+        )
+
+    def del_espacio(self, gerente_id: UUID, *, estado: EstadoMora | None = None) -> list[Mora]:
+        filtro = " AND estado = :estado" if estado else ""
+        return self._moras(
+            f"gerente_id = :gerente_id{filtro}",
+            {"gerente_id": gerente_id, "estado": estado.value if estado else None},
+            " ORDER BY declarada_en DESC LIMIT 200",
+        )
+
+    # La vigente gana a las rechazadas; entre rechazadas, la última.
+    ORDEN_CUOTA = " ORDER BY deuda_id, cuota, estado = 'rechazada', declarada_en DESC"
+
+    def de_la_cuota(self, deuda_id: UUID, cuota: int) -> Mora | None:
+        moras = self._moras(
+            "deuda_id = :deuda_id AND cuota = :cuota",
+            {"deuda_id": deuda_id, "cuota": cuota},
+            self.ORDEN_CUOTA + " LIMIT 1",
+        )
+        return moras[0] if moras else None
+
+    def del_espacio_por_cuota(self, gerente_id: UUID) -> dict[tuple[UUID, int], Mora]:
+        resultado: dict[tuple[UUID, int], Mora] = {}
+        for mora in self._moras(
+            "gerente_id = :gerente_id", {"gerente_id": gerente_id}, self.ORDEN_CUOTA
+        ):
+            resultado.setdefault((mora.deuda_id, mora.cuota), mora)
+        return resultado
 
 
 class RepositorioBloqueosPagosSql:
@@ -470,6 +602,7 @@ class UnidadPagosSql:
         self._transaccion = self._conexion.begin()
         self.comprobantes = RepositorioComprobantesSql(self._conexion, self._cifrador)
         self.pagos = RepositorioPagosSql(self._conexion)
+        self.moras = RepositorioMorasSql(self._conexion)
         self.deudas = RepositorioDeudasSql(self._conexion, self._cifrador)
         self.documentos = RepositorioDocumentosSql(self._conexion, self._cifrador)
         self.bloqueos = RepositorioBloqueosPagosSql(self._conexion)

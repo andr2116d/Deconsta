@@ -11,6 +11,8 @@ from app.documentos.infraestructura.http.esquemas import SenalSalida
 from app.pagos.aplicacion.pagos import (
     ComprobanteConsultado,
     CuotaPorPagar,
+    MoraConDetalle,
+    MoraConPrueba,
     PagoConComprobantes,
     PagoConDetalle,
     PorPagar,
@@ -19,6 +21,9 @@ from app.pagos.dominio.modelos import (
     Comprobacion,
     DatosComprobante,
     EstadoComprobante,
+    EstadoMora,
+    Mora,
+    Proposito,
     ResultadoComprobacion,
 )
 
@@ -35,6 +40,8 @@ class LecturaSalida(BaseModel):
     # En soles, como texto: lo pagado por el servicio y la comisión aparte.
     importe: str | None
     comision: str | None
+    # En la prueba de una mora: la mora, si figura aparte.
+    mora: str | None
 
     @classmethod
     def desde(cls, datos: DatosComprobante) -> "LecturaSalida":
@@ -46,6 +53,7 @@ class LecturaSalida(BaseModel):
             pagado_el=datos.pagado_el,
             importe=str(datos.importe) if datos.importe is not None else None,
             comision=str(datos.comision) if datos.comision is not None else None,
+            mora=str(datos.mora) if datos.mora is not None else None,
         )
 
 
@@ -63,6 +71,8 @@ class ComprobanteSalida(BaseModel):
     senales: list[SenalSalida]
     lectura: LecturaSalida | None
     pago_id: UUID | None
+    # El voucher de un pago o la prueba de una mora.
+    proposito: Proposito
     # Si quien lo subió tiene el registro de pagos en pausa.
     registro_bloqueado: bool
 
@@ -84,7 +94,24 @@ class ComprobanteSalida(BaseModel):
             senales=[SenalSalida.desde(s) for s in analisis.senales] if analisis else [],
             lectura=LecturaSalida.desde(analisis.datos) if analisis and analisis.datos else None,
             pago_id=comprobante.pago_id,
+            proposito=comprobante.proposito,
             registro_bloqueado=consulta.registro_bloqueado,
+        )
+
+
+class MoraResumen(BaseModel):
+    id: UUID
+    estado: EstadoMora
+    importe: str
+    motivo_decision: str | None
+
+    @classmethod
+    def desde(cls, mora: Mora) -> "MoraResumen":
+        return cls(
+            id=mora.id,
+            estado=mora.estado,
+            importe=str(mora.importe),
+            motivo_decision=mora.motivo_decision,
         )
 
 
@@ -104,6 +131,8 @@ class CuotaPorPagarSalida(BaseModel):
     registrada_por: str
     # Por qué el gerente devolvió el último pago de esta cuota, si lo devolvió.
     devuelto_por: str | None
+    # La mora vigente de la cuota o, si no hay, la última rechazada.
+    mora: MoraResumen | None
 
     @classmethod
     def desde(cls, item: CuotaPorPagar) -> "CuotaPorPagarSalida":
@@ -122,6 +151,7 @@ class CuotaPorPagarSalida(BaseModel):
             vencida_hace=item.vencida_hace,
             registrada_por=item.registrada_por,
             devuelto_por=item.devuelto_por,
+            mora=MoraResumen.desde(item.mora) if item.mora else None,
         )
 
 
@@ -168,6 +198,8 @@ class PagoSalida(BaseModel):
     cuota: int
     importe: str
     comision: str
+    # Lo pagado por una mora aprobada, dentro del importe.
+    mora: str
     lugar_pago: LugarPago | None
     pagado_el: date
     estado: EstadoPago
@@ -191,6 +223,7 @@ class PagoSalida(BaseModel):
             cuota=pago.cuota,
             importe=str(pago.importe),
             comision=str(pago.comision),
+            mora=str(pago.mora),
             lugar_pago=pago.lugar,
             pagado_el=pago.pagado_el,
             estado=pago.estado,
@@ -234,3 +267,70 @@ class BloqueoPagosSalida(BaseModel):
     @classmethod
     def desde(cls, bloqueo: Bloqueo) -> "BloqueoPagosSalida":
         return cls(asistente_id=bloqueo.asistente_id, bloqueado_en=bloqueo.bloqueado_en)
+
+
+class MoraEntrada(Entrada):
+    deuda_id: UUID
+    cuota: int = Field(ge=1, le=360)
+    # En soles, como texto («14.40»): nunca como número de coma flotante.
+    importe: str = Field("", max_length=20)
+    prueba_id: UUID
+    nota: str | None = Field(None, max_length=1000)
+
+
+class MoraSalida(BaseModel):
+    id: UUID
+    deuda_id: UUID
+    concepto: str
+    cuota: int
+    # En soles: la mora y el importe de la cuota sin ella.
+    importe: str
+    importe_cuota: str
+    nota: str | None
+    estado: EstadoMora
+    # Solo para el gerente, como en los pagos.
+    confianza: int | None
+    comprobaciones: list[ComprobacionSalida] | None
+    prueba_id: UUID
+    declarada_por: str
+    declarada_en: datetime
+    decidida_en: datetime | None
+    motivo_decision: str | None
+
+    @classmethod
+    def desde(cls, detalle: MoraConDetalle, *, gerente: bool) -> "MoraSalida":
+        mora = detalle.mora
+        return cls(
+            id=mora.id,
+            deuda_id=mora.deuda_id,
+            concepto=detalle.concepto,
+            cuota=mora.cuota,
+            importe=str(mora.importe),
+            importe_cuota=str(detalle.cuota),
+            nota=mora.nota,
+            estado=mora.estado,
+            confianza=mora.confianza if gerente else None,
+            comprobaciones=[ComprobacionSalida.desde(c) for c in mora.comprobaciones]
+            if gerente
+            else None,
+            prueba_id=mora.prueba_id,
+            declarada_por=detalle.declarada_por,
+            declarada_en=mora.declarada_en,
+            decidida_en=mora.decidida_en,
+            motivo_decision=mora.motivo_decision,
+        )
+
+
+class MoraDetalleSalida(MoraSalida):
+    prueba: ComprobanteSalida | None
+
+    @classmethod
+    def detalle(cls, consulta: MoraConPrueba, *, gerente: bool) -> "MoraDetalleSalida":
+        base = MoraSalida.desde(consulta.detalle, gerente=gerente)
+        prueba = consulta.prueba
+        return cls(
+            **base.model_dump(),
+            prueba=ComprobanteSalida.desde(ComprobanteConsultado(prueba, registro_bloqueado=False))
+            if prueba
+            else None,
+        )

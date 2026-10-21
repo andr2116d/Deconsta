@@ -48,7 +48,7 @@ from app.documentos.dominio.puertos import (
 from app.notificaciones.aplicacion.notificaciones import Avisos
 from app.notificaciones.dominio.modelos import Notificacion, TipoNotificacion, nueva_notificacion
 from app.notificaciones.dominio.puertos import PublicadorAvisos
-from app.pagos.dominio.confianza import comprobaciones, confianza
+from app.pagos.dominio.confianza import CRITERIOS_MORA, comprobaciones, confianza
 from app.pagos.dominio.errores import (
     BloqueoPagosNoEncontrado,
     CamposFaltantes,
@@ -57,6 +57,7 @@ from app.pagos.dominio.errores import (
     ComprobantesNoCombinan,
     CuotaNoPagable,
     ImporteNoCoincide,
+    MoraNoEncontrada,
     PagoInvalido,
     PagoNoEncontrado,
     RegistroPagosBloqueado,
@@ -66,7 +67,10 @@ from app.pagos.dominio.modelos import (
     Comprobante,
     DatosComprobante,
     EstadoComprobante,
+    EstadoMora,
+    Mora,
     Pago,
+    Proposito,
 )
 from app.pagos.dominio.puertos import (
     ColaComprobantes,
@@ -78,14 +82,16 @@ from app.pagos.dominio.reglas import (
     MAXIMO_COMPROBANTES,
     MAXIMO_RECHAZADOS,
     CuotaEsperada,
+    comparar_mora,
     cuenta_para_bloqueo,
     estado_tras_analisis,
     evaluar,
+    evaluar_prueba_mora,
     senal_ilegible,
     senal_legibilidad,
     senal_repetido,
 )
-from app.reglas.dominio.importes import formatear_soles
+from app.reglas.dominio.importes import a_importe, error_importe, formatear_soles
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +112,7 @@ def esperada_de(
 ) -> CuotaEsperada:
     documento = uow.documentos.por_id(deuda.documento_id)
     leidos = documento.analisis.datos if documento and documento.analisis else None
+    mora = uow.moras.de_la_cuota(deuda.id, cuota.numero)
     return CuotaEsperada(
         importe=cuota.importe,
         codigo_pago=deuda.codigo_pago,
@@ -114,6 +121,7 @@ def esperada_de(
         lugares=deuda.lugares_pago,
         registrada_el=deuda.creado_en.astimezone(zona).date(),
         vencida=cuota.vence_el < hoy,
+        mora=mora.importe if mora and mora.estado is EstadoMora.APROBADA else None,
     )
 
 
@@ -197,10 +205,18 @@ class _OperacionPagos:
         if usuario.rol is Rol.ASISTENTE and (bloqueo := uow.bloqueos.vigente(usuario.id)):
             raise RegistroPagosBloqueado(bloqueo.bloqueado_en)
 
-    @staticmethod
     def _cuota_por_pagar(
-        uow: UnidadPagos, sesion: SesionActiva, deuda_id: UUID, numero: int, *, bloquear: bool
+        self,
+        uow: UnidadPagos,
+        sesion: SesionActiva,
+        deuda_id: UUID,
+        numero: int,
+        *,
+        bloquear: bool,
+        proposito: Proposito = Proposito.PAGO,
     ) -> tuple[Deuda, Cuota]:
+        """La cuota sin pago de una deuda registrada del espacio. Para pagarla, sin una mora que
+        espere aprobación; para declarar su mora, vencida y sin otra mora vigente."""
         deuda = uow.deudas.por_id(deuda_id, bloquear=bloquear)
         if deuda is None or deuda.gerente_id != espacio_de(sesion):
             raise DeudaNoEncontrada()
@@ -214,6 +230,15 @@ class _OperacionPagos:
             raise PagoInvalido(mensaje, campos={"cuota": mensaje})
         if cuota.pago is not None:
             raise CuotaNoPagable("CUOTA_YA_PAGADA")
+        mora = uow.moras.de_la_cuota(deuda.id, numero)
+        vigente = mora is not None and mora.estado is not EstadoMora.RECHAZADA
+        if proposito is Proposito.PAGO:
+            if mora and mora.estado is EstadoMora.POR_APROBAR:
+                raise CuotaNoPagable("MORA_POR_APROBAR")
+        elif cuota.vence_el >= self._hoy():
+            raise CuotaNoPagable("CUOTA_NO_VENCIDA")
+        elif vigente:
+            raise CuotaNoPagable("MORA_YA_DECLARADA")
         return deuda, cuota
 
     @staticmethod
@@ -258,7 +283,9 @@ class SubirComprobante(_OperacionPagos):
         cuota: int | None,
         contenido: bytes,
         nombre: str | None,
+        proposito: Proposito = Proposito.PAGO,
     ) -> Comprobante:
+        """El voucher de un pago o, con el propósito mora, la prueba de la mora de la cuota."""
         if deuda_id is None or cuota is None:
             campos = {
                 **({"deuda_id": "Indica la deuda que pagaste."} if deuda_id is None else {}),
@@ -272,10 +299,12 @@ class SubirComprobante(_OperacionPagos):
         with self._unidad() as uow:
             self._sin_bloqueo(uow, sesion)
             # Se comprueba antes de analizar: no se sube el voucher de una cuota que no se paga.
-            self._cuota_por_pagar(uow, sesion, deuda_id, cuota, bloquear=False)
+            self._cuota_por_pagar(uow, sesion, deuda_id, cuota, bloquear=False, proposito=proposito)
             comprobante = self._guardar(
                 uow, sesion, gerente_id, deuda_id, cuota, contenido, tipo, nombre, examen.paginas
             )
+            comprobante.proposito = proposito
+            uow.comprobantes.agregar(comprobante)
         try:
             self._cola.encolar(comprobante.id)
         except ErrorCola as error:
@@ -318,7 +347,6 @@ class SubirComprobante(_OperacionPagos):
             estado=EstadoComprobante.ANALIZANDO,
             subido_en=self._reloj(),
         )
-        uow.comprobantes.agregar(comprobante)
         return comprobante
 
 
@@ -357,9 +385,10 @@ class AnalizarComprobante:
             deuda = uow.deudas.por_id(comprobante.deuda_id)
             cuota = deuda.cuota(comprobante.cuota) if deuda else None
             esperada = esperada_de(uow, deuda, cuota, hoy, self._zona) if deuda and cuota else None
-            repetido = uow.comprobantes.archivo_usado(
-                comprobante.gerente_id, comprobante.huella_archivo
-            )
+            mora = comprobante.proposito is Proposito.MORA
+            # Un voucher no respalda dos pagos; una prueba, dos moras.
+            usado = uow.comprobantes.prueba_usada if mora else uow.comprobantes.archivo_usado
+            repetido = usado(comprobante.gerente_id, comprobante.huella_archivo)
         if esperada is None:
             return self._concluir(comprobante_id, AnalisisComprobante(None), fallido=True)
         if repetido:
@@ -373,8 +402,9 @@ class AnalizarComprobante:
         lectura = self._lector.leer(contenido, tipo)
         if ilegible := senal_legibilidad(lectura):
             return self._concluir(comprobante_id, AnalisisComprobante(None, (ilegible, *senales)))
+        revisar = self._revisor.revisar_prueba_mora if mora else self._revisor.revisar_comprobante
         try:
-            revision = self._revisor.revisar_comprobante(contenido, tipo, lectura)
+            revision = revisar(contenido, tipo, lectura)
         except ErrorRevision:
             logger.warning("La revisión con IA del comprobante %s no se completó", comprobante_id)
             return self._concluir(
@@ -386,12 +416,13 @@ class AnalizarComprobante:
                 AnalisisComprobante(revision.datos, (senal_ilegible(), *senales)),
             )
         datos = revision.datos
-        senales = [*evaluar(datos, lectura, esperada, hoy), *senales]
+        reglas = evaluar_prueba_mora if mora else evaluar
+        senales = [*reglas(datos, lectura, esperada, hoy), *senales]
         if veredicto := senal_veredicto(revision.veredicto, revision.motivos):
             senales.append(veredicto)
-        return self._concluir(
-            comprobante_id, AnalisisComprobante(datos, tuple(senales)), self._operacion(datos)
-        )
+        # La operación de una prueba no se reserva: el mismo voucher puede pagar la cuota.
+        operacion = None if mora else self._operacion(datos)
+        return self._concluir(comprobante_id, AnalisisComprobante(datos, tuple(senales)), operacion)
 
     def _operacion(self, datos: DatosComprobante) -> bytes | None:
         """La misma operación en otra foto o captura: su número y su fecha."""
@@ -519,6 +550,8 @@ class CuotaPorPagar:
     registrada_por: str
     # Por qué el gerente devolvió el último pago de esta cuota, si lo devolvió.
     devuelto_por: str | None = None
+    # La mora vigente de la cuota o, si no hay, la última rechazada.
+    mora: Mora | None = None
 
 
 @dataclass(frozen=True)
@@ -548,6 +581,7 @@ class ListarPorPagar(_OperacionPagos):
             gerente_id = espacio_de(sesion)
             deudas = uow.deudas.por_pagar(gerente_id)
             devueltas = uow.pagos.devoluciones(gerente_id)
+            moras = uow.moras.del_espacio_por_cuota(gerente_id)
             nombres: dict[UUID, str] = {}
             cuotas = [
                 CuotaPorPagar(
@@ -556,6 +590,7 @@ class ListarPorPagar(_OperacionPagos):
                     d.vencida_hace(hoy),
                     _nombre(uow, d.registrada_por, nombres),
                     devueltas.get((d.id, d.por_pagar[0].numero)),
+                    moras.get((d.id, d.por_pagar[0].numero)),
                 )
                 for d in deudas
                 if d.por_pagar
@@ -597,8 +632,8 @@ class RegistrarPago(_OperacionPagos):
                 raise ComprobanteNoUsable("COMPROBANTE_FALLIDO")
             self._combinan(comprobantes, leidos)
             importe = sum((d.importe or Decimal("0") for d in leidos), Decimal("0"))
-            self._suma_la_cuota(importe, cuota.importe, len(comprobantes))
             esperada = esperada_de(uow, deuda, cuota, hoy, self._zona)
+            mora = self._suma_la_cuota(importe, cuota.importe, esperada.mora, len(comprobantes))
             lista = comprobaciones(
                 [(c.datos, c.analisis.senales) for c in comprobantes if c.datos and c.analisis],
                 esperada,
@@ -619,6 +654,7 @@ class RegistrarPago(_OperacionPagos):
                 comprobaciones=lista,
                 registrado_en=self._reloj(),
                 comprobantes=tuple(c.id for c in comprobantes),
+                mora=mora,
             )
             uow.pagos.agregar(pago)
             uow.comprobantes.vincular(list(pago.comprobantes), pago.id)
@@ -657,6 +693,8 @@ class RegistrarPago(_OperacionPagos):
             raise ComprobanteNoEncontrado(campos={"comprobantes": ComprobanteNoEncontrado.mensaje})
         if comprobante.pago_id is not None:
             raise ComprobanteNoUsable("COMPROBANTE_YA_USADO")
+        if comprobante.proposito is not Proposito.PAGO:
+            raise ComprobanteNoUsable("COMPROBANTE_DE_MORA")
         if (comprobante.deuda_id, comprobante.cuota) != (deuda_id, cuota):
             raise ComprobanteNoUsable("COMPROBANTE_DE_OTRA_CUOTA")
         if comprobante.estado is not EstadoComprobante.LISTO:
@@ -677,20 +715,28 @@ class RegistrarPago(_OperacionPagos):
             raise ComprobantesNoCombinan()
 
     @staticmethod
-    def _suma_la_cuota(importe: Decimal, cuota: Decimal, cantidad: int) -> None:
+    def _suma_la_cuota(
+        importe: Decimal, cuota: Decimal, mora: Decimal | None, cantidad: int
+    ) -> Decimal:
+        """Lo pagado es la cuota o, con una mora aprobada, la cuota con la mora. Devuelve lo
+        pagado por la mora."""
         if importe == cuota:
-            return
-        pagado, esperado = formatear_soles(importe), formatear_soles(cuota)
-        if importe < cuota:
-            falta = formatear_soles(cuota - importe)
+            return Decimal("0")
+        objetivo = cuota + (mora or Decimal("0"))
+        if importe == objetivo:
+            return objetivo - cuota
+        pagado, esperado = formatear_soles(importe), formatear_soles(objetivo)
+        suman = "Los vouchers suman" if cantidad > 1 else "El voucher paga"
+        con_mora = " con la mora aprobada" if mora else ""
+        if importe < objetivo:
+            falta = formatear_soles(objetivo - importe)
             raise ImporteNoCoincide(
-                f"{'Los vouchers suman' if cantidad > 1 else 'El voucher paga'} {pagado} y la "
-                f"cuota es {esperado}: falta {falta}. Si el agente te la cobró por partes, sube "
-                "los otros vouchers del mismo día."
+                f"{suman} {pagado} y la cuota es {esperado}{con_mora}: falta {falta}. Si el "
+                "agente te la cobró por partes, sube los otros vouchers del mismo día."
             )
         raise ImporteNoCoincide(
-            f"{'Los vouchers suman' if cantidad > 1 else 'El voucher paga'} {pagado}, más que la "
-            f"cuota de {esperado}. Quita el voucher que no corresponde a esta cuota."
+            f"{suman} {pagado}, más que la cuota de {esperado}{con_mora}. Quita el voucher que no "
+            "corresponde a esta cuota."
         )
 
     @staticmethod
@@ -891,3 +937,250 @@ class LevantarBloqueoPagos(_OperacionBloqueosPagos):
                 ),
             )
         avisos.enviar()
+
+
+@dataclass(frozen=True)
+class MoraConDetalle:
+    mora: Mora
+    concepto: str
+    declarada_por: str
+    # El importe de la cuota, sin la mora.
+    cuota: Decimal
+
+
+def _nota(nota: str | None) -> str | None:
+    limpia = " ".join((nota or "").split()) or None
+    if limpia and len(limpia) > LARGO_MOTIVO:
+        mensaje = f"Usa como máximo {LARGO_MOTIVO} caracteres."
+        raise PagoInvalido(mensaje, campos={"nota": mensaje})
+    return limpia
+
+
+class DeclararMora(_OperacionPagos):
+    """La mora de una cuota vencida, con una prueba ya analizada que subió la misma cuenta. La de
+    una asistente espera la aprobación del gerente y la cuota no se paga mientras tanto; la del
+    gerente queda aprobada."""
+
+    def ejecutar(
+        self,
+        sesion: SesionActiva,
+        deuda_id: UUID,
+        numero: int,
+        importe: str,
+        prueba_id: UUID,
+        nota: str | None = None,
+    ) -> MoraConDetalle:
+        if mensaje := error_importe(importe):
+            raise PagoInvalido(mensaje, campos={"importe": mensaje})
+        declarada = a_importe(importe)
+        nota_limpia = _nota(nota)
+        self._cupo(sesion)
+        usuario = sesion.usuario
+        gerente = usuario.rol is Rol.GERENTE
+        hoy = self._hoy()
+        avisos = Avisos(self._publicador)
+        with self._unidad() as uow:
+            self._sin_bloqueo(uow, sesion)
+            deuda, cuota = self._cuota_por_pagar(
+                uow, sesion, deuda_id, numero, bloquear=True, proposito=Proposito.MORA
+            )
+            prueba = self._prueba(uow, sesion, prueba_id, deuda.id, numero)
+            assert prueba.analisis is not None and prueba.datos is not None
+            senales = list(prueba.analisis.senales)
+            if diferencia := comparar_mora(prueba.datos, cuota.importe, declarada):
+                senales.append(diferencia)
+            lista = comprobaciones(
+                [(prueba.datos, senales)],
+                esperada_de(uow, deuda, cuota, hoy, self._zona),
+                CRITERIOS_MORA,
+            )
+            ahora = self._reloj()
+            mora = Mora(
+                id=uuid4(),
+                gerente_id=deuda.gerente_id,
+                deuda_id=deuda.id,
+                cuota=numero,
+                declarada_por=usuario.id,
+                importe=declarada,
+                prueba_id=prueba.id,
+                nota=nota_limpia,
+                estado=EstadoMora.APROBADA if gerente else EstadoMora.POR_APROBAR,
+                confianza=confianza(lista),
+                comprobaciones=lista,
+                declarada_en=ahora,
+                decidida_por=usuario.id if gerente else None,
+                decidida_en=ahora if gerente else None,
+            )
+            uow.moras.agregar(mora)
+            uow.auditoria.registrar(
+                EventoAuditoria(
+                    Accion.MORA_DECLARADA,
+                    actor_id=usuario.id,
+                    cuenta_id=usuario.id,
+                    detalle={
+                        "mora_id": str(mora.id),
+                        "deuda_id": str(deuda.id),
+                        "cuota": numero,
+                        "importe": str(declarada),
+                        "estado": mora.estado.value,
+                        "confianza": mora.confianza,
+                    },
+                )
+            )
+            if not gerente:
+                avisos.guardar(
+                    uow.notificaciones,
+                    nueva_notificacion(
+                        deuda.gerente_id,
+                        TipoNotificacion.MORA_POR_APROBAR,
+                        f"mora:{mora.id}:declarada",
+                        "Tu asistente declaró una mora",
+                        f"«{deuda.concepto}» venció y la empresa cobra {formatear_soles(declarada)}"
+                        f" de mora. La prueba la respalda con una confianza de {mora.confianza} %."
+                        " La cuota no se paga hasta que la apruebes o la rechaces.",
+                        ahora,
+                        deuda_id=deuda.id,
+                        cuenta_id=usuario.id,
+                    ),
+                )
+            nombre = _nombre(uow, usuario.id, {})
+        avisos.enviar()
+        return MoraConDetalle(mora, deuda.concepto, nombre, cuota.importe)
+
+    @staticmethod
+    def _prueba(
+        uow: UnidadPagos, sesion: SesionActiva, prueba_id: UUID, deuda_id: UUID, cuota: int
+    ) -> Comprobante:
+        prueba = uow.comprobantes.por_id(prueba_id, bloquear=True)
+        if (
+            prueba is None
+            or prueba.gerente_id != espacio_de(sesion)
+            or prueba.subido_por != sesion.usuario.id
+        ):
+            raise ComprobanteNoEncontrado(campos={"prueba_id": ComprobanteNoEncontrado.mensaje})
+        if prueba.proposito is not Proposito.MORA:
+            raise ComprobanteNoUsable("COMPROBANTE_DE_PAGO")
+        if (prueba.deuda_id, prueba.cuota) != (deuda_id, cuota):
+            raise ComprobanteNoUsable("COMPROBANTE_DE_OTRA_CUOTA")
+        if prueba.estado is not EstadoComprobante.LISTO:
+            raise ComprobanteNoUsable(ESTADOS_COMPROBANTE[prueba.estado])
+        return prueba
+
+
+class _DecisionMora(_OperacionPagos):
+    """Solo el gerente aprueba o rechaza, con la fila tomada con FOR UPDATE. Se audita y se avisa
+    a quien la declaró."""
+
+    def _decidir(self, sesion: SesionActiva, mora_id: UUID, motivo: str | None) -> Mora:
+        if sesion.usuario.rol is not Rol.GERENTE:
+            raise SinPermiso()
+        self._cupo(sesion)
+        avisos = Avisos(self._publicador)
+        with self._unidad() as uow:
+            mora = uow.moras.por_id(mora_id, bloquear=True)
+            if mora is None or mora.gerente_id != sesion.usuario.id:
+                raise MoraNoEncontrada()
+            ahora = self._reloj()
+            if motivo is None:
+                mora.aprobar(sesion.usuario.id, ahora)
+            else:
+                mora.rechazar(sesion.usuario.id, ahora, motivo)
+            uow.moras.guardar(mora)
+            aprobada = mora.estado is EstadoMora.APROBADA
+            uow.auditoria.registrar(
+                EventoAuditoria(
+                    Accion.MORA_APROBADA if aprobada else Accion.MORA_RECHAZADA,
+                    actor_id=sesion.usuario.id,
+                    cuenta_id=mora.declarada_por,
+                    motivo=mora.motivo_decision,
+                    detalle={"mora_id": str(mora.id), "deuda_id": str(mora.deuda_id)},
+                )
+            )
+            deuda = uow.deudas.por_id(mora.deuda_id)
+            if mora.declarada_por != sesion.usuario.id and deuda:
+                avisos.guardar(uow.notificaciones, self._aviso(mora, deuda.concepto, ahora))
+        avisos.enviar()
+        return mora
+
+    @staticmethod
+    def _aviso(mora: Mora, concepto: str, ahora: datetime) -> Notificacion:
+        importe = formatear_soles(mora.importe)
+        if mora.estado is EstadoMora.APROBADA:
+            tipo, titulo = TipoNotificacion.MORA_APROBADA, "Tu gerente aprobó la mora"
+            cuerpo = (
+                f"La mora de {importe} de «{concepto}» quedó aprobada: ya puedes pagar la cuota "
+                "con la mora."
+            )
+        else:
+            tipo, titulo = TipoNotificacion.MORA_RECHAZADA, "Tu gerente rechazó la mora"
+            cuerpo = (
+                f"Rechazó la mora de {importe} de «{concepto}»: {mora.motivo_decision} La cuota "
+                "se paga sin la mora."
+            )
+        return nueva_notificacion(
+            mora.declarada_por,
+            tipo,
+            f"mora:{mora.id}:{mora.estado.value}",
+            titulo,
+            cuerpo,
+            ahora,
+            deuda_id=mora.deuda_id,
+        )
+
+
+class AprobarMora(_DecisionMora):
+    def ejecutar(self, sesion: SesionActiva, mora_id: UUID) -> Mora:
+        return self._decidir(sesion, mora_id, None)
+
+
+class RechazarMora(_DecisionMora):
+    def ejecutar(self, sesion: SesionActiva, mora_id: UUID, motivo: str | None) -> Mora:
+        limpio = " ".join((motivo or "").split())
+        if not limpio:
+            mensaje = "Escribe por qué rechazas esta mora: tu asistente lo verá."
+            raise PagoInvalido(mensaje, campos={"motivo": mensaje})
+        if len(limpio) > LARGO_MOTIVO:
+            mensaje = f"Usa como máximo {LARGO_MOTIVO} caracteres."
+            raise PagoInvalido(mensaje, campos={"motivo": mensaje})
+        return self._decidir(sesion, mora_id, limpio)
+
+
+def _con_detalle(uow: UnidadPagos, mora: Mora, nombres: dict[UUID, str]) -> MoraConDetalle:
+    deuda = uow.deudas.por_id(mora.deuda_id)
+    cuota = deuda.cuota(mora.cuota) if deuda else None
+    return MoraConDetalle(
+        mora,
+        deuda.concepto if deuda else "",
+        _nombre(uow, mora.declarada_por, nombres),
+        cuota.importe if cuota else Decimal("0"),
+    )
+
+
+class ListarMoras(_OperacionPagos):
+    def ejecutar(
+        self, sesion: SesionActiva, *, estado: EstadoMora | None = None
+    ) -> list[MoraConDetalle]:
+        """Las del espacio, las más recientes primero; con `estado`, solo esas."""
+        with self._unidad() as uow:
+            nombres: dict[UUID, str] = {}
+            return [
+                _con_detalle(uow, m, nombres)
+                for m in uow.moras.del_espacio(espacio_de(sesion), estado=estado)
+            ]
+
+
+@dataclass(frozen=True)
+class MoraConPrueba:
+    detalle: MoraConDetalle
+    prueba: Comprobante | None
+
+
+class ConsultarMora(_OperacionPagos):
+    def ejecutar(self, sesion: SesionActiva, mora_id: UUID) -> MoraConPrueba:
+        with self._unidad() as uow:
+            mora = uow.moras.por_id(mora_id)
+            if mora is None or mora.gerente_id != espacio_de(sesion):
+                raise MoraNoEncontrada()
+            return MoraConPrueba(
+                _con_detalle(uow, mora, {}), uow.comprobantes.por_id(mora.prueba_id)
+            )

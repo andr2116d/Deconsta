@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.deudas.dominio.modelos import LugarPago
 from tests.conftest import Equipo
-from tests.dobles import TEXTO_VOUCHER, VOUCHER, imagen
+from tests.dobles import TEXTO_PRUEBA_MORA, TEXTO_VOUCHER, VOUCHER, imagen
 from tests.test_categorias import sesion
 from tests.test_deudas import DEUDAS, notificaciones, nueva
 from tests.test_documentos import LEIDO, dobles
@@ -340,3 +340,116 @@ def test_solo_el_gerente_de_su_espacio_decide_un_pago(
     ajeno = otro.post(f"{PAGOS}/{pago['id']}/confirmacion")
     assert (ajeno.status_code, ajeno.json()["code"]) == (404, "PAGO_NO_ENCONTRADO")
     assert otro.get(f"{PAGOS}/{pago['id']}").status_code == 404
+
+
+MORAS = f"{PAGOS}/moras"
+
+
+def prueba_mora(cliente: TestClient, deuda_id: str, semilla: int) -> httpx.Response:
+    dobles(cliente).lector.texto = TEXTO_PRUEBA_MORA
+    return cliente.post(
+        COMPROBANTES,
+        files={"archivo": ("recibo.png", imagen(semilla), "image/png")},
+        data={"deuda_id": deuda_id, "cuota": "1", "proposito": "mora"},
+    )
+
+
+def declarar(
+    cliente: TestClient, deuda_id: str, prueba_id: str, importe: str = "14.40"
+) -> httpx.Response:
+    return cliente.post(
+        MORAS,
+        json={"deuda_id": deuda_id, "cuota": 1, "importe": importe, "prueba_id": prueba_id},
+    )
+
+
+def vencida(gerente: TestClient, semilla: int) -> dict:
+    vencio = (hoy() - timedelta(days=11)).isoformat()
+    return deuda_de(gerente, semilla, cuotas=[{"vence_el": vencio, "importe": "182.40"}])
+
+
+def test_la_mora_se_declara_con_su_prueba_y_el_pago_espera_al_gerente(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    deuda = vencida(gerente, 14)
+    subida = prueba_mora(asistente, deuda["id"], 300)
+    assert subida.status_code == 202, subida.json()
+    prueba = asistente.get(f"{COMPROBANTES}/{subida.json()['id']}").json()
+    assert (prueba["estado"], prueba["proposito"], prueba["senales"]) == ("listo", "mora", [])
+
+    mora = declarar(asistente, deuda["id"], prueba["id"])
+
+    assert mora.status_code == 201, mora.json()
+    assert (mora.json()["estado"], mora.json()["confianza"]) == ("por_aprobar", None)
+    assert "MORA_POR_APROBAR" in [n["tipo"] for n in notificaciones(gerente)]
+    # Mientras el gerente no decide, la cuota no se paga.
+    voucher(asistente, importe=Decimal("196.80"))
+    espera = subir(asistente, deuda["id"], 301)
+    assert (espera.status_code, espera.json()["code"]) == (409, "MORA_POR_APROBAR")
+    [cuota] = asistente.get(f"{PAGOS}/por-pagar").json()["cuotas"]
+    assert cuota["mora"]["estado"] == "por_aprobar"
+    [por_aprobar] = gerente.get(MORAS, params={"estado": "por_aprobar"}).json()
+    assert por_aprobar["confianza"] > 0
+
+    assert gerente.post(f"{MORAS}/{por_aprobar['id']}/aprobacion").json()["estado"] == "aprobada"
+    assert "MORA_APROBADA" in [n["tipo"] for n in notificaciones(asistente)]
+    con_mora = comprobante(asistente, deuda["id"], 302)
+    assert con_mora["estado"] == "listo", con_mora["senales"]
+    pago = pagar(asistente, deuda["id"], con_mora["id"]).json()
+    assert (pago["importe"], pago["mora"]) == ("196.80", "14.40")
+
+
+def test_el_voucher_que_ya_pago_la_mora_sirve_de_prueba_y_su_rechazo_tiene_motivo(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    deuda = vencida(gerente, 15)
+    voucher(asistente, importe=Decimal("196.80"))
+    con_mora = comprobante(asistente, deuda["id"], 303)
+    assert [s["codigo"] for s in con_mora["senales"]] == ["POSIBLE_MORA"]
+    # El mismo archivo, ahora como prueba de la mora.
+    prueba = prueba_mora(asistente, deuda["id"], 303).json()
+    mora = declarar(asistente, deuda["id"], prueba["id"]).json()
+
+    rechazo = gerente.post(f"{MORAS}/{mora['id']}/rechazo", json={"motivo": "Esa mora no aplica."})
+
+    assert rechazo.json()["estado"] == "rechazada"
+    [cuota] = asistente.get(f"{PAGOS}/por-pagar").json()["cuotas"]
+    assert cuota["mora"] == {
+        "id": mora["id"],
+        "estado": "rechazada",
+        "importe": "14.40",
+        "motivo_decision": "Esa mora no aplica.",
+    }
+    # Rechazada, la cuota se paga sin la mora.
+    voucher(asistente, numero_operacion="0458300")
+    assert comprobante(asistente, deuda["id"], 304)["estado"] == "listo"
+
+
+def test_la_mora_solo_en_una_cuota_vencida_una_vez_y_la_decide_el_gerente(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    al_dia = deuda_de(gerente, 16)
+    temprana = prueba_mora(asistente, al_dia["id"], 305)
+    assert (temprana.status_code, temprana.json()["code"]) == (409, "CUOTA_NO_VENCIDA")
+    dobles(gerente).revisor.datos = replace(LEIDO, periodo="2026-10")
+    deuda = vencida(gerente, 17)
+    prueba = prueba_mora(asistente, deuda["id"], 306).json()
+    mora = declarar(asistente, deuda["id"], prueba["id"]).json()
+
+    otra = prueba_mora(asistente, deuda["id"], 307)
+    assert (otra.status_code, otra.json()["code"]) == (409, "MORA_YA_DECLARADA")
+    propia = asistente.post(f"{MORAS}/{mora['id']}/aprobacion")
+    assert (propia.status_code, propia.json()["code"]) == (403, "SIN_PERMISO")
+    # La prueba de la mora no sirve como voucher del pago.
+    gerente.post(f"{MORAS}/{mora['id']}/aprobacion")
+    como_pago = pagar(asistente, deuda["id"], prueba["id"])
+    assert (como_pago.status_code, como_pago.json()["code"]) == (409, "COMPROBANTE_DE_MORA")
+
+
+def test_la_mora_que_declara_el_gerente_queda_aprobada(gerente: TestClient) -> None:
+    deuda = vencida(gerente, 18)
+    prueba = prueba_mora(gerente, deuda["id"], 308).json()
+
+    mora = declarar(gerente, deuda["id"], prueba["id"]).json()
+
+    assert (mora["estado"], mora["confianza"] is not None) == ("aprobada", True)
