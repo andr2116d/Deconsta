@@ -134,6 +134,18 @@ class MoraNoEncontrada(ErrorPagos):
     mensaje = "No encontramos esa mora en tu espacio."
 
 
+class PedidoNoEncontrado(ErrorPagos):
+    codigo = "PEDIDO_NO_ENCONTRADO"
+    mensaje = "No encontramos ese pedido en tu espacio."
+
+
+class PedidoYaHecho(ErrorPagos):
+    codigo = "PEDIDO_YA_HECHO"
+    mensaje = (
+        "Ya pediste que paguen esta cuota. Retira ese pedido si quieres pedírselo a otra asistente."
+    )
+
+
 class PagoYaDecidido(ErrorPagos):
     codigo = "ESTADO_NO_PERMITE"
 

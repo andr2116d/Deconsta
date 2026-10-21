@@ -14,7 +14,14 @@ from app.documentos.dominio.bloqueos import Bloqueo
 from app.documentos.dominio.modelos import Lectura, TipoArchivo
 from app.documentos.dominio.puertos import RepositorioCuentas, RepositorioDocumentos
 from app.notificaciones.dominio.puertos import RepositorioNotificaciones
-from app.pagos.dominio.modelos import Comprobante, DatosComprobante, EstadoMora, Mora, Pago
+from app.pagos.dominio.modelos import (
+    Comprobante,
+    DatosComprobante,
+    EstadoMora,
+    Mora,
+    Pago,
+    Pedido,
+)
 
 
 @dataclass(frozen=True)
@@ -120,6 +127,27 @@ class RepositorioMoras(Protocol):
         ...
 
 
+class RepositorioPedidos(Protocol):
+    def agregar(self, pedido: Pedido) -> None:
+        """Lanza PedidoYaHecho si la cuota ya tiene un pedido sin retirar."""
+        ...
+
+    def por_id(self, pedido_id: UUID, *, bloquear: bool = False) -> Pedido | None: ...
+
+    def guardar(self, pedido: Pedido) -> None:
+        """Guarda el retiro."""
+        ...
+
+    def pendientes(self, gerente_id: UUID, asistente_id: UUID | None = None) -> list[Pedido]:
+        """Sin retirar, de deudas registradas y con la cuota sin un pago vigente; con
+        `asistente_id`, solo los suyos. Los más antiguos primero."""
+        ...
+
+    def asistente_activa(self, gerente_id: UUID, asistente_id: UUID) -> bool:
+        """Si es una asistente del espacio que no fue eliminada ni está bloqueada."""
+        ...
+
+
 class RepositorioBloqueosPagos(Protocol):
     def vigente(self, asistente_id: UUID) -> Bloqueo | None: ...
 
@@ -151,6 +179,9 @@ class UnidadPagos(Protocol):
 
     @property
     def moras(self) -> RepositorioMoras: ...
+
+    @property
+    def pedidos(self) -> RepositorioPedidos: ...
 
     @property
     def deudas(self) -> RepositorioDeudas: ...

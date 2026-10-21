@@ -29,6 +29,8 @@ class TipoNotificacion(StrEnum):
     PAGO_DEVUELTO = "PAGO_DEVUELTO"
     MORA_APROBADA = "MORA_APROBADA"
     MORA_RECHAZADA = "MORA_RECHAZADA"
+    PAGO_PEDIDO = "PAGO_PEDIDO"
+    PEDIDO_RETIRADO = "PEDIDO_RETIRADO"
 
 
 @dataclass(frozen=True)

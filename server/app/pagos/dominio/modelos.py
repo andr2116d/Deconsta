@@ -212,3 +212,25 @@ class Mora:
     def rechazar(self, por: UUID, ahora: datetime, motivo: str) -> None:
         """La cuota se paga sin la mora; quien la declaró puede volver a declararla."""
         self._decidir(EstadoMora.RECHAZADA, por, ahora, motivo)
+
+
+@dataclass
+class Pedido:
+    """El gerente pide a una asistente que pague una cuota. Está pendiente mientras no se retire y
+    la cuota siga sin un pago vigente."""
+
+    id: UUID
+    gerente_id: UUID
+    deuda_id: UUID
+    cuota: int
+    asistente_id: UUID
+    nota: str | None
+    pedido_en: datetime
+    retirado_en: datetime | None = None
+    retirado_por: UUID | None = None
+
+    def retirar(self, por: UUID, ahora: datetime) -> None:
+        if self.retirado_en is not None:
+            raise PagoYaDecidido("Este pedido ya se retiró.")
+        self.retirado_en = ahora
+        self.retirado_por = por
