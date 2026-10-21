@@ -30,11 +30,25 @@ class Accion(StrEnum):
     CAMBIO_CONTRASENA_FALLIDO = "CAMBIO_CONTRASENA_FALLIDO"
     CIERRE_SESION = "CIERRE_SESION"
     DOCUMENTOS_ACEPTADOS = "DOCUMENTOS_ACEPTADOS"
+    DATOS_PERSONALES_ACTUALIZADOS = "DATOS_PERSONALES_ACTUALIZADOS"
+    DOCUMENTO_CAMBIADO = "DOCUMENTO_CAMBIADO"
+    NOMBRE_USUARIO_CAMBIADO = "NOMBRE_USUARIO_CAMBIADO"
+    CONFIRMACION_CONTRASENA_FALLIDA = "CONFIRMACION_CONTRASENA_FALLIDA"
+
+
+REGLA_NOMBRE_USUARIO = (
+    "Usa de 3 a 40 letras minúsculas, números, '.', '_' o '-', empezando y terminando en letra o "
+    "número."
+)
 
 
 def normalizar_nombre_usuario(valor: str) -> str:
     """Forma canónica para comparar: sin espacios en los extremos, NFKC y en minúsculas."""
     return unicodedata.normalize("NFKC", valor).strip().lower()
+
+
+def nombre_usuario_valido(valor: str) -> bool:
+    return PATRON_NOMBRE_USUARIO.match(valor) is not None
 
 
 @dataclass

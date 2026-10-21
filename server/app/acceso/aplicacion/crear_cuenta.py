@@ -4,14 +4,15 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from app.acceso.dominio import politica_contrasena
-from app.acceso.dominio.datos_personales import DatosPersonales
+from app.acceso.dominio.datos_personales import DatosPersonales, validar_cargo
 from app.acceso.dominio.errores import DatosInvalidos
 from app.acceso.dominio.modelos import (
-    PATRON_NOMBRE_USUARIO,
+    REGLA_NOMBRE_USUARIO,
     Accion,
     EventoAuditoria,
     Rol,
     Usuario,
+    nombre_usuario_valido,
     normalizar_nombre_usuario,
 )
 from app.acceso.dominio.puertos import FabricaUnidadDeTrabajo, ProtectorContrasenas, Reloj
@@ -46,7 +47,7 @@ def sugerir_nombre_usuario(nombres: str, apellidos: str) -> str:
 
 class CrearCuenta:
     """Alta de cuentas desde la línea de comandos. La cuenta empieza con una contraseña temporal y
-    el indicador de cambio pendiente."""
+    el indicador de cambio pendiente. El cargo lo fija quien crea la cuenta."""
 
     def __init__(
         self, unidad: FabricaUnidadDeTrabajo, contrasenas: ProtectorContrasenas, reloj: Reloj
@@ -62,7 +63,9 @@ class CrearCuenta:
         datos: DatosPersonales,
         gerente_nombre_usuario: str | None = None,
         nombre_usuario: str | None = None,
+        cargo: str | None = None,
     ) -> CuentaCreada:
+        cargo = validar_cargo(cargo)
         with self._unidad() as uow:
             gerente_id = None
             if rol is Rol.ASISTENTE:
@@ -77,13 +80,8 @@ class CrearCuenta:
 
             if nombre_usuario:
                 nombre = normalizar_nombre_usuario(nombre_usuario)
-                if not PATRON_NOMBRE_USUARIO.match(nombre):
-                    raise DatosInvalidos(
-                        campos={
-                            "nombre_usuario": "Usa de 3 a 40 letras minúsculas, números, '.', "
-                            "'_' o '-', empezando y terminando en letra o número."
-                        }
-                    )
+                if not nombre_usuario_valido(nombre):
+                    raise DatosInvalidos(campos={"nombre_usuario": REGLA_NOMBRE_USUARIO})
                 if uow.usuarios.existe_nombre_usuario(nombre):
                     raise DatosInvalidos(campos={"nombre_usuario": "Ese usuario ya está en uso."})
             else:
@@ -108,7 +106,7 @@ class CrearCuenta:
                 intentos_fallidos=0,
                 bloqueada_en=None,
             )
-            uow.usuarios.agregar(usuario, datos)
+            uow.usuarios.agregar(usuario, datos, cargo=cargo)
             uow.auditoria.registrar(
                 EventoAuditoria(
                     Accion.CUENTA_CREADA,
