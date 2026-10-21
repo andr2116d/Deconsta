@@ -31,34 +31,31 @@ async function cambiarContrasena(page: Page, temporal: string, nueva: string) {
   await modal.getByRole('button', { name: 'Guardar contraseña' }).click()
 }
 
-test('primer ingreso: contraseña obligatoria, aceptación y próxima disponibilidad', async ({
-  page,
-}) => {
+async function aceptarDocumentos(page: Page) {
+  await page.getByLabel(/Acepto los términos de uso/).check()
+  await page.getByLabel(/He leído la política de privacidad/).check()
+  await page.getByRole('button', { name: 'Aceptar y entrar a mi espacio' }).click()
+}
+
+async function cerrarSesion(page: Page) {
+  await page.getByRole('button', { name: /Tu cuenta/ }).click()
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+  await expect(page).toHaveURL(/\/ingresar$/)
+}
+
+test('primer ingreso: aceptación obligatoria y contraseña temporal recordada', async ({ page }) => {
   const gerente = crearCuenta('gerente')
+  const modal = page.getByRole('dialog', { name: 'Crea tu contraseña personal.' })
 
   await ingresar(page, gerente.usuario, gerente.contrasena)
   await expect(page).toHaveURL(/\/bienvenida$/)
-  const modal = page.getByRole('dialog', { name: 'Crea tu contraseña personal.' })
-  await expect(modal).toBeVisible()
-  await expect(modal.getByRole('button', { name: 'Omitir por ahora' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Antes de empezar, tus datos.' })).toBeVisible()
+  await expect(modal).toHaveCount(0)
 
-  // Escape no cierra la ventana y la navegación directa no salta el paso.
-  await page.keyboard.press('Escape')
-  await expect(modal).toBeVisible()
+  // La navegación directa no salta la aceptación y el backend tampoco deja entrar.
   await page.goto('/inicio')
   await expect(page).toHaveURL(/\/bienvenida$/)
   expect((await page.request.get('/api/v1/espacio')).status()).toBe(403)
-
-  // Un cambio fallido no avanza.
-  await cambiarContrasena(page, 'Equivocada-2026', NUEVA)
-  await expect(modal.getByText('La contraseña actual no es correcta.')).toBeVisible()
-  await modal.getByLabel('Nueva contraseña', { exact: true }).fill('corta')
-  await expect(modal.getByRole('meter')).not.toHaveAttribute('aria-valuetext', 'Muy segura')
-
-  await cambiarContrasena(page, gerente.contrasena, NUEVA)
-  await expect(modal).toBeHidden()
-  await expect(page.getByText('Contraseña actualizada. Último paso')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Antes de empezar, tus datos.' })).toBeVisible()
 
   // Leer no acepta: el documento se abre y se cierra sin marcar la casilla.
   await page.getByRole('button', { name: 'Leer los términos de uso' }).click()
@@ -72,32 +69,63 @@ test('primer ingreso: contraseña obligatoria, aceptación y próxima disponibil
   // Recargar conserva el paso: lo decide el backend.
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Antes de empezar, tus datos.' })).toBeVisible()
-  await page.goto('/inicio')
-  await expect(page).toHaveURL(/\/bienvenida$/)
 
-  await page.getByLabel(/Acepto los términos de uso/).check()
-  await page.getByLabel(/He leído la política de privacidad/).check()
-  await page.getByRole('button', { name: 'Aceptar y entrar a mi espacio' }).click()
+  await aceptarDocumentos(page)
   await expect(page).toHaveURL(/\/inicio$/)
-  await expect(page.getByRole('heading', { name: 'Estaremos disponibles pronto.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Resumen' })).toBeVisible()
   await expect(page.getByText('Todo listo.')).toBeVisible()
-
   await page.goto('/bienvenida')
   await expect(page).toHaveURL(/\/inicio$/)
 
-  // El siguiente ingreso entra directo: no se vuelve a pedir nada.
-  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+  // La contraseña temporal se recuerda, pero la ventana se puede cerrar.
+  await expect(modal).toBeVisible()
+  // La ventana sale del DOM cuando el cierre ya quedó guardado: el evento close del navegador es
+  // asíncrono y getByRole deja de verla apenas se cierra.
+  await page.keyboard.press('Escape')
+  await expect(page.locator('dialog')).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Resumen' })).toBeVisible()
+  await expect(modal).toBeHidden()
+
+  // En el siguiente ingreso vuelve; desde la tarjeta de la cuenta también se abre.
+  await cerrarSesion(page)
+  await ingresar(page, gerente.usuario, gerente.contrasena)
+  await expect(page).toHaveURL(/\/inicio$/)
+  await expect(modal).toBeVisible()
+  await modal.getByRole('button', { name: 'Ahora no' }).click()
+  await expect(page.locator('dialog')).toHaveCount(0)
+  await page.getByRole('button', { name: /Tu cuenta/ }).click()
+  await page.getByRole('button', { name: /Tu contraseña sigue siendo temporal/ }).click()
+  await expect(modal).toBeVisible()
+
+  // Un cambio fallido no avanza.
+  await cambiarContrasena(page, 'Equivocada-2026', NUEVA)
+  await expect(modal.getByText('La contraseña actual no es correcta.')).toBeVisible()
+  await modal.getByLabel('Nueva contraseña', { exact: true }).fill('corta')
+  await expect(modal.getByRole('meter')).not.toHaveAttribute('aria-valuetext', 'Muy segura')
+
+  await cambiarContrasena(page, gerente.contrasena, NUEVA)
+  await expect(modal).toBeHidden()
+  await expect(page.getByText('Contraseña actualizada.')).toBeVisible()
+  await page.getByRole('button', { name: /Tu cuenta/ }).click()
+  await expect(page.getByText('Tu contraseña sigue siendo temporal.')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // Con la contraseña nueva se entra directo, sin recordatorio.
+  await cerrarSesion(page)
   await ingresar(page, gerente.usuario, NUEVA)
   await expect(page).toHaveURL(/\/inicio$/)
-  await expect(page.getByRole('heading', { name: 'Estaremos disponibles pronto.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Resumen' })).toBeVisible()
+  await expect(modal).toHaveCount(0)
 })
 
-test('la asistente ve su paso de privacidad con el acento de su rol', async ({ page }) => {
+test('la asistente ve su paso de privacidad y sus pestañas con el acento de su rol', async ({
+  page,
+}) => {
   const gerente = crearCuenta('gerente')
   const asistente = crearCuenta('asistente', gerente.usuario)
 
   await ingresar(page, asistente.usuario, asistente.contrasena)
-  await cambiarContrasena(page, asistente.contrasena, NUEVA)
   await expect(page.locator('html')).toHaveAttribute('data-rol', 'asistente')
   await expect(page.locator('small', { hasText: 'Asistente' })).toBeVisible()
   const boton = page.getByRole('button', { name: 'Aceptar y entrar a mi espacio' })
@@ -105,8 +133,26 @@ test('la asistente ve su paso de privacidad con el acento de su rol', async ({ p
 
   // Cerrar sesión a mitad del flujo no da nada por aceptado.
   await page.getByRole('button', { name: 'Salir de la sesión' }).click()
-  await ingresar(page, asistente.usuario, NUEVA)
+  await ingresar(page, asistente.usuario, asistente.contrasena)
   await expect(page.getByRole('heading', { name: 'Antes de empezar, tus datos.' })).toBeVisible()
+
+  await aceptarDocumentos(page)
+  await page.getByRole('button', { name: 'Ahora no' }).click()
+  const pestanas = page.getByRole('navigation', { name: 'Secciones de asistencia' })
+  await expect(pestanas.getByRole('link')).toHaveText([
+    'Mi jornada',
+    'Pagos por completar',
+    'Mis registros',
+    'Calendario',
+  ])
+  await expect(page.getByRole('link', { name: 'Mi jornada' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  // Las secciones de gerencia no se abren aunque se escriba la dirección.
+  await page.goto('/por-autorizar')
+  await expect(page).toHaveURL(/\/inicio$/)
 })
 
 test('la asistente queda bloqueada al quinto intento hasta que su gerente la desbloquea', async ({
