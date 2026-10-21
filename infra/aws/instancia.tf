@@ -1,3 +1,7 @@
+data "aws_ec2_instance_type" "web" {
+  instance_type = var.tipo_instancia
+}
+
 data "aws_ssm_parameter" "ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
@@ -70,6 +74,9 @@ locals {
     s3_access_key     = aws_iam_access_key.aplicacion.id
     s3_secret_key     = aws_iam_access_key.aplicacion.secret
     anthropic_api_key = var.anthropic_api_key
+    ocr_concurrencia  = var.ocr_concurrencia
+    # Los núcleos de la instancia repartidos entre los procesos del worker.
+    ocr_hilos = max(1, floor(data.aws_ec2_instance_type.web.default_vcpus / var.ocr_concurrencia))
   })
 }
 

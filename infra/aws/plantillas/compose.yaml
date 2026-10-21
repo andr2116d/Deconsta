@@ -48,7 +48,8 @@ services:
       FORKED_BY_MULTIPROCESSING: "1"
       PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
       HOME: /home/app
-    command: celery -A app.workers.celery_app:celery_app worker -Q ocr --concurrency=1 --loglevel=INFO
+    # Varios archivos a la vez: un proceso de PaddleOCR por cada uno (OCR_CONCURRENCIA en .env).
+    command: celery -A app.workers.celery_app:celery_app worker -Q ocr --concurrency=${OCR_CONCURRENCIA:-2} --loglevel=INFO
     volumes:
       - modelos_ocr:/home/app/.paddlex
     depends_on:

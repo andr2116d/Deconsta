@@ -9,9 +9,15 @@ variable "entorno" {
 }
 
 variable "tipo_instancia" {
-  description = "PaddleOCR necesita memoria: 8 GB como mínimo."
+  description = "CPU dedicada (sin créditos que se agoten) para el OCR; 8 GB de memoria como mínimo."
   type        = string
-  default     = "t3.large"
+  default     = "c7i.xlarge"
+}
+
+variable "ocr_concurrencia" {
+  description = "Archivos que el worker analiza a la vez: un proceso de PaddleOCR por cada uno."
+  type        = number
+  default     = 2
 }
 
 variable "codigo" {

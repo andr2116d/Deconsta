@@ -53,7 +53,8 @@ class LectorPaddle:
     """PaddleOCR 3 con el modelo de español. Sin clasificador de orientación ni corrección de
     deformación: los documentos son fotos o capturas planas y esos modelos duplican el tiempo."""
 
-    def __init__(self) -> None:
+    def __init__(self, hilos: int | None = None) -> None:
+        self._hilos = hilos
         self._ocr: Any = None
         # Una instancia de Paddle no admite lecturas simultáneas desde varios hilos.
         self._bloqueo = threading.Lock()
@@ -78,6 +79,7 @@ class LectorPaddle:
                 # Con oneDNN, Paddle 3 falla en procesadores x86 (servidores Intel o AMD) al
                 # ejecutar estos modelos: ConvertPirAttribute2RuntimeAttribute not support.
                 enable_mkldnn=False,
+                **({"cpu_threads": self._hilos} if self._hilos else {}),
             )
         return self._ocr
 
