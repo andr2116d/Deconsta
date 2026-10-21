@@ -228,6 +228,16 @@ class RepositorioComprobantesSql:
     def operacion_usada(self, gerente_id: UUID, huella: bytes) -> bool:
         return self._usado("huella_operacion", gerente_id, huella)
 
+    def del_pago(self, pago_id: UUID) -> list[Comprobante]:
+        filas = self._conexion.execute(
+            text(
+                f"SELECT {COLUMNAS_COMPROBANTE} FROM comprobante_pago WHERE pago_id = :pago_id"
+                " ORDER BY subido_en"
+            ),
+            {"pago_id": pago_id},
+        ).all()
+        return [self._comprobante(fila) for fila in filas]
+
     def vincular(self, comprobantes: list[UUID], pago_id: UUID) -> None:
         sentencia = text(
             "UPDATE comprobante_pago SET pago_id = :pago_id WHERE id IN :ids"
@@ -284,14 +294,14 @@ class RepositorioPagosSql:
                 raise CuotaNoPagable("CUOTA_YA_PAGADA") from error
             raise
 
-    def del_espacio(self, gerente_id: UUID) -> list[Pago]:
+    def _pagos(self, condicion: str, parametros: dict[str, Any], resto: str = "") -> list[Pago]:
         filas = self._conexion.execute(
             text(
-                f"SELECT {COLUMNAS_PAGO}, ARRAY(SELECT c.id FROM comprobante_pago c"
-                " WHERE c.pago_id = pago.id ORDER BY c.subido_en) AS comprobantes"
-                " FROM pago WHERE gerente_id = :gerente_id ORDER BY registrado_en DESC LIMIT 200"
+                f"SELECT {COLUMNAS_PAGO}, decidido_por, decidido_en, motivo_decision,"
+                " ARRAY(SELECT c.id FROM comprobante_pago c WHERE c.pago_id = pago.id"
+                f" ORDER BY c.subido_en) AS comprobantes FROM pago WHERE {condicion}{resto}"
             ),
-            {"gerente_id": gerente_id},
+            parametros,
         ).all()
         return [
             Pago(
@@ -317,9 +327,53 @@ class RepositorioPagosSql:
                 ),
                 registrado_en=fila.registrado_en,
                 comprobantes=tuple(fila.comprobantes),
+                decidido_por=fila.decidido_por,
+                decidido_en=fila.decidido_en,
+                motivo_decision=fila.motivo_decision,
             )
             for fila in filas
         ]
+
+    def por_id(self, pago_id: UUID, *, bloquear: bool = False) -> Pago | None:
+        cerrojo = " FOR UPDATE" if bloquear else ""
+        pagos = self._pagos("id = :id", {"id": pago_id}, cerrojo)
+        return pagos[0] if pagos else None
+
+    def guardar(self, pago: Pago) -> None:
+        self._conexion.execute(
+            text(
+                "UPDATE pago SET estado = :estado, decidido_por = :decidido_por,"
+                " decidido_en = :decidido_en, motivo_decision = :motivo WHERE id = :id"
+            ),
+            {
+                "id": pago.id,
+                "estado": pago.estado.value,
+                "decidido_por": pago.decidido_por,
+                "decidido_en": pago.decidido_en,
+                "motivo": pago.motivo_decision,
+            },
+        )
+
+    def del_espacio(self, gerente_id: UUID, *, estado: EstadoPago | None = None) -> list[Pago]:
+        filtro = " AND estado = :estado" if estado else ""
+        return self._pagos(
+            f"gerente_id = :gerente_id{filtro}",
+            {"gerente_id": gerente_id, "estado": estado.value if estado else None},
+            " ORDER BY registrado_en DESC LIMIT 200",
+        )
+
+    def devoluciones(self, gerente_id: UUID) -> dict[tuple[UUID, int], str]:
+        filas = self._conexion.execute(
+            text(
+                "SELECT DISTINCT ON (p.deuda_id, p.cuota) p.deuda_id, p.cuota, p.motivo_decision"
+                " FROM pago p WHERE p.gerente_id = :gerente_id AND p.estado = 'devuelto'"
+                " AND NOT EXISTS (SELECT 1 FROM pago v WHERE v.deuda_id = p.deuda_id"
+                " AND v.cuota = p.cuota AND v.estado IN ('por_verificar', 'confirmado'))"
+                " ORDER BY p.deuda_id, p.cuota, p.decidido_en DESC"
+            ),
+            {"gerente_id": gerente_id},
+        ).all()
+        return {(fila.deuda_id, fila.cuota): fila.motivo_decision for fila in filas}
 
 
 class RepositorioBloqueosPagosSql:

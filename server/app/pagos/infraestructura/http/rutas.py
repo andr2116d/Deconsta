@@ -2,19 +2,20 @@
 
 Ver lo que falta pagar, subir comprobantes y registrar pagos: el gerente y todas sus asistentes con
 la incorporación completa. Un comprobante lo ven quien lo subió y el gerente; cualquier otro
-responde 404 COMPROBANTE_NO_ENCONTRADO. Ver y levantar bloqueos: solo el gerente (403 SIN_PERMISO).
+responde 404 COMPROBANTE_NO_ENCONTRADO. La confianza de un pago solo la ve el gerente. Confirmar o
+devolver un pago y ver o levantar bloqueos: solo el gerente (403 SIN_PERMISO).
 
 `POST /pagos/comprobantes` recibe el archivo (multipart: `archivo` hasta 10 MB, `deuda_id` y
 `cuota`) y responde 202 con el comprobante «analizando»: el análisis corre en el worker y se
 consulta con `GET /pagos/comprobantes/{id}`.
 
 Errores propios: 403 REGISTRO_PAGOS_BLOQUEADO (con `blocked_since`); 404 DEUDA_NO_ENCONTRADA,
-COMPROBANTE_NO_ENCONTRADO, BLOQUEO_NO_ENCONTRADO y CUENTA_NO_ENCONTRADA; 409 DEUDA_POR_AUTORIZAR,
-DEUDA_NO_SE_PAGA, CUOTA_YA_PAGADA, COMPROBANTE_EN_ANALISIS, COMPROBANTE_ILEGIBLE,
-COMPROBANTE_RECHAZADO, COMPROBANTE_REPETIDO, COMPROBANTE_FALLIDO, COMPROBANTE_YA_USADO y
-COMPROBANTE_DE_OTRA_CUOTA; 413 ARCHIVO_DEMASIADO_GRANDE; 422 CAMPOS_OBLIGATORIOS, DATOS_INVALIDOS,
-ARCHIVO_INVALIDO, COMPROBANTES_NO_COMBINAN e IMPORTE_NO_COINCIDE; 429 DEMASIADAS_SOLICITUDES; 503
-SERVICIO_NO_DISPONIBLE.
+PAGO_NO_ENCONTRADO, COMPROBANTE_NO_ENCONTRADO, BLOQUEO_NO_ENCONTRADO y CUENTA_NO_ENCONTRADA; 409
+DEUDA_POR_AUTORIZAR, DEUDA_NO_SE_PAGA, CUOTA_YA_PAGADA, COMPROBANTE_EN_ANALISIS,
+COMPROBANTE_ILEGIBLE, COMPROBANTE_RECHAZADO, COMPROBANTE_REPETIDO, COMPROBANTE_FALLIDO,
+COMPROBANTE_YA_USADO, COMPROBANTE_DE_OTRA_CUOTA y ESTADO_NO_PERMITE; 413 ARCHIVO_DEMASIADO_GRANDE;
+422 CAMPOS_OBLIGATORIOS, DATOS_INVALIDOS, ARCHIVO_INVALIDO, COMPROBANTES_NO_COMBINAN e
+IMPORTE_NO_COINCIDE; 429 DEMASIADAS_SOLICITUDES; 503 SERVICIO_NO_DISPONIBLE.
 """
 
 from typing import Annotated
@@ -23,12 +24,14 @@ from uuid import UUID
 from fastapi import APIRouter, File, Form, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
+from app.acceso.dominio.modelos import Rol
 from app.acceso.infraestructura.http.dependencias import (
     ContenedorDep,
     GerenteDep,
     SesionHabilitadaDep,
 )
 from app.acceso.infraestructura.http.rutas import ERRORES
+from app.deudas.dominio.modelos import EstadoPago
 from app.documentos.dominio.errores import ArchivoDemasiadoGrande, ArchivoFaltante
 from app.documentos.dominio.modelos import TAMANO_MAXIMO
 from app.documentos.infraestructura.http.rutas import CSP_ARCHIVO
@@ -36,6 +39,8 @@ from app.pagos.aplicacion.pagos import ComprobanteConsultado
 from app.pagos.infraestructura.http.esquemas import (
     BloqueoPagosSalida,
     ComprobanteSalida,
+    MotivoEntrada,
+    PagoDetalleSalida,
     PagoEntrada,
     PagoSalida,
     PorPagarSalida,
@@ -110,14 +115,47 @@ def registrar_pago(
     return PagoSalida.desde(
         contenedor.registrar_pago.ejecutar(
             sesion, entrada.deuda_id, entrada.cuota, entrada.comprobantes
-        )
+        ),
+        gerente=sesion.usuario.rol is Rol.GERENTE,
     )
 
 
 @router.get("/pagos", responses=ERRORES)
-def listar_pagos(sesion: SesionHabilitadaDep, contenedor: ContenedorDep) -> list[PagoSalida]:
-    """Los pagos del espacio, los más recientes primero."""
-    return [PagoSalida.desde(p) for p in contenedor.listar_pagos.ejecutar(sesion)]
+def listar_pagos(
+    sesion: SesionHabilitadaDep, contenedor: ContenedorDep, estado: EstadoPago | None = None
+) -> list[PagoSalida]:
+    """Los pagos del espacio, los más recientes primero; con `estado`, solo esos."""
+    gerente = sesion.usuario.rol is Rol.GERENTE
+    return [
+        PagoSalida.desde(p, gerente=gerente)
+        for p in contenedor.listar_pagos.ejecutar(sesion, estado=estado)
+    ]
+
+
+@router.get("/pagos/{pago_id}", responses=ERRORES)
+def consultar_pago(
+    pago_id: UUID, sesion: SesionHabilitadaDep, contenedor: ContenedorDep
+) -> PagoDetalleSalida:
+    return PagoDetalleSalida.detalle(
+        contenedor.consultar_pago.ejecutar(sesion, pago_id),
+        gerente=sesion.usuario.rol is Rol.GERENTE,
+    )
+
+
+@router.post("/pagos/{pago_id}/confirmacion", responses=ERRORES)
+def confirmar_pago(
+    pago_id: UUID, sesion: GerenteDep, contenedor: ContenedorDep
+) -> PagoDetalleSalida:
+    contenedor.confirmar_pago.ejecutar(sesion, pago_id)
+    return consultar_pago(pago_id, sesion, contenedor)
+
+
+@router.post("/pagos/{pago_id}/devolucion", responses=ERRORES)
+def devolver_pago(
+    pago_id: UUID, entrada: MotivoEntrada, sesion: GerenteDep, contenedor: ContenedorDep
+) -> PagoDetalleSalida:
+    contenedor.devolver_pago.ejecutar(sesion, pago_id, entrada.motivo)
+    return consultar_pago(pago_id, sesion, contenedor)
 
 
 @router.get("/registro-pagos/bloqueos", responses=ERRORES)

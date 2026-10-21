@@ -11,6 +11,7 @@ from app.documentos.infraestructura.http.esquemas import SenalSalida
 from app.pagos.aplicacion.pagos import (
     ComprobanteConsultado,
     CuotaPorPagar,
+    PagoConComprobantes,
     PagoConDetalle,
     PorPagar,
 )
@@ -101,6 +102,8 @@ class CuotaPorPagarSalida(BaseModel):
     importe: str
     vencida_hace: int | None
     registrada_por: str
+    # Por qué el gerente devolvió el último pago de esta cuota, si lo devolvió.
+    devuelto_por: str | None
 
     @classmethod
     def desde(cls, item: CuotaPorPagar) -> "CuotaPorPagarSalida":
@@ -118,6 +121,7 @@ class CuotaPorPagarSalida(BaseModel):
             importe=str(cuota.importe),
             vencida_hace=item.vencida_hace,
             registrada_por=item.registrada_por,
+            devuelto_por=item.devuelto_por,
         )
 
 
@@ -167,14 +171,18 @@ class PagoSalida(BaseModel):
     lugar_pago: LugarPago | None
     pagado_el: date
     estado: EstadoPago
-    confianza: int
-    comprobaciones: list[ComprobacionSalida]
+    # Solo para el gerente: cuánto respaldan los comprobantes el pago y por qué. A una asistente
+    # no se le dice qué comprobaciones pasó un voucher.
+    confianza: int | None
+    comprobaciones: list[ComprobacionSalida] | None
     comprobantes: list[UUID]
     registrado_por: str
     registrado_en: datetime
+    decidido_en: datetime | None
+    motivo_decision: str | None
 
     @classmethod
-    def desde(cls, detalle: PagoConDetalle) -> "PagoSalida":
+    def desde(cls, detalle: PagoConDetalle, *, gerente: bool) -> "PagoSalida":
         pago = detalle.pago
         return cls(
             id=pago.id,
@@ -186,12 +194,37 @@ class PagoSalida(BaseModel):
             lugar_pago=pago.lugar,
             pagado_el=pago.pagado_el,
             estado=pago.estado,
-            confianza=pago.confianza,
-            comprobaciones=[ComprobacionSalida.desde(c) for c in pago.comprobaciones],
+            confianza=pago.confianza if gerente else None,
+            comprobaciones=[ComprobacionSalida.desde(c) for c in pago.comprobaciones]
+            if gerente
+            else None,
             comprobantes=list(pago.comprobantes),
             registrado_por=detalle.registrado_por,
             registrado_en=pago.registrado_en,
+            decidido_en=pago.decidido_en,
+            motivo_decision=pago.motivo_decision,
         )
+
+
+class PagoDetalleSalida(PagoSalida):
+    cuotas: int
+    detalle_comprobantes: list[ComprobanteSalida]
+
+    @classmethod
+    def detalle(cls, consulta: PagoConComprobantes, *, gerente: bool) -> "PagoDetalleSalida":
+        base = PagoSalida.desde(consulta.detalle, gerente=gerente)
+        return cls(
+            **base.model_dump(),
+            cuotas=consulta.cuotas,
+            detalle_comprobantes=[
+                ComprobanteSalida.desde(ComprobanteConsultado(c, registro_bloqueado=False))
+                for c in consulta.comprobantes
+            ],
+        )
+
+
+class MotivoEntrada(Entrada):
+    motivo: str | None = Field(None, max_length=1000)
 
 
 class BloqueoPagosSalida(BaseModel):

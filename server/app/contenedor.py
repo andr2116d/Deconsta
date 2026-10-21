@@ -76,7 +76,10 @@ from app.notificaciones.dominio.puertos import SuscriptorAvisos
 from app.notificaciones.infraestructura.avisos_redis import SuscriptorRedis
 from app.notificaciones.infraestructura.persistencia import UnidadNotificacionesSql
 from app.pagos.aplicacion.pagos import (
+    ConfirmarPago,
     ConsultarComprobante,
+    ConsultarPago,
+    DevolverPago,
     LeerComprobante,
     LevantarBloqueoPagos,
     ListarBloqueosPagos,
@@ -194,6 +197,9 @@ class Contenedor:
     listar_pagos: ListarPagos
     listar_bloqueos_pagos: ListarBloqueosPagos
     levantar_bloqueo_pagos: LevantarBloqueoPagos
+    consultar_pago: ConsultarPago
+    confirmar_pago: ConfirmarPago
+    devolver_pago: DevolverPago
 
     @classmethod
     def crear(
@@ -362,6 +368,9 @@ class Contenedor:
             listar_pagos=ListarPagos(*pagos),
             listar_bloqueos_pagos=ListarBloqueosPagos(*pagos),
             levantar_bloqueo_pagos=LevantarBloqueoPagos(*pagos),
+            consultar_pago=ConsultarPago(*pagos),
+            confirmar_pago=ConfirmarPago(*pagos),
+            devolver_pago=DevolverPago(*pagos),
         )
 
     def cerrar(self) -> None:
