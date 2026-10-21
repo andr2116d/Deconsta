@@ -20,12 +20,18 @@ recuperan. En producción viven en el gestor de secretos del despliegue, nunca e
 desplegada); sin ella, la revisión con IA queda incompleta y lo que registra una asistente espera
 la autorización del gerente.
 
+En desarrollo, `IA_PROVEEDOR=claude_code` prueba la revisión con IA sin clave: el worker ejecuta
+`claude -p` con la sesión de Claude Code de esa PC (hay que tenerla iniciada). Corre sin
+herramientas, sin MCP, sin configuración y en una carpeta vacía, y el documento viaja por la
+entrada estándar. En producción solo se acepta `IA_PROVEEDOR=api`.
+
 ## Comandos
 
 ```sh
 uv run uvicorn app.main:app --reload --port 8000   # servidor en desarrollo
 uv run --group ocr celery -A app.workers.celery_app:celery_app worker -Q ocr --concurrency=1
 PRUEBAS_OCR=1 uv run --group ocr pytest tests/test_adaptadores_documentos.py   # con PaddleOCR real
+PRUEBAS_CLAUDE_CODE=1 uv run pytest tests/test_revisor_claude_code.py            # con Claude Code real
 uv run pytest                                      # tests (usan Postgres y Redis de compose)
 uv run ruff check . && uv run ruff format .        # lint y formato
 uv run mypy app                                    # tipos

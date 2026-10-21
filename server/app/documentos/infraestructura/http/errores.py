@@ -50,5 +50,11 @@ async def manejar_error_documentos(_: Request, exc: Exception) -> JSONResponse:
     return respuesta_error(estado_de(exc), exc.codigo, exc.mensaje, campos=exc.campos, extra=extra)
 
 
+def respuesta_archivo_grande() -> JSONResponse:
+    """La que da el tope del cuerpo de POST /documentos, antes de leer el archivo."""
+    error = ArchivoDemasiadoGrande()
+    return respuesta_error(413, error.codigo, error.mensaje, campos=error.campos)
+
+
 def registrar_manejadores_documentos(app: FastAPI) -> None:
     app.add_exception_handler(ErrorDocumentos, manejar_error_documentos)

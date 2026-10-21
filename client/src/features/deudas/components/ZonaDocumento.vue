@@ -4,7 +4,7 @@ import { computed, ref, useId } from 'vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
-import { TIPOS_ACEPTADOS, type Etapa } from '../composables/useAnalisisDocumento'
+import { ACEPTAR, type Etapa } from '../composables/useAnalisisDocumento'
 
 /**
  * Escenario del documento: se suelta o se elige el archivo, se ve tal cual se subió y, mientras
@@ -16,6 +16,8 @@ const props = defineProps<{
   vistaPrevia: string | null
   /** Ya no se puede cambiar (la deuda se registró). */
   bloqueado?: boolean
+  /** El análisis está tardando más de lo habitual. */
+  demorado?: boolean
 }>()
 const emit = defineEmits<{ elegir: [archivo: File]; cambiar: [] }>()
 
@@ -23,7 +25,9 @@ const entrada = ref<HTMLInputElement>()
 const encima = ref(false)
 const idAyuda = useId()
 
-const esPdf = computed(() => props.archivo?.type === 'application/pdf')
+const esPdf = computed(
+  () => props.archivo?.type === 'application/pdf' || /\.pdf$/i.test(props.archivo?.name ?? ''),
+)
 const trabajando = computed(() => props.etapa === 'subiendo' || props.etapa === 'analizando')
 const tamano = computed(() => {
   const bytes = props.archivo?.size ?? 0
@@ -60,7 +64,7 @@ function alElegir(evento: Event) {
       class="sr-only"
       tabindex="-1"
       aria-hidden="true"
-      :accept="TIPOS_ACEPTADOS.join(',')"
+      :accept="ACEPTAR"
       @change="alElegir"
     />
 
@@ -125,7 +129,11 @@ function alElegir(evento: Event) {
               {{ etapa === 'subiendo' ? 'Subiendo el documento…' : 'Revisando el documento…' }}
             </b>
             <p class="max-w-[260px] text-[12px] text-secundario">
-              Leemos el texto, lo contrastamos y revisamos que el archivo no esté editado.
+              {{
+                demorado
+                  ? 'Está tardando un poco más: puede haber otros documentos en revisión. No cierres esta pantalla.'
+                  : 'Leemos el texto, lo contrastamos y revisamos que el archivo no esté editado.'
+              }}
             </p>
           </div>
         </Transition>

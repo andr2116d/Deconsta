@@ -23,6 +23,7 @@ from app.documentos.infraestructura.inspector import InspectorArchivosLocal
 from app.documentos.infraestructura.lector_paddle import LectorPaddle
 from app.documentos.infraestructura.persistencia import UnidadDocumentosSql
 from app.documentos.infraestructura.revisor_claude import RevisorClaude
+from app.documentos.infraestructura.revisor_claude_code import RevisorClaudeCode
 from app.notificaciones.dominio.puertos import PublicadorAvisos
 from app.notificaciones.infraestructura.avisos_redis import PublicadorRedis
 
@@ -57,7 +58,11 @@ class Componentes:
             ),
             inspector=InspectorArchivosLocal(),
             lector=LectorPaddle(),
-            revisor=RevisorClaude(
+            revisor=RevisorClaudeCode(
+                config.ia_comando_claude_code, config.ia_modelo, config.ia_esfuerzo
+            )
+            if config.ia_proveedor == "claude_code"
+            else RevisorClaude(
                 clave_api.get_secret_value() if clave_api else None,
                 config.ia_modelo,
                 config.ia_esfuerzo,

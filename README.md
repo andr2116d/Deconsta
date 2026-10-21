@@ -25,6 +25,11 @@ pnpm init:gerente --nombres ...       # crea el primer gerente; ver server/READM
 pnpm dev                              # client, server y worker OCR
 ```
 
+Para probar la revisión con IA sin clave de la API, pon `IA_PROVEEDOR=claude_code` en
+`server/.env` y ten iniciada tu sesión de Claude Code (`claude`): el worker la usa para revisar los
+documentos. En producción solo se usa `ANTHROPIC_API_KEY`. Si un puerto (8000 o 5173) está ocupado
+por otro proceso, `pnpm dev` se detiene en vez de arrancar a medias.
+
 La API aplica las migraciones pendientes al arrancar. El client queda en http://localhost:5173 y
 llama a la API por el proxy de Vite. Antes de abrir
 una PR, `pnpm check` ejecuta el lint y las pruebas de las dos partes.

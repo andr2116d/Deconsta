@@ -36,8 +36,11 @@ class Settings(BaseSettings):
     s3_secret_key: SecretStr
     s3_estilo_ruta: bool = True
 
-    # Revisión de documentos con Claude. Sin clave, la revisión queda incompleta y lo que registra
-    # una asistente espera la autorización del gerente.
+    # Revisión de documentos con Claude. «api» usa ANTHROPIC_API_KEY (Claude Console); sin clave,
+    # la revisión queda incompleta y lo que registra una asistente espera la autorización del
+    # gerente. «claude_code», solo en desarrollo, usa la sesión de Claude Code de esta PC.
+    ia_proveedor: Literal["api", "claude_code"] = "api"
+    ia_comando_claude_code: str = "claude"
     anthropic_api_key: SecretStr | None = None
     ia_modelo: str = "claude-sonnet-5-5"
     ia_esfuerzo: Literal["low", "medium", "high", "xhigh", "max"] = "high"
@@ -100,6 +103,8 @@ class Settings(BaseSettings):
             )
         if self.entorno == "produccion" and not self.cookie_segura:
             raise ValueError("En producción la cookie de sesión debe ser segura (HTTPS)")
+        if self.entorno == "produccion" and self.ia_proveedor != "api":
+            raise ValueError("En producción la revisión con IA solo usa la API de Anthropic")
         return self
 
     @property
