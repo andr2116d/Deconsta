@@ -78,6 +78,14 @@ def test_los_campos_obligatorios_vacios_se_marcan_uno_por_uno() -> None:
     assert set(error.value.campos) == {"concepto", "lugar_pago", "cuotas"}
 
 
+def test_el_concepto_admite_los_signos_de_un_nombre_de_deuda() -> None:
+    assert datos(concepto="Luz de la casa · setiembre").concepto == "Luz de la casa · setiembre"
+    assert datos(concepto="Cuota 3/12 – BCP").concepto == "Cuota 3/12 – BCP"
+    with pytest.raises(DeudaInvalida) as error:
+        datos(concepto="<script>")
+    assert set(error.value.campos) == {"concepto"}
+
+
 def test_cada_cuota_se_valida_en_soles_y_en_orden() -> None:
     with pytest.raises(DeudaInvalida) as error:
         datos(

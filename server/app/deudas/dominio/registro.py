@@ -33,7 +33,8 @@ MAXIMO_CUOTAS = 360
 # Una deuda vencida también se registra (se acumularon); no una de hace años ni a décadas.
 ANTIGUEDAD_MAXIMA = timedelta(days=730)
 PLAZO_MAXIMO = timedelta(days=365 * 30)
-PATRON_CONCEPTO = re.compile(r"^[^\W_][\w .,&'’()/#°º:+-]*$")
+# Letras, números y los signos de un concepto: «Luz de la casa · setiembre», «Cuota 3/12 – BCP».
+PATRON_CONCEPTO = re.compile(r"^[^\W_][\w .,&'’()/#°º:+·–-]*$")
 PATRON_CODIGO = re.compile(r"^[0-9A-Za-z][0-9A-Za-z -]*$")
 
 LUGARES = {lugar.value for lugar in LugarPago}
