@@ -18,7 +18,14 @@ from app.acceso.infraestructura.cifrado import CifradorDatos
 from app.acceso.infraestructura.persistencia import RegistroAuditoriaSql
 from app.categorias.infraestructura.persistencia import RepositorioCategoriasSql
 from app.deudas.dominio.errores import DocumentoNoRegistrable
-from app.deudas.dominio.modelos import Cuota, Deuda, EstadoDeuda, LugarPago, MotivoEspera
+from app.deudas.dominio.modelos import (
+    Cuota,
+    Deuda,
+    EstadoDeuda,
+    EstadoPago,
+    LugarPago,
+    MotivoEspera,
+)
 from app.documentos.dominio.modelos import TipoDocumento
 from app.documentos.infraestructura.persistencia import (
     RepositorioBloqueosSql,
@@ -35,6 +42,8 @@ COLUMNAS = """
     codigo_pago_cifrado, estado, motivos_autorizacion, revision_pendiente, campos_corregidos,
     decidida_por, decidida_en, motivo_decision, creado_en
 """
+# El pago que cuenta para una cuota: el que espera verificación o el confirmado.
+PAGO_VIGENTE = "pago.estado IN ('por_verificar', 'confirmado')"
 DOCUMENTO_REPETIDO = {
     "uq_deuda_documento_id",
     "uq_documento_deuda_deuda_id",
@@ -62,13 +71,20 @@ class RepositorioDeudasSql:
         if not ids:
             return {}
         sentencia = text(
-            "SELECT deuda_id, numero, vence_el, importe FROM cuota_deuda"
-            " WHERE deuda_id IN :ids ORDER BY deuda_id, numero"
+            "SELECT c.deuda_id, c.numero, c.vence_el, c.importe, pago.estado AS pago"
+            " FROM cuota_deuda c LEFT JOIN pago ON pago.deuda_id = c.deuda_id"
+            f" AND pago.cuota = c.numero AND {PAGO_VIGENTE}"
+            " WHERE c.deuda_id IN :ids ORDER BY c.deuda_id, c.numero"
         ).bindparams(bindparam("ids", expanding=True))
         cuotas: dict[UUID, list[Cuota]] = {}
         for fila in self._conexion.execute(sentencia, {"ids": ids}):
             cuotas.setdefault(fila.deuda_id, []).append(
-                Cuota(fila.numero, fila.vence_el, fila.importe)
+                Cuota(
+                    fila.numero,
+                    fila.vence_el,
+                    fila.importe,
+                    EstadoPago(fila.pago) if fila.pago else None,
+                )
             )
         return cuotas
 
@@ -207,6 +223,19 @@ class RepositorioDeudasSql:
             text(
                 f"SELECT {COLUMNAS} FROM deuda WHERE gerente_id = :gerente_id{filtro}"
                 " ORDER BY estado <> 'por_autorizar', creado_en DESC LIMIT 200"
+            ),
+            {"gerente_id": gerente_id},
+        ).all()
+        return self._deudas(list(filas))
+
+    def por_pagar(self, gerente_id: UUID) -> list[Deuda]:
+        filas = self._conexion.execute(
+            text(
+                f"SELECT {COLUMNAS} FROM deuda WHERE gerente_id = :gerente_id"
+                " AND estado = 'registrada' AND EXISTS ("
+                " SELECT 1 FROM cuota_deuda c WHERE c.deuda_id = deuda.id AND NOT EXISTS ("
+                " SELECT 1 FROM pago WHERE pago.deuda_id = c.deuda_id AND pago.cuota = c.numero"
+                f" AND {PAGO_VIGENTE})) ORDER BY vence_el, creado_en LIMIT 300"
             ),
             {"gerente_id": gerente_id},
         ).all()

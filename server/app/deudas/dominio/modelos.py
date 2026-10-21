@@ -11,6 +11,9 @@ Estados y transiciones:
 - rechazada y anulada son finales.
 
 Lo que registra el gerente queda registrada, sin revisión pendiente.
+
+Cada cuota se paga aparte (app.pagos): su pago queda por verificar hasta que el gerente lo confirme.
+Una deuda con un pago por verificar no se anula: primero se decide el pago.
 """
 
 from dataclasses import dataclass
@@ -47,11 +50,20 @@ class MotivoEspera(StrEnum):
     DATOS_CORREGIDOS = "DATOS_CORREGIDOS"
 
 
+class EstadoPago(StrEnum):
+    """El pago vigente de una cuota."""
+
+    POR_VERIFICAR = "por_verificar"
+    CONFIRMADO = "confirmado"
+
+
 @dataclass(frozen=True)
 class Cuota:
     numero: int
     vence_el: date
     importe: Decimal
+    # Sin pago vigente, la cuota falta pagarse.
+    pago: EstadoPago | None = None
 
 
 @dataclass
@@ -86,12 +98,22 @@ class Deuda:
     def vence_el(self) -> date:
         return min(c.vence_el for c in self.cuotas)
 
+    @property
+    def por_pagar(self) -> tuple[Cuota, ...]:
+        """Las cuotas sin un pago vigente, en orden."""
+        return tuple(c for c in self.cuotas if c.pago is None)
+
+    def cuota(self, numero: int) -> Cuota | None:
+        return next((c for c in self.cuotas if c.numero == numero), None)
+
     def vencida_hace(self, hoy: date) -> int | None:
-        """Días desde que venció su primera cuota; None si aún no vence o ya no se paga. Una
-        deuda vencida se registra y se paga igual: la empresa puede cobrar mora."""
-        if self.estado not in (EstadoDeuda.POR_AUTORIZAR, EstadoDeuda.REGISTRADA):
+        """Días desde que venció su primera cuota sin pagar; None si aún no vence, ya está
+        pagada o ya no se paga. Una deuda vencida se registra y se paga igual: la empresa puede
+        cobrar mora."""
+        pendientes = self.por_pagar
+        if not pendientes or self.estado not in (EstadoDeuda.POR_AUTORIZAR, EstadoDeuda.REGISTRADA):
             return None
-        dias = (hoy - self.vence_el).days
+        dias = (hoy - pendientes[0].vence_el).days
         return dias if dias > 0 else None
 
     @property
@@ -135,6 +157,13 @@ class Deuda:
             )
         if self.estado is not EstadoDeuda.REGISTRADA:
             raise TransicionInvalida(self._ya_decidida())
+        if any(c.pago is EstadoPago.POR_VERIFICAR for c in self.cuotas):
+            raise TransicionInvalida(
+                "Esta deuda tiene un pago esperando tu verificación: confírmalo o devuélvelo "
+                "antes de anularla."
+            )
+        if not self.por_pagar:
+            raise TransicionInvalida("Esta deuda ya está pagada.")
         self.estado = EstadoDeuda.ANULADA
         self.revision_pendiente = False
         self._decidir(por, ahora, motivo)
