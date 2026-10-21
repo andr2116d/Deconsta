@@ -84,11 +84,14 @@ export const SECCIONES: readonly Seccion[] = [
   {
     nombre: 'pagos-por-completar',
     ruta: 'pagos-por-completar',
-    etiqueta: 'Pagos por completar',
-    descripcion: 'Las cuotas del espacio que faltan pagar, con su vencimiento y su comprobante.',
+    etiqueta: { gerente: 'Por pagar', asistente: 'Pagos por completar' },
+    descripcion: {
+      gerente: 'Las cuotas que faltan pagar, para pagarlas o pedir a una asistente que las pague.',
+      asistente: 'Las cuotas del espacio que faltan pagar, con su vencimiento y su comprobante.',
+    },
     icono: 'reloj',
     ubicacion: 'pestana',
-    roles: ['asistente'],
+    roles: AMBOS,
     vista: () => import('@/features/pagos/views/PagosPorCompletarView.vue'),
   },
   {

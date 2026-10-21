@@ -180,15 +180,15 @@ onMounted(cargar)
 </script>
 
 <template>
-  <ConfirmacionPago v-if="pago" :pago="pago" :rol="rol" />
+  <ConfirmacionPago v-if="pago" :pago="pago" />
 
   <section v-else aria-labelledby="titulo-seccion">
     <RouterLink
-      :to="{ name: rol === 'asistente' ? 'pagos-por-completar' : 'calendario' }"
+      :to="{ name: 'pagos-por-completar' }"
       class="mb-4 inline-flex min-h-8 items-center gap-1 text-[12px] font-bold text-acento hover:underline"
     >
       <BaseIcono nombre="derecha" class="size-3.5 rotate-180" />
-      {{ rol === 'asistente' ? 'Pagos por completar' : 'Calendario' }}
+      {{ rol === 'asistente' ? 'Pagos por completar' : 'Por pagar' }}
     </RouterLink>
     <h1
       id="titulo-seccion"

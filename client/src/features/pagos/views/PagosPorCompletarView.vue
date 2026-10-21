@@ -28,6 +28,7 @@ const enVerificacion = ref<Pago[]>([])
 const fallo = ref(false)
 const cargando = ref(false)
 const DIAS_SEMANA = 7
+const gerente = computed(() => sesion.usuario?.rol === 'gerente')
 
 const grupos = computed(() => {
   const datos = porPagar.value
@@ -92,8 +93,14 @@ watch(
           Lo que falta pagar.
         </h1>
         <p class="mt-2 max-w-[62ch] text-[13px] text-secundario">
-          Paga fuera de Deconsta (en un agente, por Yape, en la banca por internet) y deja aquí el
-          comprobante. Tu gerente lo verificará.
+          <template v-if="gerente">
+            Págalo tú mismo o pide a una asistente que lo pague: le saldrá un aviso hasta que
+            registre el comprobante.
+          </template>
+          <template v-else>
+            Paga fuera de Deconsta (en un agente, por Yape, en la banca por internet) y deja aquí el
+            comprobante. Tu gerente lo verificará.
+          </template>
         </p>
       </div>
       <p v-if="porPagar?.cuotas.length" class="text-[13px] text-secundario">
@@ -162,6 +169,8 @@ watch(
               :hoy="porPagar.hoy"
               :categoria="categoriaDe(cuota.categoria_id)"
               :bloqueado="porPagar.registro_bloqueado"
+              :gerente="gerente"
+              @cambio="cargar"
             />
           </li>
         </ul>
@@ -174,7 +183,8 @@ watch(
       aria-labelledby="titulo-verificacion"
     >
       <h2 id="titulo-verificacion" class="text-[15px] font-extrabold">
-        Esperan la verificación del gerente · {{ enVerificacion.length }}
+        {{ gerente ? 'Esperan tu verificación' : 'Esperan la verificación del gerente' }} ·
+        {{ enVerificacion.length }}
       </h2>
       <ul class="mt-3 flex flex-col divide-y divide-borde">
         <li

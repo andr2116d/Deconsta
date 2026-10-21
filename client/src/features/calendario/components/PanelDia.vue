@@ -7,6 +7,8 @@ import InsigniaCategoria from '@/features/categorias/components/InsigniaCategori
 import type { Categoria } from '@/features/categorias/types'
 import { ESTADOS, TIPOS_DOCUMENTO } from '@/features/deudas/catalogo'
 import type { EstadoPago } from '@/features/deudas/types'
+import AccionPedido from '@/features/pagos/components/AccionPedido.vue'
+import type { PedidoResumen } from '@/features/pagos/types'
 import { formatearSoles } from '@/features/reglas/importes'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
@@ -19,7 +21,10 @@ const props = defineProps<{
   vencimientos: Vencimiento[]
   rol: Rol
   categoriaDe: (id: string | null) => Categoria | null
+  /** El pedido pendiente del gerente para pagar la cuota, si lo hizo. */
+  pedidoDe?: (deudaId: string, cuota: number) => PedidoResumen | null
 }>()
+const emit = defineEmits<{ cambio: [] }>()
 
 const encabezado = computed(() => partesDia(props.dia))
 const total = computed(() => props.vencimientos.reduce((suma, v) => suma + Number(v.importe), 0))
@@ -135,6 +140,16 @@ const PAGOS: Record<EstadoPago, { texto: string; clase: string }> = {
                 Registrar pago
                 <BaseIcono nombre="derecha" class="size-3.5" />
               </RouterLink>
+              <AccionPedido
+                v-if="pagable(v) && rol === 'gerente'"
+                :deuda-id="v.deuda_id"
+                :cuota="v.cuota"
+                :concepto="v.concepto"
+                :importe="v.importe"
+                :vence-el="v.vence_el"
+                :pedido="pedidoDe?.(v.deuda_id, v.cuota) ?? null"
+                @cambio="emit('cambio')"
+              />
             </div>
           </div>
         </div>

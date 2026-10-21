@@ -10,6 +10,7 @@ import { formatearSoles } from '@/features/reglas/importes'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
 import type { CuotaPorPagar } from '../types'
+import AccionPedido from './AccionPedido.vue'
 
 /** Una cuota que falta pagar: cuánto, cuándo vence, dónde se paga y el paso para registrarla. */
 const props = defineProps<{
@@ -17,7 +18,10 @@ const props = defineProps<{
   hoy: string
   categoria?: Categoria
   bloqueado?: boolean
+  /** El gerente pide que la paguen; la asistente ve si se lo pidieron. */
+  gerente?: boolean
 }>()
+const emit = defineEmits<{ cambio: [] }>()
 
 const vencida = computed(() => props.cuota.vencida_hace !== null)
 const cuando = computed(() => cuandoVence(props.cuota.vence_el, props.hoy))
@@ -57,7 +61,19 @@ const cuando = computed(() => cuandoVence(props.cuota.vence_el, props.hoy))
           }}
         </p>
         <p v-if="cuota.devuelto_por" class="mt-1.5 text-[12px] text-error">
-          Tu gerente devolvió el pago: {{ cuota.devuelto_por }}
+          {{ gerente ? 'Devolviste el pago' : 'Tu gerente devolvió el pago' }}:
+          {{ cuota.devuelto_por }}
+        </p>
+        <p
+          v-if="cuota.pedido && !gerente"
+          class="mt-1.5 inline-flex items-start gap-1 text-[12px] font-bold text-aviso"
+        >
+          <BaseIcono nombre="reloj" class="mt-px size-3.5 shrink-0" />
+          <span>
+            Tu gerente te pidió pagarla<template v-if="cuota.pedido.nota"
+              >: «{{ cuota.pedido.nota }}»</template
+            >
+          </span>
         </p>
         <span
           class="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold"
@@ -88,6 +104,16 @@ const cuando = computed(() => cuandoVence(props.cuota.vence_el, props.hoy))
         Registrar pago
         <BaseIcono nombre="derecha" class="size-4" />
       </RouterLink>
+      <AccionPedido
+        v-if="gerente"
+        :deuda-id="cuota.deuda_id"
+        :cuota="cuota.cuota"
+        :concepto="cuota.concepto"
+        :importe="cuota.importe"
+        :vence-el="cuota.vence_el"
+        :pedido="cuota.pedido"
+        @cambio="emit('cambio')"
+      />
     </div>
   </article>
 </template>
