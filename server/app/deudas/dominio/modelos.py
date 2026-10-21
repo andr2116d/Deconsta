@@ -86,6 +86,14 @@ class Deuda:
     def vence_el(self) -> date:
         return min(c.vence_el for c in self.cuotas)
 
+    def vencida_hace(self, hoy: date) -> int | None:
+        """Días desde que venció su primera cuota; None si aún no vence o ya no se paga. Una
+        deuda vencida se registra y se paga igual: la empresa puede cobrar mora."""
+        if self.estado not in (EstadoDeuda.POR_AUTORIZAR, EstadoDeuda.REGISTRADA):
+            return None
+        dias = (hoy - self.vence_el).days
+        return dias if dias > 0 else None
+
     @property
     def pendiente_para_gerente(self) -> bool:
         return self.estado is EstadoDeuda.POR_AUTORIZAR or self.revision_pendiente

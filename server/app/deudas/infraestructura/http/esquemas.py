@@ -91,9 +91,12 @@ class DeudaSalida(BaseModel):
     creado_en: datetime
     decidida_en: datetime | None
     motivo_decision: str | None
+    # Días desde que venció su primera cuota, contados en la zona del espacio; null si no está
+    # vencida o ya no se paga.
+    vencida_hace: int | None
 
     @classmethod
-    def desde(cls, deuda: Deuda, registrada_por: str) -> "DeudaSalida":
+    def desde(cls, deuda: Deuda, registrada_por: str, hoy: date) -> "DeudaSalida":
         documento = deuda.titular_documento
         return cls(
             id=deuda.id,
@@ -120,11 +123,12 @@ class DeudaSalida(BaseModel):
             creado_en=deuda.creado_en,
             decidida_en=deuda.decidida_en,
             motivo_decision=deuda.motivo_decision,
+            vencida_hace=deuda.vencida_hace(hoy),
         )
 
     @classmethod
     def con_detalle(cls, detalle: DeudaConDetalle) -> "DeudaSalida":
-        return cls.desde(detalle.deuda, detalle.registrada_por)
+        return cls.desde(detalle.deuda, detalle.registrada_por, detalle.hoy)
 
 
 class RegistroSalida(BaseModel):

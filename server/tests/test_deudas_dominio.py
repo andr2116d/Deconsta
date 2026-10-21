@@ -185,7 +185,7 @@ def test_los_campos_corregidos_se_comparan_con_lo_leido() -> None:
     assert campos_corregidos(datos(), None) == ()
 
 
-def deuda(estado: EstadoDeuda, revision: bool = False) -> Deuda:
+def deuda(estado: EstadoDeuda, revision: bool = False, vence_el: date = HOY) -> Deuda:
     return Deuda(
         id=uuid4(),
         gerente_id=uuid4(),
@@ -194,7 +194,7 @@ def deuda(estado: EstadoDeuda, revision: bool = False) -> Deuda:
         concepto="Luz",
         categoria_id=None,
         tipo_documento=TipoDocumento.RECIBO_SERVICIO,
-        cuotas=(Cuota(1, HOY, Decimal("10.00")),),
+        cuotas=(Cuota(1, vence_el, Decimal("10.00")),),
         lugares_pago=(LugarPago.AGENTE,),
         titular_nombre=None,
         titular_documento=None,
@@ -221,3 +221,14 @@ def test_las_decisiones_del_gerente_siguen_sus_transiciones() -> None:
     assert en_revision.estado is EstadoDeuda.ANULADA
     with pytest.raises(TransicionInvalida, match="ya fue anulada"):
         en_revision.anular(uuid4(), AHORA, "Otra vez")
+
+
+def test_una_deuda_vencida_cuenta_sus_dias_mientras_se_pueda_pagar() -> None:
+    atrasada = date(2026, 10, 10)
+    assert deuda(EstadoDeuda.REGISTRADA, vence_el=atrasada).vencida_hace(HOY) == 11
+    assert deuda(EstadoDeuda.POR_AUTORIZAR, vence_el=atrasada).vencida_hace(HOY) == 11
+    # Hoy todavía no está vencida.
+    assert deuda(EstadoDeuda.REGISTRADA).vencida_hace(HOY) is None
+    # Una anulada o rechazada ya no se paga: no está vencida.
+    assert deuda(EstadoDeuda.ANULADA, vence_el=atrasada).vencida_hace(HOY) is None
+    assert deuda(EstadoDeuda.RECHAZADA, vence_el=atrasada).vencida_hace(HOY) is None

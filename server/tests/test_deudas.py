@@ -90,6 +90,35 @@ def test_lo_que_registra_la_asistente_se_paga_y_se_notifica_al_gerente(
     assert gerente.get(DEUDAS, params={"pendientes": True}).json() == []
 
 
+def test_una_deuda_vencida_se_registra_en_varios_lugares_y_avisa_la_posible_mora(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    atrasada = date.today() - timedelta(days=30)
+    deuda = nueva(
+        asistente,
+        3,
+        lugares_pago=["billetera", "agente", "banca_digital"],
+        cuotas=[{"vence_el": atrasada.isoformat(), "importe": "182.40"}],
+    )["deuda"]
+    # El servidor cuenta los días en la zona del espacio, no en la del cliente.
+    calendario = asistente.get(
+        f"{DEUDAS}/calendario", params={"desde": atrasada, "hasta": atrasada}
+    ).json()
+    vencida_hace = (date.fromisoformat(calendario["hoy"]) - atrasada).days
+
+    assert deuda["estado"] == "registrada"
+    assert deuda["lugares_pago"] == ["agente", "banca_digital", "billetera"]
+    assert deuda["vencida_hace"] == vencida_hace
+    detalle = asistente.get(f"{DEUDAS}/{deuda['id']}").json()
+    assert (detalle["lugares_pago"], detalle["vencida_hace"]) == (
+        deuda["lugares_pago"],
+        vencida_hace,
+    )
+    assert calendario["vencimientos"][0]["lugares_pago"] == deuda["lugares_pago"]
+    [aviso] = notificaciones(gerente)
+    assert "la empresa podría cobrar mora" in aviso["cuerpo"]
+
+
 def test_sobre_el_limite_espera_al_gerente_y_su_decision_se_notifica(
     cliente: TestClient, asistente: TestClient, gerente: TestClient
 ) -> None:
