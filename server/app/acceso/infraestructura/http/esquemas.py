@@ -1,8 +1,11 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
+from app.acceso.aplicacion.autenticar import SesionActiva
+from app.acceso.dominio.incorporacion import DocumentoVigente, PasoPendiente, TipoDocumentoLegal
 from app.acceso.dominio.modelos import Rol, Usuario
 
 
@@ -70,10 +73,68 @@ class UsuarioSalida(BaseModel):
 class SesionSalida(BaseModel):
     usuario: UsuarioSalida
     debe_cambiar_contrasena: bool
+    # En orden. Vacío: la cuenta puede entrar a su espacio.
+    pasos_pendientes: list[PasoPendiente]
+
+    @classmethod
+    def desde(cls, sesion: SesionActiva) -> "SesionSalida":
+        return cls(
+            usuario=UsuarioSalida.desde(sesion.usuario),
+            debe_cambiar_contrasena=sesion.usuario.debe_cambiar_contrasena,
+            pasos_pendientes=list(sesion.pasos_pendientes),
+        )
 
 
 class IngresoSalida(SesionSalida):
     primer_ingreso: bool
+
+
+class DocumentoAceptadoEntrada(BaseModel):
+    tipo: TipoDocumentoLegal
+    # La versión que la persona leyó; se compara con la vigente.
+    version: int = Field(ge=1)
+
+
+class AceptacionEntrada(BaseModel):
+    documentos: list[DocumentoAceptadoEntrada] = Field(default_factory=list, max_length=10)
+
+
+class SeccionSalida(BaseModel):
+    titulo: str
+    parrafos: list[str]
+
+
+class DocumentoSalida(BaseModel):
+    tipo: TipoDocumentoLegal
+    version: int
+    titulo: str
+    resumen: str
+    secciones: list[SeccionSalida]
+    vigente_desde: datetime
+    aceptado_en: datetime | None
+
+    @classmethod
+    def desde(cls, vigente: DocumentoVigente) -> "DocumentoSalida":
+        documento = vigente.documento
+        return cls(
+            tipo=documento.tipo,
+            version=documento.version,
+            titulo=documento.titulo,
+            resumen=documento.resumen,
+            secciones=[
+                SeccionSalida(titulo=s.titulo, parrafos=list(s.parrafos))
+                for s in documento.secciones
+            ],
+            vigente_desde=documento.vigente_desde,
+            aceptado_en=vigente.aceptado_en,
+        )
+
+
+class EspacioSalida(BaseModel):
+    """Estado real del espacio de trabajo: los módulos aún no están disponibles."""
+
+    usuario: UsuarioSalida
+    disponible: bool
 
 
 class DesbloqueoSalida(BaseModel):

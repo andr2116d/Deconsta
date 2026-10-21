@@ -159,3 +159,18 @@ def consultar(url: str, sql: str, *parametros: object) -> list[tuple[Any, ...]]:
     with psycopg.connect(conninfo(url)) as conexion:
         cursor = conexion.execute(sql.encode(), parametros or None)
         return cursor.fetchall() if cursor.description else []
+
+
+def habilitar(url: str, *usuarios: uuid.UUID) -> None:
+    """Deja cuentas con la incorporación completa (contraseña cambiada y documentos vigentes
+    aceptados) para probar rutas de trabajo sin repetir el flujo."""
+    with psycopg.connect(conninfo(url)) as conexion:
+        for usuario in usuarios:
+            conexion.execute(
+                "UPDATE usuario SET debe_cambiar_contrasena = false WHERE id = %s", (usuario,)
+            )
+            conexion.execute(
+                "INSERT INTO aceptacion_documento (usuario_id, documento_id)"
+                " SELECT %s, id FROM documento_legal ON CONFLICT DO NOTHING",
+                (usuario,),
+            )

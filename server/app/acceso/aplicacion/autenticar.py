@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.acceso.dominio.errores import NoAutenticado
+from app.acceso.dominio.incorporacion import PasoPendiente, pasos_pendientes
 from app.acceso.dominio.modelos import Accion, EventoAuditoria, Usuario, huella_token
 from app.acceso.dominio.puertos import FabricaUnidadDeTrabajo, Reloj
 
@@ -10,6 +11,9 @@ from app.acceso.dominio.puertos import FabricaUnidadDeTrabajo, Reloj
 class SesionActiva:
     sesion_id: UUID
     usuario: Usuario
+    # Se recalculan en cada solicitud: si se publica una versión nueva de los documentos, las
+    # sesiones abiertas vuelven a pedir la aceptación.
+    pasos_pendientes: tuple[PasoPendiente, ...] = ()
 
 
 class Autenticar:
@@ -21,11 +25,13 @@ class Autenticar:
         if not token:
             raise NoAutenticado()
         with self._unidad() as uow:
-            sesion = uow.sesiones.vigente(huella_token(token), self._reloj())
+            ahora = self._reloj()
+            sesion = uow.sesiones.vigente(huella_token(token), ahora)
             usuario = uow.usuarios.por_id(sesion.usuario_id, bloquear=False) if sesion else None
-        if sesion is None or usuario is None or usuario.bloqueada:
-            raise NoAutenticado()
-        return SesionActiva(sesion.id, usuario)
+            if sesion is None or usuario is None or usuario.bloqueada:
+                raise NoAutenticado()
+            pasos = pasos_pendientes(usuario, uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+        return SesionActiva(sesion.id, usuario, pasos)
 
 
 class CerrarSesion:

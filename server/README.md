@@ -56,8 +56,19 @@ uv run python -m app.acceso.infraestructura.cli crear-gerente --nombres "Valenti
 uv run python -m app.acceso.infraestructura.cli crear-asistente --gerente valentina.ramos ...
 ```
 
-Imprime el id, el usuario y una contraseña temporal; al ingresar se pide cambiarla (se puede omitir y
-se vuelve a pedir en cada ingreso). `--tipo-documento` acepta `dni` o `ce`.
+Imprime el id, el usuario y una contraseña temporal. `--tipo-documento` acepta `dni` o `ce`.
+
+## Primer ingreso
+
+Antes de entrar a su espacio, cada cuenta completa en orden: cambiar la contraseña temporal y
+aceptar los términos de uso y la política de privacidad vigentes. La sesión informa lo que falta
+en `pasos_pendientes`; mientras quede algo, las rutas de trabajo (`GerenteDep`,
+`SesionHabilitadaDep`) responden 403 `INCORPORACION_PENDIENTE`.
+
+Los documentos viven en `documento_legal` con su versión y no se editan. Para cambiar un texto,
+crea una migración que inserte la versión siguiente (puede llevar `vigente_desde` futura): desde
+que rige, todas las cuentas deben volver a aceptarla. Las aceptaciones quedan en
+`aceptacion_documento` (cuenta, versión y fecha) y no se pueden modificar.
 
 ## Acceso
 
@@ -67,6 +78,9 @@ se vuelve a pedir en cada ingreso). `--tipo-documento` acepta `dni` o `ce`.
 | `GET /api/v1/auth/me` | Usuario de la sesión |
 | `POST /api/v1/auth/logout` | Cierra la sesión |
 | `POST /api/v1/auth/contrasena` | Cambia la contraseña (pide la actual) |
+| `GET /api/v1/documentos-legales` | Términos y política vigentes, con su aceptación |
+| `POST /api/v1/documentos-legales/aceptacion` | Acepta las versiones vigentes (`{tipo, version}`) |
+| `GET /api/v1/espacio` | Entrada al espacio; exige la incorporación completa |
 | `POST /api/v1/asistentes/{id}/desbloqueo` | El gerente desbloquea a su asistente |
 
 Los errores siguen siempre `{"code", "detail", "fields"?}`. La asistente se bloquea al quinto

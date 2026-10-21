@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from app.acceso.aplicacion.autenticar import SesionActiva
-from app.acceso.dominio.errores import SinPermiso
+from app.acceso.dominio.errores import IncorporacionPendiente, SinPermiso
 from app.acceso.dominio.modelos import Rol
 from app.contenedor import Contenedor
 
@@ -33,7 +33,18 @@ def sesion_actual(request: Request, contenedor: ContenedorDep) -> SesionActiva:
 SesionDep = Annotated[SesionActiva, Depends(sesion_actual)]
 
 
-def sesion_de_gerente(sesion: SesionDep) -> SesionActiva:
+def sesion_habilitada(sesion: SesionDep) -> SesionActiva:
+    """Sesión de una cuenta que ya completó su incorporación. Toda ruta de trabajo la exige: con
+    un paso pendiente, la sesión solo sirve para completarlo, aunque se llame a la API directo."""
+    if sesion.pasos_pendientes:
+        raise IncorporacionPendiente(sesion.pasos_pendientes)
+    return sesion
+
+
+SesionHabilitadaDep = Annotated[SesionActiva, Depends(sesion_habilitada)]
+
+
+def sesion_de_gerente(sesion: SesionHabilitadaDep) -> SesionActiva:
     if sesion.usuario.rol is not Rol.GERENTE:
         raise SinPermiso()
     return sesion

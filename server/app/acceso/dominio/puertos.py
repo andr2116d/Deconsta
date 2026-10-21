@@ -8,6 +8,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from app.acceso.dominio.datos_personales import DatosPersonales
+from app.acceso.dominio.incorporacion import DocumentoLegal
 from app.acceso.dominio.modelos import EventoAuditoria, Sesion, Usuario
 
 
@@ -43,6 +44,22 @@ class RegistroAuditoria(Protocol):
     def registrar(self, evento: EventoAuditoria) -> None: ...
 
 
+class RepositorioDocumentosLegales(Protocol):
+    def vigentes(self, ahora: datetime) -> list[DocumentoLegal]:
+        """La versión más alta de cada tipo cuya vigencia ya empezó."""
+        ...
+
+    def aceptaciones(self, usuario_id: UUID, documento_ids: list[int]) -> dict[int, datetime]:
+        """Fecha en que la cuenta aceptó cada uno de esos documentos, si lo hizo."""
+        ...
+
+    def hay_sin_aceptar(self, usuario_id: UUID, ahora: datetime) -> bool: ...
+
+    def registrar_aceptacion(self, usuario_id: UUID, documento_id: int, ahora: datetime) -> bool:
+        """Registra la aceptación; False si ya existía (no se duplica)."""
+        ...
+
+
 class UnidadDeTrabajo(Protocol):
     """Transacción: al salir sin excepción confirma; con excepción revierte."""
 
@@ -54,6 +71,9 @@ class UnidadDeTrabajo(Protocol):
 
     @property
     def auditoria(self) -> RegistroAuditoria: ...
+
+    @property
+    def documentos(self) -> RepositorioDocumentosLegales: ...
 
     def __enter__(self) -> Self: ...
 

@@ -3,7 +3,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import Equipo, consultar
+from tests.conftest import Equipo, consultar, habilitar
 
 LOGIN = "/api/v1/auth/login"
 CONTRASENA = "/api/v1/auth/contrasena"
@@ -124,6 +124,7 @@ def test_cambiar_la_contrasena_exige_sesion(cliente: TestClient) -> None:
 
 
 def test_el_gerente_desbloquea_a_su_asistente(cliente: TestClient, equipo: Equipo) -> None:
+    habilitar(base_de(cliente), equipo.gerente.id)
     bloquear(cliente, equipo.asistente.usuario)
     ingresar(cliente, equipo.gerente.usuario, equipo.gerente.contrasena)
 
@@ -143,6 +144,7 @@ def test_el_gerente_desbloquea_a_su_asistente(cliente: TestClient, equipo: Equip
 def test_el_desbloqueo_tras_un_bloqueo_reinicia_el_contador(
     cliente: TestClient, equipo: Equipo
 ) -> None:
+    habilitar(base_de(cliente), equipo.gerente.id)
     bloquear(cliente, equipo.asistente.usuario)
     gerente = TestClient(cliente.app)
     ingresar(gerente, equipo.gerente.usuario, equipo.gerente.contrasena)
@@ -156,6 +158,7 @@ def test_el_desbloqueo_tras_un_bloqueo_reinicia_el_contador(
 def test_otro_gerente_no_puede_desbloquear_ni_saber_si_existe(
     cliente: TestClient, equipo: Equipo
 ) -> None:
+    habilitar(base_de(cliente), equipo.otro_gerente.id)
     bloquear(cliente, equipo.asistente.usuario)
     ingresar(cliente, equipo.otro_gerente.usuario, equipo.otro_gerente.contrasena)
 
@@ -167,6 +170,7 @@ def test_otro_gerente_no_puede_desbloquear_ni_saber_si_existe(
 
 
 def test_una_asistente_no_puede_desbloquear(cliente: TestClient, equipo: Equipo) -> None:
+    habilitar(base_de(cliente), equipo.asistente.id)
     ingresar(cliente, equipo.asistente.usuario, equipo.asistente.contrasena)
     respuesta = desbloquear(cliente, equipo.asistente.id)
     assert respuesta.status_code == 403

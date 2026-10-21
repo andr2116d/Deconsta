@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 from app.acceso.aplicacion.limites import LimitesAcceso, exigir_cupo
 from app.acceso.dominio.errores import CredencialesIncorrectas, CuentaBloqueada, ErrorAcceso
+from app.acceso.dominio.incorporacion import PasoPendiente, pasos_pendientes
 from app.acceso.dominio.modelos import (
     Accion,
     EventoAuditoria,
@@ -24,6 +25,7 @@ class SesionIniciada:
     expira_en: datetime
     usuario: Usuario
     primer_ingreso: bool
+    pasos_pendientes: tuple[PasoPendiente, ...]
 
 
 class IniciarSesion:
@@ -112,7 +114,8 @@ class IniciarSesion:
                         Accion.INGRESO_EXITOSO, actor_id=usuario.id, cuenta_id=usuario.id
                     )
                 )
-                resultado = SesionIniciada(token, sesion.expira_en, usuario, primer_ingreso)
+                pasos = pasos_pendientes(usuario, uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+                resultado = SesionIniciada(token, sesion.expira_en, usuario, primer_ingreso, pasos)
         # El error se lanza después de confirmar: el contador y la auditoría deben quedar guardados.
         if fallo is not None:
             raise fallo
