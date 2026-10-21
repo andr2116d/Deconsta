@@ -262,3 +262,59 @@ def test_limita_la_frecuencia_de_la_gestion_del_equipo(
     codigos = [cliente.post(ASISTENTES, json=DANIELA).status_code for _ in range(3)]
 
     assert codigos == [201, 409, 429]
+
+
+def test_restablecer_entrega_una_contrasena_nueva_y_cierra_sus_sesiones(
+    gerente: TestClient,
+) -> None:
+    creada = registrar(gerente)
+    asistente = TestClient(gerente.app)
+    ingresar(asistente, "daniela.torres", creada["contrasena_temporal"])
+    url = f"{ASISTENTES}/{creada['asistente']['id']}/restablecimiento"
+
+    respuesta = gerente.post(url, json={"motivo": "Olvidó su contraseña"})
+
+    assert respuesta.status_code == 200
+    nueva = respuesta.json()["contrasena_temporal"]
+    assert nueva != creada["contrasena_temporal"]
+    assert respuesta.json()["nombre_usuario"] == "daniela.torres"
+    assert asistente.get("/api/v1/auth/me").status_code == 401
+    anterior = {"nombre_usuario": "daniela.torres", "contrasena": creada["contrasena_temporal"]}
+    assert asistente.post(LOGIN, json=anterior).status_code == 401
+    assert ingresar(asistente, "daniela.torres", nueva)["debe_cambiar_contrasena"] is True
+    auditoria = consultar(
+        base_de(gerente),
+        "SELECT motivo, actor_id IS NOT NULL, detalle FROM auditoria"
+        " WHERE accion = 'CONTRASENA_RESTABLECIDA'",
+    )
+    assert auditoria == [("Olvidó su contraseña", True, {"sesiones_cerradas": 1})]
+    assert nueva not in str(auditoria)
+
+
+def test_restablecer_no_levanta_el_bloqueo(gerente: TestClient) -> None:
+    creada = registrar(gerente)
+    url = f"{ASISTENTES}/{creada['asistente']['id']}"
+    gerente.post(f"{url}/bloqueo")
+
+    nueva = gerente.post(f"{url}/restablecimiento").json()
+
+    assert nueva["asistente"]["estado"] == "bloqueada"
+    intento = {"nombre_usuario": "daniela.torres", "contrasena": nueva["contrasena_temporal"]}
+    assert TestClient(gerente.app).post(LOGIN, json=intento).status_code == 423
+
+
+def test_solo_su_gerente_restablece_y_nunca_a_una_eliminada(
+    gerente: TestClient, equipo: Equipo
+) -> None:
+    creada = registrar(gerente)
+    url = f"{ASISTENTES}/{creada['asistente']['id']}/restablecimiento"
+    gerente.post(f"{ASISTENTES}/{creada['asistente']['id']}/eliminacion")
+    assert gerente.post(url).json()["code"] == "CUENTA_NO_ENCONTRADA"
+
+    otro = TestClient(gerente.app)
+    habilitar(base_de(gerente), equipo.otro_gerente.id, equipo.asistente.id)
+    ingresar(otro, equipo.otro_gerente.usuario, equipo.otro_gerente.contrasena)
+    ajena = f"{ASISTENTES}/{equipo.asistente.id}/restablecimiento"
+    assert otro.post(ajena).status_code == 404
+    ingresar(otro, equipo.asistente.usuario, equipo.asistente.contrasena)
+    assert otro.post(ajena).status_code == 403
