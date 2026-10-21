@@ -360,11 +360,16 @@ def test_todas_las_asistentes_del_espacio_ven_todas_sus_deudas_pero_no_deciden(
     deuda = nueva(asistente, 24, concepto="De Lucía")["deuda"]
     dobles(cliente).revisor.datos = replace(LEIDO, periodo="2026-10")
     nueva(gerente, 25, concepto="Del gerente")
+    borrador = subir(asistente, imagen(26))
     rosa = sesion(cliente, equipo.otra_asistente)
 
     assert {d["concepto"] for d in rosa.get(DEUDAS).json()} == {"De Lucía", "Del gerente"}
     detalle = rosa.get(f"{DEUDAS}/{deuda['id']}")
     assert (detalle.status_code, detalle.json()["registrada_por"]["nombre"]) == (200, "Lucía Vega")
+    # El documento que respalda la deuda se ve; el que Lucía aún no registra, no.
+    assert rosa.get(f"/api/v1/documentos/{deuda['documento_id']}/contenido").status_code == 200
+    ajeno = rosa.get(f"/api/v1/documentos/{borrador['id']}")
+    assert (ajeno.status_code, ajeno.json()["code"]) == (404, "DOCUMENTO_NO_ENCONTRADO")
     # Ver no es decidir: eso sigue siendo del gerente.
     anular = rosa.post(f"{DEUDAS}/{deuda['id']}/anulacion", json={"motivo": "No"})
     assert (anular.status_code, anular.json()["code"]) == (403, "SIN_PERMISO")
