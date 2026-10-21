@@ -92,6 +92,19 @@ def eliminar(
     contenedor.eliminar_asistente.ejecutar(sesion, asistente_id, motivo)
 
 
+@router.post("/{asistente_id}/restablecimiento", responses=ERRORES)
+def restablecer_contrasena(
+    asistente_id: UUID,
+    sesion: GerenteDep,
+    contenedor: ContenedorDep,
+    entrada: MotivoEntrada | None = None,
+) -> CredencialesSalida:
+    """Contraseña temporal nueva para una asistente que olvidó la suya. Cierra sus sesiones."""
+    motivo = entrada.motivo if entrada else None
+    entregadas = contenedor.restablecer_contrasena.ejecutar(sesion, asistente_id, motivo)
+    return CredencialesSalida.desde(entregadas)
+
+
 @router.post("/{asistente_id}/recuperacion", responses=ERRORES)
 def recuperar(
     asistente_id: UUID, sesion: GerenteDep, contenedor: ContenedorDep
