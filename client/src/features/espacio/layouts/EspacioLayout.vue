@@ -7,6 +7,7 @@ import { obtenerEspacio } from '@/features/incorporacion/api/incorporacion'
 import ModalCambioContrasena from '@/features/incorporacion/components/ModalCambioContrasena.vue'
 import AvisoEnVivo from '@/features/notificaciones/components/AvisoEnVivo.vue'
 import { useNotificacionesStore } from '@/features/notificaciones/stores/notificaciones'
+import AvisoPedidoPago from '@/features/pagos/components/AvisoPedidoPago.vue'
 import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 
@@ -20,6 +21,8 @@ const saliendo = ref(false)
 // Aviso que deja la pantalla anterior (por ejemplo, al terminar la bienvenida).
 const aviso = ref(typeof history.state?.aviso === 'string' ? (history.state.aviso as string) : null)
 const contrasenaPedida = ref(false)
+// El espacio confirmó que la cuenta puede trabajar: recién entonces se consultan sus pedidos.
+const espacioListo = ref(false)
 
 // La ventana aparece sola en cada ingreso mientras la contraseña siga siendo temporal; desde el
 // menú de la cuenta se puede volver a abrir aunque se haya pospuesto.
@@ -82,6 +85,7 @@ function enfocarTitulo() {
 onMounted(async () => {
   try {
     await obtenerEspacio()
+    espacioListo.value = true
     // Avisos de la cuenta: los guardados y, en adelante, los que lleguen en tiempo real.
     notificaciones.cargar().catch(() => undefined)
     notificaciones.conectar()
@@ -107,6 +111,8 @@ onBeforeUnmount(() => notificaciones.olvidar())
     >
       Saltar al contenido
     </a>
+    <!-- Los pagos que pidió el gerente: aviso al entrar y, si se pospone, una barra arriba. -->
+    <AvisoPedidoPago v-if="espacioListo && sesion.usuario.rol === 'asistente'" />
     <CabeceraEspacio
       :usuario="sesion.usuario"
       :contrasena-temporal="sesion.debeCambiarContrasena"
