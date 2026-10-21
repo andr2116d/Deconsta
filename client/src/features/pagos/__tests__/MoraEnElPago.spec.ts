@@ -53,7 +53,7 @@ const lectura = (importe: string) => ({
 })
 
 /** Un voucher con mora (c1) y, al subirlo como prueba, la prueba lista (c2). */
-function simularApi(cuota: Record<string, unknown> = CUOTA) {
+function simularApi(cuota: Record<string, unknown> = CUOTA, voucher?: Record<string, unknown>) {
   let subidas = 0
   const mock = vi.fn<typeof fetch>((entrada, opciones) => {
     const ruta = new URL(String(entrada), 'http://localhost').pathname
@@ -65,6 +65,10 @@ function simularApi(cuota: Record<string, unknown> = CUOTA) {
       subidas += 1
       return Promise.resolve(respuesta(202, comprobante(`c${subidas}`, {})))
     }
+    if (ruta.endsWith('/comprobantes/c1') && voucher)
+      return Promise.resolve(respuesta(200, comprobante('c1', voucher)))
+    if (ruta.endsWith('/pagos') && opciones?.method === 'POST')
+      return Promise.resolve(respuesta(201, { id: 'p1', estado: 'por_verificar' }))
     if (ruta.endsWith('/comprobantes/c1'))
       return Promise.resolve(
         respuesta(
@@ -180,5 +184,36 @@ describe('La mora al registrar un pago', () => {
 
     expect(vista.text()).toContain('La mora espera a tu gerente')
     expect(boton(vista, 'Elegir voucher')!.attributes('disabled')).toBeDefined()
+  })
+
+  it('con la mora aprobada acepta la cuota más la mora y registra el pago', async () => {
+    const api = simularApi(
+      { ...CUOTA, mora: { id: 'm1', estado: 'aprobada', importe: '14.40', motivo_decision: null } },
+      { estado: 'listo', lectura: lectura('196.80') },
+    )
+    const vista = await montar()
+    expect(vista.text()).toContain('Mora aprobada')
+
+    const archivo = new File([new Uint8Array([137, 80, 78, 71])], 'voucher.png', {
+      type: 'image/png',
+    })
+    const entrada = vista.get('input[type="file"][multiple]')
+    Object.defineProperty(entrada.element, 'files', { value: [archivo] })
+    await entrada.trigger('change')
+    await vi.advanceTimersByTimeAsync(1300)
+    await flushPromises()
+
+    const registrar = boton(vista, 'Registrar pago')!
+    expect(registrar.attributes('disabled')).toBeUndefined()
+    await registrar.trigger('click')
+    await flushPromises()
+    const registro = api.mock.calls.find(
+      ([e, o]) => String(e).endsWith('/pagos') && o?.method === 'POST',
+    )
+    expect(JSON.parse(String(registro?.[1]?.body))).toEqual({
+      deuda_id: 'd1',
+      cuota: 1,
+      comprobantes: ['c1'],
+    })
   })
 })
