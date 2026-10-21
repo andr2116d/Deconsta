@@ -3,8 +3,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.concurrency import run_in_threadpool
 
 from app.acceso.infraestructura.http.errores import registrar_manejadores_acceso
 from app.api.v1 import router as api_v1
