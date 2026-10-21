@@ -11,7 +11,8 @@ import { useSesionStore } from '../stores/sesion'
 import MedidorSeguridad from './MedidorSeguridad.vue'
 
 defineProps<{ inicial: boolean }>()
-const emit = defineEmits<{ cambiada: []; omitir: []; 'sesion-terminada': [] }>()
+// Con la contraseña temporal (inicial) el cambio es obligatorio: no hay forma de omitirlo.
+const emit = defineEmits<{ cambiada: []; volver: []; 'sesion-terminada': [] }>()
 
 type Campo = 'contrasena_actual' | 'contrasena_nueva' | 'confirmacion'
 
@@ -114,12 +115,13 @@ async function enviar() {
         {{ enviando ? 'Guardando…' : 'Guardar contraseña' }}
       </BaseBoton>
       <BaseBoton
+        v-if="!inicial"
         variante="discreto"
         ancho="completo"
         :deshabilitado="enviando"
-        @click="emit('omitir')"
+        @click="emit('volver')"
       >
-        {{ inicial ? 'Omitir por ahora' : 'Volver' }}
+        Volver
       </BaseBoton>
     </div>
   </form>

@@ -2,7 +2,7 @@
 persona usuaria: qué ocurrió y qué hacer. Ninguno incluye contraseñas, hashes ni detalles internos.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 
 class ErrorAcceso(Exception):
@@ -94,6 +94,29 @@ class DatosInvalidos(ErrorAcceso):
 class DatosDuplicados(ErrorAcceso):
     codigo = "DATOS_DUPLICADOS"
     mensaje = "Ya existe una cuenta con alguno de estos datos."
+
+
+class IncorporacionPendiente(ErrorAcceso):
+    """La sesión es válida, pero la cuenta aún no completa los pasos de su primer ingreso."""
+
+    codigo = "INCORPORACION_PENDIENTE"
+
+    def __init__(self, pasos: Sequence[str]) -> None:
+        self.pasos = list(pasos)
+        mensaje = (
+            "Primero cambia tu contraseña temporal."
+            if "cambiar_contrasena" in self.pasos
+            else "Acepta los términos de uso y la política de privacidad vigentes para continuar."
+        )
+        super().__init__(mensaje)
+
+
+class DocumentosDesactualizados(ErrorAcceso):
+    codigo = "DOCUMENTOS_DESACTUALIZADOS"
+    mensaje = (
+        "Los términos o la política de privacidad cambiaron mientras los leías. "
+        "Revisa la versión vigente y vuelve a aceptarla."
+    )
 
 
 class ServicioNoDisponible(ErrorAcceso):

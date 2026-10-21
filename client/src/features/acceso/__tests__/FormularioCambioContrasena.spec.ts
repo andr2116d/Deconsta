@@ -52,7 +52,13 @@ describe('FormularioCambioContrasena', () => {
   })
 
   it('actualiza el indicador de la sesión al guardar', async () => {
-    simularFetch(respuesta(200, { ...SESION, debe_cambiar_contrasena: false }))
+    simularFetch(
+      respuesta(200, {
+        ...SESION,
+        debe_cambiar_contrasena: false,
+        pasos_pendientes: ['aceptar_documentos'],
+      }),
+    )
     const { formulario, sesion, actual, nueva, confirmacion } = await montar()
     await actual.setValue('Temporal-1')
     await nueva.setValue('Ciruela-2026')
@@ -63,14 +69,13 @@ describe('FormularioCambioContrasena', () => {
 
     expect(formulario.emitted('cambiada')).toHaveLength(1)
     expect(sesion.debeCambiarContrasena).toBe(false)
+    expect(sesion.pasoActual).toBe('aceptar_documentos')
   })
 
-  it('permite omitir el cambio inicial', async () => {
+  it('no ofrece omitir el cambio de la contraseña temporal', async () => {
     const { formulario } = await montar()
-    await formulario
-      .findAll('button')
-      .find((b) => b.text() === 'Omitir por ahora')!
-      .trigger('click')
-    expect(formulario.emitted('omitir')).toHaveLength(1)
+    const textos = formulario.findAll('button').map((b) => b.text())
+    expect(textos).not.toContain('Omitir por ahora')
+    expect(textos).not.toContain('Volver')
   })
 })

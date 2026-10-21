@@ -64,3 +64,44 @@ def test_solo_una_asistente_puede_quedar_bloqueada(conexion: psycopg.Connection)
 def test_toda_asistente_pertenece_a_un_gerente(conexion: psycopg.Connection) -> None:
     with pytest.raises(psycopg.errors.CheckViolation, match="ck_usuario_rol_gerente"):
         insertar_usuario(conexion, "asistente")
+
+
+def test_publica_la_primera_version_de_cada_documento(conexion: psycopg.Connection) -> None:
+    filas = conexion.execute("SELECT tipo, version FROM documento_legal ORDER BY tipo").fetchall()
+    assert filas == [("privacidad", 1), ("terminos", 1)]
+
+
+@pytest.mark.parametrize(
+    "sentencia",
+    [
+        "UPDATE documento_legal SET titulo = 'otro'",
+        "DELETE FROM documento_legal",
+        "TRUNCATE documento_legal CASCADE",
+        "UPDATE aceptacion_documento SET aceptada_en = now()",
+        "DELETE FROM aceptacion_documento",
+        "TRUNCATE aceptacion_documento",
+    ],
+)
+def test_documentos_y_aceptaciones_no_admiten_cambios(
+    conexion: psycopg.Connection, sentencia: str
+) -> None:
+    usuario = insertar_usuario(conexion, "gerente")
+    conexion.execute(
+        "INSERT INTO aceptacion_documento (usuario_id, documento_id)"
+        " SELECT %s, id FROM documento_legal",
+        (usuario,),
+    )
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        conexion.execute(sentencia.encode())
+    assert conexion.execute("SELECT count(*) FROM aceptacion_documento").fetchone() == (2,)
+
+
+def test_una_cuenta_acepta_cada_version_una_sola_vez(conexion: psycopg.Connection) -> None:
+    usuario = insertar_usuario(conexion, "gerente")
+    aceptar = (
+        "INSERT INTO aceptacion_documento (usuario_id, documento_id)"
+        " SELECT %s, id FROM documento_legal WHERE tipo = 'terminos'"
+    )
+    conexion.execute(aceptar, (usuario,))
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        conexion.execute(aceptar, (usuario,))

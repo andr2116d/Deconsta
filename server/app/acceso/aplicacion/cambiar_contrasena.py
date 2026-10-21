@@ -8,7 +8,8 @@ from app.acceso.dominio.errores import (
     ErrorAcceso,
     NoAutenticado,
 )
-from app.acceso.dominio.modelos import Accion, EventoAuditoria, Usuario
+from app.acceso.dominio.incorporacion import pasos_pendientes
+from app.acceso.dominio.modelos import Accion, EventoAuditoria
 from app.acceso.dominio.puertos import (
     FabricaUnidadDeTrabajo,
     LimitadorSolicitudes,
@@ -32,7 +33,8 @@ class CambiarContrasena:
         self._limites = limites
         self._reloj = reloj
 
-    def ejecutar(self, sesion: SesionActiva, actual: str, nueva: str) -> Usuario:
+    def ejecutar(self, sesion: SesionActiva, actual: str, nueva: str) -> SesionActiva:
+        """Devuelve la sesión actualizada: tras la contraseña inicial sigue la aceptación."""
         exigir_cupo(self._limitador, (self._limites.cambio_contrasena, str(sesion.usuario.id)))
         fallo: ErrorAcceso | None = None
         with self._unidad() as uow:
@@ -71,6 +73,7 @@ class CambiarContrasena:
                         detalle={"era_inicial": era_inicial, "sesiones_cerradas": cerradas},
                     )
                 )
+                pasos = pasos_pendientes(usuario, uow.documentos.hay_sin_aceptar(usuario.id, ahora))
         if fallo is not None:
             raise fallo
-        return usuario
+        return SesionActiva(sesion.sesion_id, usuario, pasos)

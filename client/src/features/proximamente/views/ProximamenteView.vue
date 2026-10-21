@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { useSesionStore } from '@/features/acceso/stores/sesion'
+import { obtenerEspacio } from '@/features/incorporacion/api/incorporacion'
+import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 import MarcaDeconsta from '@/shared/components/MarcaDeconsta.vue'
@@ -21,6 +23,24 @@ const responsabilidad = computed(() =>
 )
 
 const proximos = ['Obligaciones', 'Calendario', 'Comprobantes', 'Historial']
+
+// La guarda decide con la sesión del navegador; el backend confirma que la cuenta puede entrar.
+// Si se publicó otra versión de los documentos o la sesión dejó de valer, se vuelve al paso que
+// corresponda.
+onMounted(async () => {
+  try {
+    await obtenerEspacio()
+  } catch (error) {
+    if (!(error instanceof ErrorApi)) return
+    if (error.codigo === 'NO_AUTENTICADO') {
+      sesion.olvidar()
+      router.replace({ name: 'inicio-sesion' })
+    } else if (error.codigo === 'INCORPORACION_PENDIENTE') {
+      await sesion.recargar().catch(() => undefined)
+      router.replace({ name: 'incorporacion' })
+    }
+  }
+})
 
 async function salir() {
   saliendo.value = true
@@ -46,10 +66,7 @@ async function salir() {
         </div>
         <span
           aria-hidden="true"
-          class="grid size-9 place-items-center rounded-full text-[13px] font-extrabold"
-          :class="
-            usuario?.rol === 'gerente' ? 'bg-rosa text-ciruela' : 'bg-[#e0eae3] text-[#365c4b]'
-          "
+          class="grid size-9 place-items-center rounded-full bg-acento-suave text-[13px] font-extrabold text-acento"
         >
           {{ iniciales }}
         </span>
@@ -71,7 +88,7 @@ async function salir() {
           </span>
         </div>
 
-        <p class="text-[13px] font-bold text-ciruela">Hola, {{ usuario?.nombres }}</p>
+        <p class="text-[13px] font-bold text-acento">Hola, {{ usuario?.nombres }}</p>
         <h1
           class="mt-2 text-[32px] leading-[1.15] font-extrabold tracking-[-0.04em] sm:text-[40px]"
         >
@@ -92,18 +109,7 @@ async function salir() {
           </li>
         </ul>
 
-        <div class="mt-8 flex flex-col gap-3">
-          <BaseAviso v-if="aviso" tono="exito">{{ aviso }}</BaseAviso>
-          <BaseAviso v-if="sesion.debeCambiarContrasena" tono="aviso" titulo="Contraseña temporal">
-            Tu cuenta todavía usa la contraseña que te entregaron. Cámbiala para protegerla.
-            <RouterLink
-              :to="{ name: 'cambio-contrasena' }"
-              class="mt-2 block font-bold underline underline-offset-2"
-            >
-              Cambiar contraseña
-            </RouterLink>
-          </BaseAviso>
-        </div>
+        <BaseAviso v-if="aviso" tono="exito" class="mt-8">{{ aviso }}</BaseAviso>
       </div>
     </main>
   </div>

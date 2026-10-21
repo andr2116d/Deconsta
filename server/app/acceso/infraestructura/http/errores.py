@@ -12,7 +12,9 @@ from app.acceso.dominio.errores import (
     DatosDuplicados,
     DatosInvalidos,
     DemasiadasSolicitudes,
+    DocumentosDesactualizados,
     ErrorAcceso,
+    IncorporacionPendiente,
     NoAutenticado,
     ServicioNoDisponible,
     SinPermiso,
@@ -24,9 +26,11 @@ ESTADOS_HTTP: dict[type[ErrorAcceso], int] = {
     NoAutenticado: 401,
     ContrasenaActualIncorrecta: 400,
     SinPermiso: 403,
+    IncorporacionPendiente: 403,
     CuentaNoEncontrada: 404,
     CuentaNoBloqueada: 409,
     DatosDuplicados: 409,
+    DocumentosDesactualizados: 409,
     ContrasenaInsegura: 422,
     ContrasenaRepetida: 422,
     DatosInvalidos: 422,
@@ -45,6 +49,8 @@ async def manejar_error_acceso(request: Request, exc: Exception) -> JSONResponse
         extra["retry_after"] = exc.reintentar_en
     if isinstance(exc, ContrasenaInsegura):
         extra["requirements"] = list(exc.requisitos)
+    if isinstance(exc, IncorporacionPendiente):
+        extra["pending_steps"] = exc.pasos
     respuesta = respuesta_error(
         ESTADOS_HTTP.get(type(exc), 400),
         exc.codigo,

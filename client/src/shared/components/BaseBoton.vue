@@ -11,10 +11,10 @@ withDefaults(
 )
 
 const estilos = {
-  principal: 'border-ciruela bg-ciruela text-white enabled:hover:bg-ciruela-hover',
+  principal: 'border-acento bg-acento text-white enabled:hover:bg-acento-hover',
   secundario:
     'border-borde bg-white text-tinta enabled:hover:border-control enabled:hover:bg-fondo',
-  discreto: 'border-transparent bg-transparent text-ciruela enabled:hover:bg-rosa',
+  discreto: 'border-transparent bg-transparent text-acento enabled:hover:bg-acento-suave',
 }
 </script>
 

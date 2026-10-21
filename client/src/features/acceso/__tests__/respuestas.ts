@@ -10,6 +10,14 @@ export function respuesta(estado: number, cuerpo?: unknown): Response {
 export const SESION = {
   usuario: { id: '1', nombre_usuario: 'lucia.vega', nombres: 'Lucía', rol: 'asistente' },
   debe_cambiar_contrasena: true,
+  pasos_pendientes: ['cambiar_contrasena'],
+}
+
+/** Cuenta que ya completó el primer ingreso. */
+export const SESION_HABILITADA = {
+  ...SESION,
+  debe_cambiar_contrasena: false,
+  pasos_pendientes: [],
 }
 
 /** Simula fetch con respuestas en orden y devuelve el mock para revisar las llamadas. */

@@ -8,8 +8,8 @@ import type { Ingreso } from '../types'
 const router = useRouter()
 
 function continuar(ingreso: Ingreso) {
-  // Mientras la contraseña inicial siga pendiente, cada ingreso pasa primero por el cambio.
-  router.replace({ name: ingreso.debe_cambiar_contrasena ? 'cambio-contrasena' : 'inicio' })
+  // Mientras quede un paso del primer ingreso, cada ingreso pasa primero por la bienvenida.
+  router.replace({ name: ingreso.pasos_pendientes.length ? 'incorporacion' : 'inicio' })
 }
 </script>
 

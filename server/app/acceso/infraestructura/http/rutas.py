@@ -1,8 +1,11 @@
 """Rutas HTTP del acceso.
 
-Resultados del inicio de sesión: 200 con la sesión (debe_cambiar_contrasena indica si toca cambiar
-la contraseña inicial), 422 CAMPOS_OBLIGATORIOS, 401 CREDENCIALES_INCORRECTAS, 423 CUENTA_BLOQUEADA,
+Resultados del inicio de sesión: 200 con la sesión (pasos_pendientes indica qué falta del primer
+ingreso: cambiar la contraseña temporal y aceptar los documentos vigentes), 422
+CAMPOS_OBLIGATORIOS, 401 CREDENCIALES_INCORRECTAS, 423 CUENTA_BLOQUEADA,
 429 DEMASIADAS_SOLICITUDES con Retry-After, 503 SERVICIO_NO_DISPONIBLE y 500 ERROR_INTERNO.
+
+Con un paso pendiente, las rutas de trabajo responden 403 INCORPORACION_PENDIENTE con pending_steps.
 """
 
 from datetime import UTC, datetime
@@ -16,12 +19,16 @@ from app.acceso.infraestructura.http.dependencias import (
     GerenteDep,
     OrigenDep,
     SesionDep,
+    SesionHabilitadaDep,
 )
 from app.acceso.infraestructura.http.esquemas import (
+    AceptacionEntrada,
     CambioContrasenaEntrada,
     DesbloqueoEntrada,
     DesbloqueoSalida,
+    DocumentoSalida,
     ErrorSalida,
+    EspacioSalida,
     IngresoEntrada,
     IngresoSalida,
     SesionSalida,
@@ -53,16 +60,14 @@ def iniciar_sesion(
     return IngresoSalida(
         usuario=UsuarioSalida.desde(resultado.usuario),
         debe_cambiar_contrasena=resultado.usuario.debe_cambiar_contrasena,
+        pasos_pendientes=list(resultado.pasos_pendientes),
         primer_ingreso=resultado.primer_ingreso,
     )
 
 
 @router.get("/auth/me", responses=ERRORES)
 def sesion(sesion: SesionDep) -> SesionSalida:
-    return SesionSalida(
-        usuario=UsuarioSalida.desde(sesion.usuario),
-        debe_cambiar_contrasena=sesion.usuario.debe_cambiar_contrasena,
-    )
+    return SesionSalida.desde(sesion)
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -76,13 +81,31 @@ def cerrar_sesion(request: Request, response: Response, contenedor: ContenedorDe
 def cambiar_contrasena(
     datos: CambioContrasenaEntrada, sesion: SesionDep, contenedor: ContenedorDep
 ) -> SesionSalida:
-    usuario = contenedor.cambiar_contrasena.ejecutar(
+    actualizada = contenedor.cambiar_contrasena.ejecutar(
         sesion, datos.contrasena_actual, datos.contrasena_nueva
     )
-    return SesionSalida(
-        usuario=UsuarioSalida.desde(usuario),
-        debe_cambiar_contrasena=usuario.debe_cambiar_contrasena,
-    )
+    return SesionSalida.desde(actualizada)
+
+
+@router.get("/documentos-legales", responses=ERRORES)
+def documentos_legales(sesion: SesionDep, contenedor: ContenedorDep) -> list[DocumentoSalida]:
+    """Versiones vigentes de los términos y la política, con su aceptación por esta cuenta."""
+    return [DocumentoSalida.desde(d) for d in contenedor.consultar_documentos.ejecutar(sesion)]
+
+
+@router.post("/documentos-legales/aceptacion", responses=ERRORES)
+def aceptar_documentos(
+    datos: AceptacionEntrada, sesion: SesionDep, contenedor: ContenedorDep
+) -> SesionSalida:
+    aceptados = {d.tipo: d.version for d in datos.documentos}
+    return SesionSalida.desde(contenedor.aceptar_documentos.ejecutar(sesion, aceptados))
+
+
+@router.get("/espacio", responses=ERRORES)
+def espacio(sesion: SesionHabilitadaDep) -> EspacioSalida:
+    """Punto de entrada al espacio de trabajo. Solo responde a cuentas que completaron su
+    incorporación; los módulos de pagos todavía no están disponibles."""
+    return EspacioSalida(usuario=UsuarioSalida.desde(sesion.usuario), disponible=False)
 
 
 @router.post("/asistentes/{asistente_id}/desbloqueo", responses=ERRORES)

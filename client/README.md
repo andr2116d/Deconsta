@@ -15,13 +15,19 @@ src/
       composables/     lógica reutilizable (indicador de seguridad de la contraseña)
       stores/          estado de la sesión (Pinia)
       views/           pantallas enrutadas
-    proximamente/    pantalla temporal tras ingresar
+    incorporacion/   primer ingreso: contraseña obligatoria y aceptación de términos y privacidad
+    proximamente/    pantalla de próxima disponibilidad (el backend confirma el acceso)
   shared/
     api/             cliente HTTP y estructura común de errores
-    components/      componentes base (BaseBoton, BaseCampo, BaseAviso, MarcaDeconsta)
+    components/      componentes base (BaseBoton, BaseCampo, BaseAviso, BaseDialogo, MarcaDeconsta)
   router/            rutas y guardas de navegación
   assets/main.css    Tailwind y los tokens de la identidad (ciruela, rosa mineral, Manrope)
 ```
+
+Tras ingresar, la guarda lleva a `/bienvenida` mientras la sesión tenga `pasos_pendientes`: primero
+la ventana obligatoria de cambio de contraseña y después la aceptación de los documentos vigentes.
+El acento de color sigue al rol (`data-rol` en `<html>`): ciruela para gerencia y eucalipto para
+asistencia; la marca siempre es ciruela.
 
 Las pantallas siguen los prototipos de `DECONSTA/`. El frontend mejora la experiencia (validación
 de campos, indicador de seguridad, espera tras un 429), pero la autoridad es siempre el backend.

@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.acceso.dominio.datos_personales import DatosPersonales
 from app.acceso.dominio.errores import DatosDuplicados
+from app.acceso.dominio.incorporacion import DocumentoLegal, Seccion, TipoDocumentoLegal
 from app.acceso.dominio.modelos import EventoAuditoria, Rol, Sesion, Usuario
 from app.acceso.infraestructura.cifrado import CifradorDatos
 
@@ -225,6 +226,74 @@ class RegistroAuditoriaSql:
         )
 
 
+# La versión más alta de cada tipo cuya vigencia ya empezó.
+VIGENTES = """
+    SELECT DISTINCT ON (tipo) id, tipo, version, titulo, resumen, secciones, vigente_desde
+    FROM documento_legal
+    WHERE vigente_desde <= :ahora
+    ORDER BY tipo, version DESC
+"""
+
+
+class RepositorioDocumentosLegalesSql:
+    def __init__(self, conexion: Connection) -> None:
+        self._conexion = conexion
+
+    def vigentes(self, ahora: datetime) -> list[DocumentoLegal]:
+        filas = self._conexion.execute(text(VIGENTES), {"ahora": ahora}).all()
+        return [
+            DocumentoLegal(
+                id=fila.id,
+                tipo=TipoDocumentoLegal(fila.tipo),
+                version=fila.version,
+                titulo=fila.titulo,
+                resumen=fila.resumen,
+                secciones=tuple(
+                    Seccion(seccion["titulo"], tuple(seccion["parrafos"]))
+                    for seccion in fila.secciones
+                ),
+                vigente_desde=fila.vigente_desde,
+            )
+            for fila in filas
+        ]
+
+    def aceptaciones(self, usuario_id: UUID, documento_ids: list[int]) -> dict[int, datetime]:
+        if not documento_ids:
+            return {}
+        filas = self._conexion.execute(
+            text(
+                "SELECT documento_id, aceptada_en FROM aceptacion_documento"
+                " WHERE usuario_id = :usuario_id AND documento_id = ANY(:ids)"
+            ),
+            {"usuario_id": usuario_id, "ids": documento_ids},
+        ).all()
+        return {fila.documento_id: fila.aceptada_en for fila in filas}
+
+    def hay_sin_aceptar(self, usuario_id: UUID, ahora: datetime) -> bool:
+        fila = self._conexion.execute(
+            text(
+                f"SELECT EXISTS (SELECT 1 FROM ({VIGENTES}) vigente WHERE NOT EXISTS ("
+                "SELECT 1 FROM aceptacion_documento aceptacion"
+                " WHERE aceptacion.documento_id = vigente.id"
+                " AND aceptacion.usuario_id = :usuario_id))"
+            ),
+            {"usuario_id": usuario_id, "ahora": ahora},
+        ).scalar_one()
+        return bool(fila)
+
+    def registrar_aceptacion(self, usuario_id: UUID, documento_id: int, ahora: datetime) -> bool:
+        insertada = self._conexion.execute(
+            text(
+                "INSERT INTO aceptacion_documento (usuario_id, documento_id, aceptada_en)"
+                " VALUES (:usuario_id, :documento_id, :ahora)"
+                " ON CONFLICT ON CONSTRAINT uq_aceptacion_documento_usuario_documento DO NOTHING"
+                " RETURNING id"
+            ),
+            {"usuario_id": usuario_id, "documento_id": documento_id, "ahora": ahora},
+        ).first()
+        return insertada is not None
+
+
 class UnidadDeTrabajoSql:
     def __init__(self, motor: Engine, cifrador: CifradorDatos) -> None:
         self._motor = motor
@@ -236,6 +305,7 @@ class UnidadDeTrabajoSql:
         self.usuarios = RepositorioUsuariosSql(self._conexion, self._cifrador)
         self.sesiones = RepositorioSesionesSql(self._conexion)
         self.auditoria = RegistroAuditoriaSql(self._conexion)
+        self.documentos = RepositorioDocumentosLegalesSql(self._conexion)
         return self
 
     def __exit__(
