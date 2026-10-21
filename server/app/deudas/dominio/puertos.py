@@ -35,13 +35,9 @@ class RepositorioDeudas(Protocol):
         """Las más recientes primero."""
         ...
 
-    def registradas_por(self, usuario_id: UUID) -> list[Deuda]: ...
-
-    def con_vencimientos_entre(
-        self, gerente_id: UUID, desde: date, hasta: date, *, registrada_por: UUID | None
-    ) -> list[Deuda]:
+    def con_vencimientos_entre(self, gerente_id: UUID, desde: date, hasta: date) -> list[Deuda]:
         """Las deudas vigentes (por autorizar o registradas) con alguna cuota que vence en el
-        rango, ambos días incluidos. Con `registrada_por`, solo las que registró esa cuenta."""
+        rango, ambos días incluidos."""
         ...
 
 

@@ -135,14 +135,9 @@ class _OperacionDeudas:
     def _deuda(
         uow: UnidadDeudas, sesion: SesionActiva, deuda_id: UUID, *, bloquear: bool = False
     ) -> Deuda:
-        """Del espacio de la sesión; una asistente solo ve las que registró."""
+        """Del espacio de la sesión: el gerente y todas sus asistentes la ven."""
         deuda = uow.deudas.por_id(deuda_id, bloquear=bloquear)
-        usuario = sesion.usuario
-        if (
-            deuda is None
-            or deuda.gerente_id != espacio_de(sesion)
-            or (usuario.rol is not Rol.GERENTE and deuda.registrada_por != usuario.id)
-        ):
+        if deuda is None or deuda.gerente_id != espacio_de(sesion):
             raise DeudaNoEncontrada()
         return deuda
 
@@ -292,13 +287,14 @@ class RegistrarDeuda(_OperacionDeudas):
 
 class ListarDeudas(_OperacionDeudas):
     def ejecutar(self, sesion: SesionActiva, *, solo_pendientes: bool) -> list[DeudaConDetalle]:
-        """El gerente ve las de su espacio (o solo sus pendientes); una asistente, las suyas."""
+        """Las del espacio, las registre quien las registre. Solo el gerente filtra sus
+        pendientes: lo que espera su autorización o su visto bueno."""
         hoy = self._hoy()
+        gerente = sesion.usuario.rol is Rol.GERENTE
         with self._unidad() as uow:
-            if sesion.usuario.rol is Rol.GERENTE:
-                deudas = uow.deudas.del_espacio(sesion.usuario.id, solo_pendientes=solo_pendientes)
-            else:
-                deudas = uow.deudas.registradas_por(sesion.usuario.id)
+            deudas = uow.deudas.del_espacio(
+                espacio_de(sesion), solo_pendientes=gerente and solo_pendientes
+            )
             nombres: dict[UUID, str] = {}
             return [
                 DeudaConDetalle(d, None, _nombre(uow, d.registrada_por, nombres), hoy)
@@ -348,9 +344,8 @@ class Calendario:
 
 class ConsultarCalendario(_OperacionDeudas):
     def ejecutar(self, sesion: SesionActiva, desde: date, hasta: date) -> Calendario:
-        """Las cuotas que vencen entre dos fechas, en el pasado o en el futuro. El gerente ve las
-        de su espacio; una asistente, las de las deudas que registró. Las rechazadas y las anuladas
-        no se muestran: ya no se pagan."""
+        """Las cuotas que vencen entre dos fechas, en el pasado o en el futuro. Las ven el gerente
+        y todas sus asistentes. Las rechazadas y las anuladas no se muestran: ya no se pagan."""
         if hasta < desde:
             raise DeudaInvalida(
                 campos={"hasta": "La fecha final no puede ser anterior a la inicial."}
@@ -359,14 +354,8 @@ class ConsultarCalendario(_OperacionDeudas):
             raise DeudaInvalida(
                 campos={"hasta": f"Consulta como máximo {DIAS_CALENDARIO} días a la vez."}
             )
-        usuario = sesion.usuario
         with self._unidad() as uow:
-            deudas = uow.deudas.con_vencimientos_entre(
-                espacio_de(sesion),
-                desde,
-                hasta,
-                registrada_por=None if usuario.rol is Rol.GERENTE else usuario.id,
-            )
+            deudas = uow.deudas.con_vencimientos_entre(espacio_de(sesion), desde, hasta)
             nombres: dict[UUID, str] = {}
             vencimientos = [
                 Vencimiento(d, c, _nombre(uow, d.registrada_por, nombres))

@@ -1,9 +1,9 @@
 """Rutas de las deudas.
 
 Registrar y consultar (también el calendario de vencimientos): gerente y asistentes con la
-incorporación completa. El gerente ve las de su espacio; una asistente, las que registró. Una
-deuda de otro espacio responde 404 DEUDA_NO_ENCONTRADA. Autorizar, rechazar, dar visto bueno y
-anular: solo el gerente (403 SIN_PERMISO).
+incorporación completa. Todas las cuentas del espacio ven todas sus deudas, las registre quien las
+registre. Una deuda de otro espacio responde 404 DEUDA_NO_ENCONTRADA. Autorizar, rechazar, dar
+visto bueno y anular: solo el gerente (403 SIN_PERMISO).
 
 Errores propios: 403 REGISTRO_DEUDAS_BLOQUEADO; 404 DEUDA_NO_ENCONTRADA y DOCUMENTO_NO_ENCONTRADO;
 409 DOCUMENTO_EN_ANALISIS, DOCUMENTO_ILEGIBLE, DOCUMENTO_REPETIDO, DOCUMENTO_RECHAZADO,

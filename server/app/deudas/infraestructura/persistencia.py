@@ -212,34 +212,16 @@ class RepositorioDeudasSql:
         ).all()
         return self._deudas(list(filas))
 
-    def registradas_por(self, usuario_id: UUID) -> list[Deuda]:
+    def con_vencimientos_entre(self, gerente_id: UUID, desde: date, hasta: date) -> list[Deuda]:
         filas = self._conexion.execute(
             text(
-                f"SELECT {COLUMNAS} FROM deuda WHERE registrada_por = :usuario_id"
-                " ORDER BY creado_en DESC LIMIT 200"
-            ),
-            {"usuario_id": usuario_id},
-        ).all()
-        return self._deudas(list(filas))
-
-    def con_vencimientos_entre(
-        self, gerente_id: UUID, desde: date, hasta: date, *, registrada_por: UUID | None
-    ) -> list[Deuda]:
-        filtro = " AND registrada_por = :registrada_por" if registrada_por else ""
-        filas = self._conexion.execute(
-            text(
-                f"SELECT {COLUMNAS} FROM deuda WHERE gerente_id = :gerente_id{filtro}"
+                f"SELECT {COLUMNAS} FROM deuda WHERE gerente_id = :gerente_id"
                 " AND estado IN ('por_autorizar', 'registrada') AND EXISTS ("
                 " SELECT 1 FROM cuota_deuda WHERE cuota_deuda.deuda_id = deuda.id"
                 " AND cuota_deuda.vence_el BETWEEN :desde AND :hasta)"
                 " ORDER BY creado_en LIMIT 500"
             ),
-            {
-                "gerente_id": gerente_id,
-                "registrada_por": registrada_por,
-                "desde": desde,
-                "hasta": hasta,
-            },
+            {"gerente_id": gerente_id, "desde": desde, "hasta": hasta},
         ).all()
         return self._deudas(list(filas))
 

@@ -354,6 +354,22 @@ def test_el_calendario_muestra_cada_cuota_en_su_dia_y_no_lo_que_ya_no_se_paga(
     assert [v["cuota"] for v in solo_pasado] == [1]
 
 
+def test_todas_las_asistentes_del_espacio_ven_todas_sus_deudas_pero_no_deciden(
+    cliente: TestClient, asistente: TestClient, gerente: TestClient, equipo: Equipo
+) -> None:
+    deuda = nueva(asistente, 24, concepto="De Lucía")["deuda"]
+    dobles(cliente).revisor.datos = replace(LEIDO, periodo="2026-10")
+    nueva(gerente, 25, concepto="Del gerente")
+    rosa = sesion(cliente, equipo.otra_asistente)
+
+    assert {d["concepto"] for d in rosa.get(DEUDAS).json()} == {"De Lucía", "Del gerente"}
+    detalle = rosa.get(f"{DEUDAS}/{deuda['id']}")
+    assert (detalle.status_code, detalle.json()["registrada_por"]["nombre"]) == (200, "Lucía Vega")
+    # Ver no es decidir: eso sigue siendo del gerente.
+    anular = rosa.post(f"{DEUDAS}/{deuda['id']}/anulacion", json={"motivo": "No"})
+    assert (anular.status_code, anular.json()["code"]) == (403, "SIN_PERMISO")
+
+
 def test_cada_cuenta_ve_en_el_calendario_solo_lo_que_le_corresponde(
     cliente: TestClient, asistente: TestClient, gerente: TestClient, equipo: Equipo
 ) -> None:
@@ -367,7 +383,8 @@ def test_cada_cuenta_ve_en_el_calendario_solo_lo_que_le_corresponde(
         return {v["concepto"] for v in calendario(cuenta, desde, hasta).json()["vencimientos"]}
 
     assert conceptos(gerente) == {"De la asistente", "Del gerente"}
-    assert conceptos(asistente) == {"De la asistente"}
+    # Las asistentes ven todo el espacio, no solo lo que registraron.
+    assert conceptos(asistente) == {"De la asistente", "Del gerente"}
     assert conceptos(otro) == set()
 
 
