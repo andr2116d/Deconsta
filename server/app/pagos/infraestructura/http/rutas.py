@@ -138,7 +138,11 @@ def registrar_pago(
 ) -> PagoSalida:
     return PagoSalida.desde(
         contenedor.registrar_pago.ejecutar(
-            sesion, entrada.deuda_id, entrada.cuota, entrada.comprobantes
+            sesion,
+            entrada.deuda_id,
+            entrada.cuota,
+            entrada.comprobantes,
+            omitir_verificacion=entrada.omitir_verificacion,
         ),
         gerente=sesion.usuario.rol is Rol.GERENTE,
     )

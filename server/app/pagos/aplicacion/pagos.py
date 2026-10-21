@@ -66,6 +66,7 @@ from app.pagos.dominio.errores import (
 )
 from app.pagos.dominio.modelos import (
     AnalisisComprobante,
+    Comprobacion,
     Comprobante,
     DatosComprobante,
     EstadoComprobante,
@@ -75,6 +76,7 @@ from app.pagos.dominio.modelos import (
     Pago,
     Pedido,
     Proposito,
+    ResultadoComprobacion,
 )
 from app.pagos.dominio.puertos import (
     ColaComprobantes,
@@ -731,10 +733,34 @@ class PagoConDetalle:
     registrado_por: str
 
 
+# Lo que el gerente puede aceptar sin la verificación automática del voucher. Nunca un voucher que
+# ya respalda otro pago, uno repetido o uno que aún se analiza.
+OMITIBLES = {
+    EstadoComprobante.LISTO,
+    EstadoComprobante.RECHAZADO,
+    EstadoComprobante.ILEGIBLE,
+    EstadoComprobante.FALLIDO,
+}
+OMITIDA = Comprobacion(
+    "verificacion",
+    "Verificación del voucher",
+    ResultadoComprobacion.AVISO,
+    "El gerente registró el pago sin la verificación automática del voucher.",
+)
+
+
 class RegistrarPago(_OperacionPagos):
     def ejecutar(
-        self, sesion: SesionActiva, deuda_id: UUID, numero: int, comprobante_ids: list[UUID]
+        self,
+        sesion: SesionActiva,
+        deuda_id: UUID,
+        numero: int,
+        comprobante_ids: list[UUID],
+        *,
+        omitir_verificacion: bool = False,
     ) -> PagoConDetalle:
+        """Con `omitir_verificacion`, solo el gerente registra el pago de la cuota aunque el
+        sistema no haya aceptado sus vouchers: queda confirmado con confianza 0 y lo dice."""
         ids = list(dict.fromkeys(comprobante_ids))
         if not ids:
             mensaje = "Sube el comprobante del pago."
@@ -742,27 +768,40 @@ class RegistrarPago(_OperacionPagos):
         if len(ids) > MAXIMO_COMPROBANTES:
             mensaje = f"Un pago se registra con hasta {MAXIMO_COMPROBANTES} vouchers."
             raise PagoInvalido(mensaje, campos={"comprobantes": mensaje})
-        self._cupo(sesion)
         usuario = sesion.usuario
+        gerente = usuario.rol is Rol.GERENTE
+        if omitir_verificacion and not gerente:
+            raise SinPermiso()
+        self._cupo(sesion)
         hoy = self._hoy()
         avisos = Avisos(self._publicador)
         with self._unidad() as uow:
             self._sin_bloqueo(uow, sesion)
             # Con la deuda tomada, dos registros de la misma cuota van uno tras otro.
             deuda, cuota = self._cuota_por_pagar(uow, sesion, deuda_id, numero, bloquear=True)
-            comprobantes = [self._usable(uow, sesion, i, deuda.id, numero) for i in ids]
+            comprobantes = [
+                self._usable(uow, sesion, i, deuda.id, numero, omitir=omitir_verificacion)
+                for i in ids
+            ]
             leidos = [c.datos for c in comprobantes if c.datos]
-            if len(leidos) != len(comprobantes):
-                raise ComprobanteNoUsable("COMPROBANTE_FALLIDO")
-            self._combinan(comprobantes, leidos)
-            importe = sum((d.importe or Decimal("0") for d in leidos), Decimal("0"))
             esperada = esperada_de(uow, deuda, cuota, hoy, self._zona)
-            mora = self._suma_la_cuota(importe, cuota.importe, esperada.mora, len(comprobantes))
             lista = comprobaciones(
                 [(c.datos, c.analisis.senales) for c in comprobantes if c.datos and c.analisis],
                 esperada,
             )
-            gerente = usuario.rol is Rol.GERENTE
+            if omitir_verificacion:
+                importe, mora = self._sin_verificar(leidos, cuota.importe, esperada.mora)
+                lista = (OMITIDA, *lista)
+                nivel = 0
+            else:
+                if len(leidos) != len(comprobantes):
+                    raise ComprobanteNoUsable("COMPROBANTE_FALLIDO")
+                self._combinan(comprobantes, leidos)
+                importe = sum((d.importe or Decimal("0") for d in leidos), Decimal("0"))
+                mora = self._suma_la_cuota(importe, cuota.importe, esperada.mora, len(comprobantes))
+                nivel = confianza(lista)
+            # Una fecha leída que no sirve (futura o ausente) no se usa: vale la de hoy.
+            fechas = [d.pagado_el for d in leidos if d.pagado_el and d.pagado_el <= hoy]
             pago = Pago(
                 id=uuid4(),
                 gerente_id=deuda.gerente_id,
@@ -771,10 +810,10 @@ class RegistrarPago(_OperacionPagos):
                 registrado_por=usuario.id,
                 importe=importe,
                 comision=sum((d.comision or Decimal("0") for d in leidos), Decimal("0")),
-                lugar=leidos[0].lugar,
-                pagado_el=max(d.pagado_el for d in leidos if d.pagado_el),
+                lugar=leidos[0].lugar if leidos else None,
+                pagado_el=max(fechas, default=hoy),
                 estado=EstadoPago.CONFIRMADO if gerente else EstadoPago.POR_VERIFICAR,
-                confianza=confianza(lista),
+                confianza=nivel,
                 comprobaciones=lista,
                 registrado_en=self._reloj(),
                 comprobantes=tuple(c.id for c in comprobantes),
@@ -794,6 +833,7 @@ class RegistrarPago(_OperacionPagos):
                         "estado": pago.estado.value,
                         "confianza": pago.confianza,
                         "comprobantes": len(pago.comprobantes),
+                        "verificacion_omitida": omitir_verificacion,
                     },
                 )
             )
@@ -805,7 +845,13 @@ class RegistrarPago(_OperacionPagos):
 
     @staticmethod
     def _usable(
-        uow: UnidadPagos, sesion: SesionActiva, comprobante_id: UUID, deuda_id: UUID, cuota: int
+        uow: UnidadPagos,
+        sesion: SesionActiva,
+        comprobante_id: UUID,
+        deuda_id: UUID,
+        cuota: int,
+        *,
+        omitir: bool = False,
     ) -> Comprobante:
         comprobante = uow.comprobantes.por_id(comprobante_id, bloquear=True)
         # Solo quien lo subió lo usa.
@@ -821,9 +867,20 @@ class RegistrarPago(_OperacionPagos):
             raise ComprobanteNoUsable("COMPROBANTE_DE_MORA")
         if (comprobante.deuda_id, comprobante.cuota) != (deuda_id, cuota):
             raise ComprobanteNoUsable("COMPROBANTE_DE_OTRA_CUOTA")
-        if comprobante.estado is not EstadoComprobante.LISTO:
+        aceptados = OMITIBLES if omitir else {EstadoComprobante.LISTO}
+        if comprobante.estado not in aceptados:
             raise ComprobanteNoUsable(ESTADOS_COMPROBANTE[comprobante.estado])
         return comprobante
+
+    @staticmethod
+    def _sin_verificar(
+        leidos: list[DatosComprobante], cuota: Decimal, mora: Decimal | None
+    ) -> tuple[Decimal, Decimal]:
+        """Sin verificación, el pago es la cuota; con la mora aprobada solo si lo leído la suma."""
+        leido = sum((d.importe or Decimal("0") for d in leidos), Decimal("0"))
+        if mora and leido == cuota + mora:
+            return leido, mora
+        return cuota, Decimal("0")
 
     @staticmethod
     def _combinan(comprobantes: list[Comprobante], leidos: list[DatosComprobante]) -> None:
