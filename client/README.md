@@ -19,9 +19,11 @@ src/
                      contraseña temporal y, para una asistente nueva, la confirmación de sus datos
     equipo/          Mi equipo: lista, registro, bloqueo, eliminación y recuperación de asistentes
     categorias/      categorías del espacio: catálogo de colores, íconos y sugerencias
+    reglas/          reglas de autorización: límite en soles, titulares autorizados y su prueba
     espacio/         espacio de trabajo: cabecera, pestañas por rol y tarjeta de la cuenta
-      layouts/         EspacioLayout, ruta padre de todas las secciones
-      secciones.ts     secciones de cada rol; de aquí salen rutas, pestañas y menú
+      layouts/         EspacioLayout, ruta padre de todas las secciones, y ConfiguracionLayout
+      secciones.ts     secciones de cada rol; de aquí salen rutas, pestañas y menú. Una sección con
+                       `pestana` es una pestaña de su página («Mi cuenta», «Límites y categorías»)
       views/           EnDesarrolloView, lugar de cada sección mientras se construye
     cuenta/          Mi cuenta: datos personales, usuario y contraseña, rol y permisos, privacidad
       layouts/         CuentaLayout: encabezado, pestañas y tarjeta lateral que se quedan al
@@ -67,16 +69,27 @@ En su primer ingreso, la asistente acepta las políticas, puede cambiar su contr
 y, como paso obligatorio, confirma sus datos (completa su correo y revisa lo que registró su
 gerente). Hasta entonces no entra a su espacio.
 
-## Categorías
+## Límites y categorías
 
-Solo para gerencia, desde «Límites y categorías» en el menú de la cuenta (`/configuracion`). El
-gerente crea categorías desde cero o a partir de una sugerencia (agua, luz, tarjetas…), con nombre,
+Solo para gerencia, desde el menú de la cuenta. Es una página con dos pestañas.
+
+**Reglas de autorización** (`/configuracion`):
+
+- El límite en soles se escribe como en Perú («2,900.50»): la coma separa los miles y un aviso dice
+  cómo se guardará. «Guardar límite» solo se activa con un importe distinto; «Quitar límite» pide
+  confirmación.
+- Los titulares autorizados (tu esposa, tu empresa) llevan nombre, relación y documento opcional
+  (DNI, carné o RUC), y exigen confirmar que esa persona te autorizó. El documento solo se ve
+  enmascarado. Tú apareces siempre como titular reconocido.
+- «Prueba tus reglas» envía un importe y un titular de ejemplo, y muestra si esperaría tu
+  autorización y por qué, con la evaluación del backend.
+
+**Categorías** (`/configuracion/categorias`): el gerente crea categorías desde cero o a partir de una sugerencia (agua, luz, tarjetas…), con nombre,
 descripción opcional (qué recibos van ahí), color e ícono, y ve una vista previa. Puede editarlas,
 archivarlas con un motivo y reactivarlas desde «Archivadas». El formulario avisa mientras se
 escribe si el nombre es muy corto o ya existe, y no deja escribir signos inválidos; el backend
 vuelve a validar todo y su respuesta (por ejemplo, un nombre repetido de una categoría archivada,
-con la opción de reactivarla) se muestra junto al campo. El límite de autorización aún no está
-disponible.
+con la opción de reactivarla) se muestra junto al campo.
 
 ## Validación de datos personales
 
