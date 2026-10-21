@@ -78,7 +78,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', alPresionarFue
 </script>
 
 <template>
-  <div ref="raiz" class="relative" @keydown.esc="cerrar(true)" @focusout="alSacarFoco">
+  <div
+    ref="raiz"
+    class="relative"
+    :data-menu-abierto="abierto || undefined"
+    @keydown.esc="cerrar(true)"
+    @focusout="alSacarFoco"
+  >
     <button
       ref="disparador"
       type="button"

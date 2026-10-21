@@ -68,7 +68,9 @@ watch(
 )
 
 function enfocarTitulo() {
-  if (navegado) document.getElementById('titulo-seccion')?.focus({ preventScroll: true })
+  // Si durante la transición la persona abrió el menú de la cuenta, el foco se queda con ella.
+  if (!navegado || document.activeElement?.closest('[data-menu-abierto]')) return
+  document.getElementById('titulo-seccion')?.focus({ preventScroll: true })
 }
 
 // La guarda decide con la sesión del navegador; el backend confirma que la cuenta puede entrar.
