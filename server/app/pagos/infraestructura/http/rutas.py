@@ -7,7 +7,9 @@ devolver un pago y ver o levantar bloqueos: solo el gerente (403 SIN_PERMISO).
 
 `POST /pagos/comprobantes` recibe el archivo (multipart: `archivo` hasta 10 MB, `deuda_id`,
 `cuota` y, para la prueba de una mora, `proposito=mora`) y responde 202 con el comprobante
-«analizando»: el análisis corre en el worker y se consulta con `GET /pagos/comprobantes/{id}`.
+«analizando»: el análisis corre en el worker y se consulta con `GET /pagos/comprobantes/{id}`. Si
+la lectura automática falla («fallido»), quien lo subió escribe sus datos con
+`POST /pagos/comprobantes/{id}/datos`.
 
 Errores propios: 403 REGISTRO_PAGOS_BLOQUEADO (con `blocked_since`); 404 DEUDA_NO_ENCONTRADA,
 PAGO_NO_ENCONTRADO, COMPROBANTE_NO_ENCONTRADO, BLOQUEO_NO_ENCONTRADO y CUENTA_NO_ENCONTRADA; 409
@@ -36,11 +38,12 @@ from app.deudas.dominio.modelos import EstadoPago
 from app.documentos.dominio.errores import ArchivoDemasiadoGrande, ArchivoFaltante
 from app.documentos.dominio.modelos import TAMANO_MAXIMO
 from app.documentos.infraestructura.http.rutas import CSP_ARCHIVO
-from app.pagos.aplicacion.pagos import ComprobanteConsultado
+from app.pagos.aplicacion.pagos import ComprobanteConsultado, DatosAMano
 from app.pagos.dominio.modelos import Proposito
 from app.pagos.infraestructura.http.esquemas import (
     BloqueoPagosSalida,
     ComprobanteSalida,
+    DatosAManoEntrada,
     MotivoEntrada,
     PagoDetalleSalida,
     PagoEntrada,
@@ -94,6 +97,22 @@ def consultar_comprobante(
 ) -> ComprobanteSalida:
     return ComprobanteSalida.desde(
         contenedor.consultar_comprobante.ejecutar(sesion, comprobante_id)
+    )
+
+
+@router.post("/pagos/comprobantes/{comprobante_id}/datos", responses=ERRORES)
+def completar_comprobante(
+    comprobante_id: UUID,
+    entrada: DatosAManoEntrada,
+    sesion: SesionHabilitadaDep,
+    contenedor: ContenedorDep,
+) -> ComprobanteSalida:
+    """Quien subió un voucher que no se pudo leer solo escribe sus datos; queda listo y el pago
+    que respalde llega al gerente con poca confianza."""
+    return ComprobanteSalida.desde(
+        contenedor.completar_comprobante.ejecutar(
+            sesion, comprobante_id, DatosAMano(**entrada.model_dump())
+        )
     )
 
 

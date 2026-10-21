@@ -564,3 +564,65 @@ def test_no_se_pide_el_pago_de_lo_que_aun_no_se_puede_pagar(
     dobles(gerente).revisor.datos = replace(LEIDO, periodo="2026-07")
     larga = pedir(gerente, vencida(gerente, 24)["id"], equipo.asistente.id, nota="a" * 501)
     assert (larga.status_code, set(larga.json()["fields"])) == (422, {"nota"})
+
+
+def a_mano(cliente: TestClient, comprobante_id: str, **cambios: Any) -> httpx.Response:
+    datos = {
+        "importe": "182.40",
+        "pagado_el": hoy().isoformat(),
+        "numero_operacion": "0458777",
+        "lugar": "agente",
+        **cambios,
+    }
+    return cliente.post(f"{COMPROBANTES}/{comprobante_id}/datos", json=datos)
+
+
+def test_si_la_lectura_falla_se_escriben_los_datos_y_el_pago_llega_con_poca_confianza(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    deuda = deuda_de(gerente, 25)
+    dobles(asistente).revisor.falla = True
+    fallido = comprobante(asistente, deuda["id"], 501)
+    assert fallido["estado"] == "fallido"
+    sin_pagar = pagar(asistente, deuda["id"], fallido["id"])
+    assert sin_pagar.json()["code"] == "COMPROBANTE_FALLIDO"
+    # Solo quien lo subió escribe sus datos, y deben corresponder a la cuota.
+    ajeno = a_mano(gerente, fallido["id"])
+    assert (ajeno.status_code, ajeno.json()["code"]) == (403, "SIN_PERMISO")
+    vacio = a_mano(asistente, fallido["id"], importe="", numero_operacion="", lugar=None)
+    assert set(vacio.json()["fields"]) == {"importe", "numero_operacion", "lugar"}
+    menor = a_mano(asistente, fallido["id"], importe="100.00", lugar="billetera")
+    assert (menor.status_code, set(menor.json()["fields"])) == (422, {"importe"})
+    futura = a_mano(asistente, fallido["id"], pagado_el=(hoy() + timedelta(days=2)).isoformat())
+    assert set(futura.json()["fields"]) == {"pagado_el"}
+
+    listo = a_mano(asistente, fallido["id"])
+
+    assert listo.status_code == 200, listo.json()
+    assert listo.json()["estado"] == "listo"
+    assert "DATOS_A_MANO" in [s["codigo"] for s in listo.json()["senales"]]
+    otra_vez = a_mano(asistente, fallido["id"])
+    assert (otra_vez.status_code, otra_vez.json()["code"]) == (409, "COMPROBANTE_NO_SE_COMPLETA")
+    pago = pagar(asistente, deuda["id"], fallido["id"])
+    assert pago.status_code == 201, pago.json()
+    [por_verificar] = gerente.get(PAGOS, params={"estado": "por_verificar"}).json()
+    assert por_verificar["confianza"] <= 40
+    lectura = next(c for c in por_verificar["comprobaciones"] if c["codigo"] == "lectura")
+    assert lectura["resultado"] == "aviso"
+
+
+def test_la_operacion_escrita_a_mano_no_respalda_otro_pago(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    deuda = deuda_de(gerente, 26)
+    voucher(asistente, numero_operacion="0458888")
+    leido = comprobante(asistente, deuda["id"], 502)
+    assert pagar(asistente, deuda["id"], leido["id"]).status_code == 201
+    dobles(gerente).revisor.datos = replace(LEIDO, periodo="2026-03")
+    otra = deuda_de(gerente, 27)
+    dobles(asistente).revisor.falla = True
+    fallido = comprobante(asistente, otra["id"], 503)
+
+    repetida = a_mano(asistente, fallido["id"], numero_operacion="0458888")
+
+    assert (repetida.status_code, repetida.json()["code"]) == (409, "COMPROBANTE_REPETIDO")

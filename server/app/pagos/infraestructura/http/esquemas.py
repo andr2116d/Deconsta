@@ -289,6 +289,18 @@ class BloqueoPagosSalida(BaseModel):
         return cls(asistente_id=bloqueo.asistente_id, bloqueado_en=bloqueo.bloqueado_en)
 
 
+class DatosAManoEntrada(Entrada):
+    """Los datos del voucher que no se pudo leer solo, como los ve quien pagó."""
+
+    # En soles, como texto («182.40»): nunca como número de coma flotante.
+    importe: str = Field("", max_length=20)
+    pagado_el: date | None = None
+    numero_operacion: str = Field("", max_length=60)
+    lugar: LugarPago | None = None
+    comision: str = Field("", max_length=20)
+    codigo_pago: str | None = Field(None, max_length=60)
+
+
 class MoraEntrada(Entrada):
     deuda_id: UUID
     cuota: int = Field(ge=1, le=360)

@@ -73,7 +73,10 @@ class ComprobanteNoUsable(ErrorPagos):
         ),
         "COMPROBANTE_REPETIDO": "Este comprobante ya respalda otro pago. Sube el de este pago.",
         "COMPROBANTE_FALLIDO": (
-            "No pudimos terminar de revisar el comprobante. Súbelo otra vez en unos minutos."
+            "No pudimos leer el comprobante solo. Escribe sus datos a mano o súbelo otra vez."
+        ),
+        "COMPROBANTE_NO_SE_COMPLETA": (
+            "Solo se escriben a mano los datos de un voucher que no se pudo leer solo."
         ),
         "COMPROBANTE_YA_USADO": "Este comprobante ya respalda otro pago. Sube el de este pago.",
         "COMPROBANTE_DE_OTRA_CUOTA": (

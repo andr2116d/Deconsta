@@ -36,7 +36,7 @@ from app.documentos.dominio.analisis import evaluar_metadatos, normalizar_numero
 from app.documentos.dominio.archivos import limpiar_nombre, validar_archivo
 from app.documentos.dominio.bloqueos import Bloqueo, contar_desde
 from app.documentos.dominio.errores import AsistenteNoEncontrada
-from app.documentos.dominio.modelos import Senal, TipoArchivo
+from app.documentos.dominio.modelos import Lectura, Riesgo, Senal, TipoArchivo
 from app.documentos.dominio.puertos import (
     Almacen,
     ErrorAlmacen,
@@ -70,6 +70,7 @@ from app.pagos.dominio.modelos import (
     DatosComprobante,
     EstadoComprobante,
     EstadoMora,
+    Moneda,
     Mora,
     Pago,
     Pedido,
@@ -90,6 +91,7 @@ from app.pagos.dominio.reglas import (
     estado_tras_analisis,
     evaluar,
     evaluar_prueba_mora,
+    senal_datos_a_mano,
     senal_ilegible,
     senal_legibilidad,
     senal_repetido,
@@ -509,6 +511,117 @@ class ConsultarComprobante(_OperacionPagos):
     def ejecutar(self, sesion: SesionActiva, comprobante_id: UUID) -> ComprobanteConsultado:
         with self._unidad() as uow:
             comprobante = self._visible(uow, sesion, comprobante_id)
+            bloqueado = uow.bloqueos.vigente(comprobante.subido_por) is not None
+            return ComprobanteConsultado(comprobante, bloqueado)
+
+
+# Qué campo del formulario corrige cada regla que no se cumple con los datos escritos a mano.
+CAMPO_DE_SENAL = {
+    "MONTO_MENOR": "importe",
+    "POSIBLE_MORA": "importe",
+    "FECHA_FUTURA": "pagado_el",
+    "FECHA_ANTERIOR_A_LA_DEUDA": "pagado_el",
+    "CODIGO_DISTINTO": "codigo_pago",
+}
+LARGO_DATO_A_MANO = 40
+
+
+@dataclass(frozen=True)
+class DatosAMano:
+    """Lo que escribe quien subió el voucher cuando la lectura automática falló."""
+
+    importe: str
+    pagado_el: date | None
+    numero_operacion: str
+    lugar: LugarPago | None
+    comision: str = ""
+    codigo_pago: str | None = None
+
+
+class CompletarComprobante(_OperacionPagos):
+    """Si la lectura automática del voucher falló, quien lo subió escribe sus datos. Pasan por las
+    mismas reglas que lo leído (importe, fechas, código y operación repetida) y el voucher queda
+    listo marcado como escrito a mano: el pago que respalde llega al gerente con poca confianza.
+    Lo que no se cumple se responde como error del formulario; no cuenta para el bloqueo."""
+
+    def __init__(
+        self,
+        unidad: FabricaUnidadPagos,
+        reloj: Reloj,
+        publicador: PublicadorAvisos,
+        limitador: LimitadorSolicitudes,
+        limite: Limite,
+        zona: ZoneInfo,
+        *,
+        huellero: Huellero,
+    ) -> None:
+        super().__init__(unidad, reloj, publicador, limitador, limite, zona)
+        self._huellero = huellero
+
+    def ejecutar(
+        self, sesion: SesionActiva, comprobante_id: UUID, datos: DatosAMano
+    ) -> ComprobanteConsultado:
+        campos: dict[str, str] = {}
+        if mensaje := error_importe(datos.importe):
+            campos["importe"] = mensaje
+        if datos.comision.strip() and (mensaje := error_importe(datos.comision)):
+            campos["comision"] = mensaje
+        if datos.pagado_el is None:
+            campos["pagado_el"] = "Escribe la fecha del pago."
+        numero = " ".join(datos.numero_operacion.split())
+        if not normalizar_numero(numero) or len(numero) > LARGO_DATO_A_MANO:
+            campos["numero_operacion"] = "Escribe el número de operación del voucher."
+        if datos.lugar is None:
+            campos["lugar"] = "Elige dónde pagaste."
+        codigo = " ".join((datos.codigo_pago or "").split()) or None
+        if codigo and len(codigo) > LARGO_DATO_A_MANO:
+            campos["codigo_pago"] = f"Usa como máximo {LARGO_DATO_A_MANO} caracteres."
+        if campos:
+            raise PagoInvalido(campos=campos)
+        assert datos.pagado_el is not None
+        self._cupo(sesion)
+        hoy = self._hoy()
+        leidos = DatosComprobante(
+            lugar=datos.lugar,
+            codigo_pago=codigo,
+            numero_operacion=numero,
+            pagado_el=datos.pagado_el,
+            moneda=Moneda.SOLES,
+            importe=a_importe(datos.importe),
+            comision=a_importe(datos.comision) if datos.comision.strip() else None,
+        )
+        with self._unidad() as uow:
+            comprobante = self._visible(uow, sesion, comprobante_id)
+            if comprobante.subido_por != sesion.usuario.id:
+                raise SinPermiso()
+            if (
+                comprobante.estado is not EstadoComprobante.FALLIDO
+                or comprobante.proposito is not Proposito.PAGO
+            ):
+                raise ComprobanteNoUsable("COMPROBANTE_NO_SE_COMPLETA")
+            deuda, cuota = self._cuota_por_pagar(
+                uow, sesion, comprobante.deuda_id, comprobante.cuota, bloquear=False
+            )
+            esperada = esperada_de(uow, deuda, cuota, hoy, self._zona)
+            # Sin texto leído: lo escrito no se puede contrastar con el voucher.
+            senales = evaluar(leidos, Lectura("", 0.0, comprobante.paginas), esperada, hoy)
+            if graves := [s for s in senales if s.riesgo is Riesgo.ALTO]:
+                raise PagoInvalido(
+                    graves[0].detalle,
+                    campos={CAMPO_DE_SENAL.get(s.codigo, "importe"): s.detalle for s in graves},
+                )
+            huella = self._huellero.huella(
+                f"operacion:{normalizar_numero(numero)}|{datos.pagado_el.isoformat()}"
+            )
+            if uow.comprobantes.archivo_usado(
+                comprobante.gerente_id, comprobante.huella_archivo
+            ) or uow.comprobantes.operacion_usada(comprobante.gerente_id, huella):
+                raise ComprobanteNoUsable("COMPROBANTE_REPETIDO")
+            comprobante.analisis = AnalisisComprobante(leidos, (senal_datos_a_mano(), *senales))
+            comprobante.estado = EstadoComprobante.LISTO
+            comprobante.huella_operacion = huella
+            comprobante.analizado_en = self._reloj()
+            uow.comprobantes.guardar(comprobante)
             bloqueado = uow.bloqueos.vigente(comprobante.subido_por) is not None
             return ComprobanteConsultado(comprobante, bloqueado)
 
