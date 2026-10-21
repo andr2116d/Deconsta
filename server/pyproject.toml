@@ -1,7 +1,7 @@
 [project]
-name = "control-de-pagos-server"
+name = "deconsta-server"
 version = "0.1.0"
-description = "API del sistema de control de pagos"
+description = "API de Deconsta"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
