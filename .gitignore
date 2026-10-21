@@ -33,3 +33,4 @@ infra/**/*.tfstate
 infra/**/*.tfstate.*
 infra/**/*.tfvars
 infra/**/codigo.tar.gz
+infra/**/*.tfplan
