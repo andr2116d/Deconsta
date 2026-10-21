@@ -29,7 +29,7 @@ entrada estándar. En producción solo se acepta `IA_PROVEEDOR=api`.
 
 ```sh
 uv run uvicorn app.main:app --reload --port 8000   # servidor en desarrollo
-uv run --group ocr celery -A app.workers.celery_app:celery_app worker -Q ocr --concurrency=1
+uv run --group ocr celery -A app.workers.celery_app:celery_app worker -Q ocr,pagos --concurrency=1
 PRUEBAS_OCR=1 uv run --group ocr pytest tests/test_adaptadores_documentos.py   # con PaddleOCR real
 PRUEBAS_CLAUDE_CODE=1 uv run pytest tests/test_revisor_claude_code.py            # con Claude Code real
 uv run pytest                                      # tests (usan Postgres y Redis de compose)

@@ -9,7 +9,7 @@
     "services:logs": "docker compose logs -f",
     "dev": "concurrently --kill-others-on-fail -n client,server,ocr -c blue,green,yellow \"pnpm --filter client dev\" \"pnpm dev:server\" \"pnpm worker:ocr\"",
     "dev:server": "cd server && uv run uvicorn app.main:app --reload --port 8000",
-    "worker:ocr": "cd server && FORKED_BY_MULTIPROCESSING=1 OCR_PRECARGAR=true PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True uv run --group ocr celery -A app.workers.celery_app:celery_app worker -Q ocr --concurrency=1 --loglevel=INFO",
+    "worker:ocr": "cd server && FORKED_BY_MULTIPROCESSING=1 OCR_PRECARGAR=true PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True uv run --group ocr celery -A app.workers.celery_app:celery_app worker -Q ocr,pagos --concurrency=1 --loglevel=INFO",
     "init:gerente": "cd server && uv run python -m app.acceso.infraestructura.cli crear-gerente",
     "init:asistente": "cd server && uv run python -m app.acceso.infraestructura.cli crear-asistente",
     "lint": "pnpm lint:client && pnpm lint:server",
