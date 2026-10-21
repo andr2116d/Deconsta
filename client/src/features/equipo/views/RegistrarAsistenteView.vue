@@ -111,7 +111,7 @@ function sesionTerminada() {
 
     <DialogoCredenciales
       :credenciales="credenciales"
-      :recuperada="recuperada"
+      :motivo="recuperada ? 'recuperada' : 'creada'"
       @cerrar="volverAlEquipo"
     />
   </section>

@@ -47,3 +47,8 @@ export interface CuentaEliminada {
   id: string
   nombre_usuario: string
 }
+
+export type AccionAsistente = 'bloquear' | 'eliminar' | 'restablecer'
+
+/** Por qué se entregan credenciales: cambia el título y la explicación de la ventana. */
+export type MotivoCredenciales = 'creada' | 'recuperada' | 'restablecida'

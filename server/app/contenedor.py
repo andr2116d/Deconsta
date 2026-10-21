@@ -22,6 +22,7 @@ from app.acceso.aplicacion.equipo import (
     ListarEquipo,
     RecuperarAsistente,
     RegistrarAsistente,
+    RestablecerContrasena,
 )
 from app.acceso.aplicacion.incorporacion import (
     AceptarDocumentos,
@@ -96,6 +97,7 @@ class Contenedor:
     bloquear_asistente: BloquearAsistente
     eliminar_asistente: EliminarAsistente
     recuperar_asistente: RecuperarAsistente
+    restablecer_contrasena: RestablecerContrasena
 
     @classmethod
     def crear(cls, config: Settings) -> "Contenedor":
@@ -146,6 +148,7 @@ class Contenedor:
             desbloquear_asistente=DesbloquearAsistente(*equipo),
             eliminar_asistente=EliminarAsistente(*equipo),
             recuperar_asistente=RecuperarAsistente(*equipo),
+            restablecer_contrasena=RestablecerContrasena(*equipo),
         )
 
     def cerrar(self) -> None:

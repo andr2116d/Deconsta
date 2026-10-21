@@ -10,15 +10,18 @@ import BaseIcono from '@/shared/components/BaseIcono.vue'
 import DialogoFalloGuardado from '@/shared/components/DialogoFalloGuardado.vue'
 
 import DialogoAccionAsistente from '../components/DialogoAccionAsistente.vue'
+import DialogoCredenciales from '../components/DialogoCredenciales.vue'
 import TarjetaAsistente from '../components/TarjetaAsistente.vue'
 import { useEquipoStore } from '../stores/equipo'
-import type { Asistente } from '../types'
+import type { AccionAsistente, Asistente, Credenciales } from '../types'
 
 const router = useRouter()
 const sesion = useSesionStore()
 const equipo = useEquipoStore()
 
-const accion = ref<{ tipo: 'bloquear' | 'eliminar'; asistente: Asistente } | null>(null)
+const accion = ref<{ tipo: AccionAsistente; asistente: Asistente } | null>(null)
+// La contraseña restablecida se muestra una sola vez, para copiarla y entregarla.
+const restablecidas = ref<Credenciales | null>(null)
 const ocupada = ref<string | null>(null)
 const aviso = ref<string | null>(
   typeof history.state?.aviso === 'string' ? (history.state.aviso as string) : null,
@@ -61,6 +64,8 @@ async function confirmarAccion(motivo: string | null) {
     if (tipo === 'bloquear') {
       await equipo.bloquear(asistente.id, motivo)
       aviso.value = `Bloqueaste a ${nombreDe(asistente)}. Sus sesiones abiertas se cerraron.`
+    } else if (tipo === 'restablecer') {
+      restablecidas.value = await equipo.restablecer(asistente.id, motivo)
     } else {
       await equipo.eliminar(asistente.id, motivo)
       aviso.value = `Eliminaste la cuenta de ${nombreDe(asistente)}. Puedes recuperarla si vuelve.`
@@ -72,6 +77,14 @@ async function confirmarAccion(motivo: string | null) {
   } finally {
     ocupada.value = null
   }
+}
+
+function cerrarRestablecidas() {
+  if (restablecidas.value) {
+    const asistente = restablecidas.value.asistente
+    aviso.value = `Restableciste la contraseña de ${nombreDe(asistente)}. Sus sesiones abiertas se cerraron.`
+  }
+  restablecidas.value = null
 }
 
 async function desbloquear(asistente: Asistente) {
@@ -198,6 +211,7 @@ onMounted(() => {
             @bloquear="accion = { tipo: 'bloquear', asistente }"
             @desbloquear="desbloquear(asistente)"
             @eliminar="accion = { tipo: 'eliminar', asistente }"
+            @restablecer="accion = { tipo: 'restablecer', asistente }"
           />
         </TransitionGroup>
       </div>
@@ -228,6 +242,11 @@ onMounted(() => {
       </aside>
     </div>
 
+    <DialogoCredenciales
+      :credenciales="restablecidas"
+      motivo="restablecida"
+      @cerrar="cerrarRestablecidas"
+    />
     <DialogoAccionAsistente
       :accion="accion"
       :enviando="ocupada !== null"

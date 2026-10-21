@@ -132,3 +132,30 @@ test('bloquear, eliminar y recuperar a una asistente', async ({ page }) => {
   expect(nuevas.usuario).toBe(usuario)
   expect(nuevas.contrasena).not.toBe(contrasena)
 })
+
+test('el gerente restablece la contraseña de una asistente que la olvidó', async ({ page }) => {
+  await entrarComoGerente(page)
+  await registrar(page, String(randomInt(10_000_000, 99_999_999)))
+  const anteriores = await leerCredenciales(page)
+  await page.getByRole('button', { name: 'Listo' }).click()
+
+  await page.getByRole('button', { name: 'Restablecer contraseña' }).click()
+  await page.getByLabel('Motivo (opcional)').fill('Olvidó su contraseña')
+  await page.getByRole('dialog').getByRole('button', { name: 'Restablecer contraseña' }).click()
+
+  const ventana = page.getByRole('dialog', { name: 'Contraseña restablecida.' })
+  await expect(ventana).toBeVisible()
+  const nuevas = await leerCredenciales(page)
+  expect(nuevas.usuario).toBe(anteriores.usuario)
+  expect(nuevas.contrasena).not.toBe(anteriores.contrasena)
+  await ventana.getByRole('button', { name: 'Listo' }).click()
+  await expect(page.getByText(/Restableciste la contraseña de Daniela Torres Ríos/)).toBeVisible()
+
+  // La anterior ya no sirve (que la nueva funciona lo prueba el backend).
+  const ingresar = (contrasena: string) =>
+    page.request.post('/api/v1/auth/login', {
+      data: { nombre_usuario: nuevas.usuario, contrasena },
+      headers: { Cookie: '' },
+    })
+  expect((await ingresar(anteriores.contrasena)).status()).toBe(401)
+})

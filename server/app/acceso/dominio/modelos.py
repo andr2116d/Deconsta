@@ -41,6 +41,7 @@ class Accion(StrEnum):
     CONFIRMACION_CONTRASENA_FALLIDA = "CONFIRMACION_CONTRASENA_FALLIDA"
     CUENTA_ELIMINADA = "CUENTA_ELIMINADA"
     CUENTA_RECUPERADA = "CUENTA_RECUPERADA"
+    CONTRASENA_RESTABLECIDA = "CONTRASENA_RESTABLECIDA"
     DATOS_CONFIRMADOS = "DATOS_CONFIRMADOS"
 
 
@@ -131,6 +132,14 @@ class Usuario:
 
     def eliminar(self, ahora: datetime) -> None:
         self.eliminada_en = ahora
+
+    def restablecer_contrasena(self, contrasena_hash: str, ahora: datetime) -> None:
+        """Su gerente le entrega una contraseña temporal nueva: deberá cambiarla al ingresar. El
+        bloqueo no cambia; se levanta aparte."""
+        self.cambiar_contrasena(contrasena_hash, ahora)
+        self.debe_cambiar_contrasena = True
+        if not self.bloqueada:
+            self.intentos_fallidos = 0
 
     def recuperar(self, contrasena_hash: str, ahora: datetime) -> None:
         """Vuelve al equipo como recién registrada: contraseña temporal nueva, sin bloqueo y con

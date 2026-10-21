@@ -269,6 +269,36 @@ class EliminarAsistente(_OperacionEquipo):
             )
 
 
+class RestablecerContrasena(_OperacionEquipo):
+    """Para una asistente que olvidó su contraseña: la anterior deja de servir, sus sesiones se
+    cierran y recibe una temporal nueva que se muestra una sola vez."""
+
+    def ejecutar(
+        self, sesion: SesionActiva, asistente_id: UUID, motivo: str | None
+    ) -> CredencialesEntregadas:
+        self._exigir_gerente(sesion)
+        with self._unidad() as uow:
+            ahora = self._reloj()
+            gerente = self._gerente(uow, sesion)
+            asistente = self._asistente(uow, gerente, asistente_id)
+            contrasena = generar_contrasena_temporal(asistente.nombre_usuario)
+            asistente.restablecer_contrasena(self._contrasenas.generar_hash(contrasena), ahora)
+            uow.usuarios.guardar(asistente)
+            cerradas = uow.sesiones.revocar_de_usuario(
+                asistente.id, ahora, "contrasena_restablecida"
+            )
+            uow.auditoria.registrar(
+                EventoAuditoria(
+                    Accion.CONTRASENA_RESTABLECIDA,
+                    actor_id=gerente.id,
+                    cuenta_id=asistente.id,
+                    motivo=motivo,
+                    detalle={"sesiones_cerradas": cerradas},
+                )
+            )
+            return CredencialesEntregadas(self._miembro(uow, asistente), contrasena)
+
+
 class RecuperarAsistente(_OperacionEquipo):
     def ejecutar(self, sesion: SesionActiva, asistente_id: UUID) -> CredencialesEntregadas:
         self._exigir_gerente(sesion)

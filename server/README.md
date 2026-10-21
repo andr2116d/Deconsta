@@ -93,6 +93,7 @@ que rige, todas las cuentas deben volver a aceptarla. Las aceptaciones quedan en
 | `POST /api/v1/asistentes/{id}/desbloqueo` | El gerente desbloquea a su asistente |
 | `POST /api/v1/asistentes/{id}/eliminacion` | Baja lógica: deja de ingresar, se conserva su historial |
 | `POST /api/v1/asistentes/{id}/recuperacion` | Recupera una eliminada con una contraseña temporal nueva |
+| `POST /api/v1/asistentes/{id}/restablecimiento` | Contraseña temporal nueva para una asistente que olvidó la suya |
 | `GET /api/v1/cuenta` | Datos de la propia cuenta, descifrados, y el cupo de cambios de usuario |
 | `POST /api/v1/cuenta/confirmacion-datos` | La asistente confirma sus datos en su primer ingreso |
 | `POST /api/v1/cuenta/datos` | Actualiza los datos personales (envía los datos completos) |
@@ -121,6 +122,9 @@ El gerente administra a sus asistentes; cualquier otra cuenta responde 404. Las 
   `ASISTENTE_ELIMINADA` con `deleted_account`, para elegir entre recuperarla o crear otra con
   `crear_aunque_eliminada: true`. Recuperarla le da una contraseña temporal nueva y vuelve a
   pedirle confirmar sus datos.
+- Restablecer la contraseña genera una temporal nueva (se muestra una sola vez), invalida la anterior,
+  cierra sus sesiones y queda en la auditoría como `CONTRASENA_RESTABLECIDA` con su motivo. No
+  levanta un bloqueo: eso se hace con el desbloqueo.
 - Bloquear (causa `gerente`) cierra sus sesiones; el bloqueo por 5 intentos fallidos tiene la causa
   `intentos_fallidos`. El mensaje de ingreso dice cuál fue.
 - El trabajo será del equipo, no de una asistente: eliminar a una no deja nada sin responsable.
