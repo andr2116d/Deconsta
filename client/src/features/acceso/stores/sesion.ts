@@ -18,6 +18,8 @@ export const useSesionStore = defineStore('sesion', () => {
   const usuario = computed(() => sesion.value?.usuario ?? null)
   const autenticada = computed(() => sesion.value !== null)
   const debeCambiarContrasena = computed(() => sesion.value?.debe_cambiar_contrasena ?? false)
+  const pasosPendientes = computed(() => sesion.value?.pasos_pendientes ?? [])
+  const pasoActual = computed(() => pasosPendientes.value[0] ?? null)
 
   async function comprobar(): Promise<void> {
     if (comprobada.value) return
@@ -41,6 +43,16 @@ export const useSesionStore = defineStore('sesion', () => {
     sesion.value = await api.cambiarContrasena(datos)
   }
 
+  /** Vuelve a pedir la sesión: los pasos pendientes pueden haber cambiado en el backend. */
+  async function recargar(): Promise<void> {
+    comprobada.value = false
+    await comprobar()
+  }
+
+  function actualizar(nueva: Sesion): void {
+    sesion.value = nueva
+  }
+
   async function salir(): Promise<void> {
     try {
       await api.cerrarSesion()
@@ -59,7 +71,11 @@ export const useSesionStore = defineStore('sesion', () => {
     usuario,
     autenticada,
     debeCambiarContrasena,
+    pasosPendientes,
+    pasoActual,
     comprobar,
+    recargar,
+    actualizar,
     ingresar,
     cambiarContrasena,
     salir,

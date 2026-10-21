@@ -5,10 +5,10 @@ import FormularioCambioContrasena from '../components/FormularioCambioContrasena
 import MarcoAcceso from '../components/MarcoAcceso.vue'
 import { useSesionStore } from '../stores/sesion'
 
+// Cambio voluntario. El cambio obligatorio de la contraseña temporal ocurre en la bienvenida: la
+// guarda de navegación no deja llegar aquí mientras quede un paso pendiente.
 const router = useRouter()
 const sesion = useSesionStore()
-// Se fija al abrir la vista: tras guardar, el indicador cambia pero el texto no debe saltar.
-const inicial = sesion.debeCambiarContrasena
 
 function irAlInicio(aviso?: string) {
   router.replace({ name: 'inicio', state: aviso ? { aviso } : undefined })
@@ -22,26 +22,16 @@ function sesionTerminada() {
 
 <template>
   <MarcoAcceso>
-    <p
-      v-if="inicial"
-      class="mb-3 inline-flex rounded-full bg-rosa px-2.5 py-1 text-[11px] font-bold text-ciruela"
-    >
-      Primer paso de seguridad
-    </p>
     <h1 class="text-[24px] leading-tight font-extrabold tracking-[-0.03em]">
-      {{ inicial ? 'Crea tu contraseña personal.' : 'Cambia tu contraseña.' }}
+      Cambia tu contraseña.
     </h1>
     <p class="mt-2 mb-6 text-[13px] text-secundario">
-      <template v-if="inicial">
-        Ingresaste con una contraseña temporal. Cámbiala ahora para proteger tu cuenta; si lo dejas
-        para después, te lo recordaremos en cada ingreso.
-      </template>
-      <template v-else>Al guardarla, se cerrarán tus otras sesiones abiertas.</template>
+      Al guardarla, se cerrarán tus otras sesiones abiertas.
     </p>
     <FormularioCambioContrasena
-      :inicial="inicial"
+      :inicial="false"
       @cambiada="irAlInicio('Contraseña actualizada. Ya puedes usarla en tus próximos ingresos.')"
-      @omitir="irAlInicio()"
+      @volver="irAlInicio()"
       @sesion-terminada="sesionTerminada"
     />
   </MarcoAcceso>

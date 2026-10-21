@@ -1,7 +1,12 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { respuesta, SESION, simularFetch } from '@/features/acceso/__tests__/respuestas'
+import {
+  respuesta,
+  SESION,
+  SESION_HABILITADA,
+  simularFetch,
+} from '@/features/acceso/__tests__/respuestas'
 
 async function routerNuevo() {
   vi.resetModules()
@@ -22,7 +27,7 @@ describe('guardas de navegación', () => {
   })
 
   it('no muestra el ingreso a quien ya tiene sesión', async () => {
-    simularFetch(respuesta(200, SESION))
+    simularFetch(respuesta(200, SESION_HABILITADA))
     const router = await routerNuevo()
 
     await router.push('/ingresar')
@@ -37,5 +42,26 @@ describe('guardas de navegación', () => {
     await router.push('/cambiar-contrasena')
 
     expect(router.currentRoute.value.name).toBe('inicio-sesion')
+  })
+
+  it.each(['/inicio', '/cambiar-contrasena', '/ingresar', '/otra-ruta'])(
+    'retiene en la bienvenida a quien tiene un paso pendiente (%s)',
+    async (ruta) => {
+      simularFetch(respuesta(200, { ...SESION, pasos_pendientes: ['aceptar_documentos'] }))
+      const router = await routerNuevo()
+
+      await router.push(ruta)
+
+      expect(router.currentRoute.value.name).toBe('incorporacion')
+    },
+  )
+
+  it('saca de la bienvenida a quien ya completó los pasos', async () => {
+    simularFetch(respuesta(200, SESION_HABILITADA))
+    const router = await routerNuevo()
+
+    await router.push('/bienvenida')
+
+    expect(router.currentRoute.value.name).toBe('inicio')
   })
 })

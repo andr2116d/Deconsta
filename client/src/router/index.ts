@@ -7,6 +7,8 @@ declare module 'vue-router' {
     titulo: string
     requiereSesion?: boolean
     soloInvitados?: boolean
+    /** Pantalla de los pasos del primer ingreso: solo mientras quede alguno pendiente. */
+    incorporacion?: boolean
   }
 }
 
@@ -19,6 +21,12 @@ const router = createRouter({
       name: 'inicio-sesion',
       component: () => import('@/features/acceso/views/InicioSesionView.vue'),
       meta: { titulo: 'Inicia sesión', soloInvitados: true },
+    },
+    {
+      path: '/bienvenida',
+      name: 'incorporacion',
+      component: () => import('@/features/incorporacion/views/IncorporacionView.vue'),
+      meta: { titulo: 'Bienvenida', requiereSesion: true, incorporacion: true },
     },
     {
       path: '/cambiar-contrasena',
@@ -46,6 +54,12 @@ router.beforeEach(async (destino) => {
   }
   if (destino.meta.requiereSesion && !sesion.autenticada) return { name: 'inicio-sesion' }
   if (destino.meta.soloInvitados && sesion.autenticada) return { name: 'inicio' }
+  // Con un paso pendiente, cualquier otra pantalla de la sesión lleva a completarlo.
+  const pendiente = sesion.pasosPendientes.length > 0
+  if (sesion.autenticada && pendiente && !destino.meta.incorporacion) {
+    return { name: 'incorporacion' }
+  }
+  if (destino.meta.incorporacion && !pendiente) return { name: 'inicio' }
 })
 
 router.afterEach((destino) => {

@@ -7,9 +7,13 @@ export interface Usuario {
   rol: Rol
 }
 
+/** Pasos del primer ingreso, en el orden en que deben completarse. */
+export type PasoPendiente = 'cambiar_contrasena' | 'aceptar_documentos'
+
 export interface Sesion {
   usuario: Usuario
   debe_cambiar_contrasena: boolean
+  pasos_pendientes: PasoPendiente[]
 }
 
 export interface Ingreso extends Sesion {
