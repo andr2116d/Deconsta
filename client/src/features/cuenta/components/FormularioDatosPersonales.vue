@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 
 import { ErrorApi } from '@/shared/api/http'
+import { useLimpiarErrores } from '@/shared/composables/useLimpiarErrores'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseCampo from '@/shared/components/BaseCampo.vue'
@@ -67,6 +68,7 @@ const datos = reactive<Formulario>(desde(props.cuenta))
 const contrasena = ref('')
 const errores = reactive<Partial<Record<Campo, string>>>({})
 const enviando = ref(false)
+useLimpiarErrores(datos, errores)
 const guardado = ref(false)
 const fallo = ref<ErrorApi | null>(null)
 const dialogoDocumento = ref<'inicio' | 'final' | null>(null)

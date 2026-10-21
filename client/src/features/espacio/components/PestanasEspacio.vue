@@ -24,6 +24,9 @@ const pestanas = computed(() =>
   })),
 )
 
+// Una pantalla interna (Registrar asistente) mantiene marcada la pestaña de la que depende.
+const enSuPadre = (nombre: string) => route.meta.seccion?.padre === nombre
+
 const mascara = computed(() => {
   if (!hayAntes.value && !hayDespues.value) return undefined
   const inicio = hayAntes.value ? 'transparent 0, #000 32px' : '#000 0'
@@ -40,7 +43,7 @@ function medir() {
 }
 
 function mostrarActiva() {
-  const activa = lista.value?.querySelector<HTMLElement>('[aria-current="page"]')
+  const activa = lista.value?.querySelector<HTMLElement>('[aria-current]')
   const reducir = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   // jsdom no implementa scrollIntoView.
   activa?.scrollIntoView?.({
@@ -90,10 +93,10 @@ watch(
         >
           <a
             :href="href"
-            :aria-current="isExactActive ? 'page' : undefined"
+            :aria-current="isExactActive ? 'page' : enSuPadre(pestana.nombre) ? 'true' : undefined"
             class="group relative inline-flex items-center gap-2 text-[13px] whitespace-nowrap transition-colors duration-200"
             :class="
-              isExactActive
+              isExactActive || enSuPadre(pestana.nombre)
                 ? 'font-extrabold text-acento'
                 : 'font-semibold text-secundario hover:text-acento'
             "
@@ -104,7 +107,11 @@ watch(
             <span
               aria-hidden="true"
               class="absolute inset-x-0 bottom-0 h-[3px] origin-bottom rounded-t-[3px] bg-acento transition-transform duration-200 ease-out"
-              :class="isExactActive ? 'scale-y-100' : 'scale-y-0 group-hover:scale-y-50'"
+              :class="
+                isExactActive || enSuPadre(pestana.nombre)
+                  ? 'scale-y-100'
+                  : 'scale-y-0 group-hover:scale-y-50'
+              "
             />
           </a>
         </RouterLink>
