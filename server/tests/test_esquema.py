@@ -56,9 +56,10 @@ def test_la_auditoria_no_admite_cambios(conexion: psycopg.Connection, sentencia:
 
 def test_solo_una_asistente_puede_quedar_bloqueada(conexion: psycopg.Connection) -> None:
     gerente = insertar_usuario(conexion, "gerente")
-    insertar_usuario(conexion, "asistente", gerente_id=gerente, bloqueada_en="2026-10-21")
+    bloqueo = {"bloqueada_en": "2026-10-21", "causa_bloqueo": "intentos_fallidos"}
+    insertar_usuario(conexion, "asistente", gerente_id=gerente, **bloqueo)
     with pytest.raises(psycopg.errors.CheckViolation, match="ck_usuario_bloqueo_asistente"):
-        insertar_usuario(conexion, "gerente", bloqueada_en="2026-10-21")
+        insertar_usuario(conexion, "gerente", **bloqueo)
 
 
 def test_toda_asistente_pertenece_a_un_gerente(conexion: psycopg.Connection) -> None:
