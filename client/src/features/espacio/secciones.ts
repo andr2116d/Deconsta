@@ -204,6 +204,16 @@ export const SECCIONES: readonly Seccion[] = [
     pestana: { grupo: 'cuenta', etiqueta: 'Privacidad' },
   },
   {
+    nombre: 'categorias-espacio',
+    ruta: 'categorias',
+    etiqueta: 'Categorías',
+    descripcion: 'Las categorías del espacio para ordenar las deudas; puedes crear las que falten.',
+    icono: 'etiqueta',
+    ubicacion: 'cuenta',
+    roles: ['asistente'],
+    vista: () => import('@/features/categorias/views/CategoriasEspacioView.vue'),
+  },
+  {
     nombre: 'configuracion',
     ruta: GRUPOS.configuracion.ruta,
     etiqueta: 'Límites y categorías',
