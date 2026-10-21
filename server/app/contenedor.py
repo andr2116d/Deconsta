@@ -7,7 +7,9 @@ from redis import Redis
 from sqlalchemy import Engine
 
 from app.acceso.aplicacion.autenticar import Autenticar, CerrarSesion
+from app.acceso.aplicacion.cambiar_contrasena import CambiarContrasena
 from app.acceso.aplicacion.crear_cuenta import CrearCuenta
+from app.acceso.aplicacion.desbloquear_asistente import DesbloquearAsistente
 from app.acceso.aplicacion.iniciar_sesion import IniciarSesion
 from app.acceso.aplicacion.limites import LimitesAcceso
 from app.acceso.dominio.puertos import Limite
@@ -54,6 +56,8 @@ class Contenedor:
     iniciar_sesion: IniciarSesion
     autenticar: Autenticar
     cerrar_sesion: CerrarSesion
+    cambiar_contrasena: CambiarContrasena
+    desbloquear_asistente: DesbloquearAsistente
     crear_cuenta: CrearCuenta
 
     @classmethod
@@ -83,6 +87,8 @@ class Contenedor:
             ),
             autenticar=Autenticar(unidad, reloj),
             cerrar_sesion=CerrarSesion(unidad, reloj),
+            cambiar_contrasena=CambiarContrasena(unidad, contrasenas, limitador, limites, reloj),
+            desbloquear_asistente=DesbloquearAsistente(unidad, limitador, limites),
             crear_cuenta=CrearCuenta(unidad, contrasenas, reloj),
         )
 

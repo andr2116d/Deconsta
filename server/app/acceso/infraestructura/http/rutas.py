@@ -7,15 +7,20 @@ la contraseña inicial), 422 CAMPOS_OBLIGATORIOS, 401 CREDENCIALES_INCORRECTAS, 
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Request, Response, status
 
 from app.acceso.infraestructura.http.dependencias import (
     ContenedorDep,
+    GerenteDep,
     OrigenDep,
     SesionDep,
 )
 from app.acceso.infraestructura.http.esquemas import (
+    CambioContrasenaEntrada,
+    DesbloqueoEntrada,
+    DesbloqueoSalida,
     ErrorSalida,
     IngresoEntrada,
     IngresoSalida,
@@ -65,3 +70,30 @@ def cerrar_sesion(request: Request, response: Response, contenedor: ContenedorDe
     nombre = contenedor.config.cookie_sesion_nombre
     contenedor.cerrar_sesion.ejecutar(request.cookies.get(nombre))
     response.delete_cookie(nombre, path="/api")
+
+
+@router.post("/auth/contrasena", responses=ERRORES)
+def cambiar_contrasena(
+    datos: CambioContrasenaEntrada, sesion: SesionDep, contenedor: ContenedorDep
+) -> SesionSalida:
+    usuario = contenedor.cambiar_contrasena.ejecutar(
+        sesion, datos.contrasena_actual, datos.contrasena_nueva
+    )
+    return SesionSalida(
+        usuario=UsuarioSalida.desde(usuario),
+        debe_cambiar_contrasena=usuario.debe_cambiar_contrasena,
+    )
+
+
+@router.post("/asistentes/{asistente_id}/desbloqueo", responses=ERRORES)
+def desbloquear_asistente(
+    asistente_id: UUID,
+    sesion: GerenteDep,
+    contenedor: ContenedorDep,
+    datos: DesbloqueoEntrada | None = None,
+) -> DesbloqueoSalida:
+    motivo = datos.motivo if datos else None
+    asistente = contenedor.desbloquear_asistente.ejecutar(sesion, asistente_id, motivo)
+    return DesbloqueoSalida(
+        id=asistente.id, nombre_usuario=asistente.nombre_usuario, bloqueada=asistente.bloqueada
+    )
