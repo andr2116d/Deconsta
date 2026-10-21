@@ -47,12 +47,12 @@ const contenido = computed(() => {
         class="mt-6 inline-flex items-center gap-1.5 rounded-full bg-aviso-fondo px-3 py-1 text-[12px] font-bold text-aviso"
       >
         <BaseIcono nombre="destello" class="size-3.5" />
-        En desarrollo
+        Muy pronto
       </span>
       <p
         class="mt-4 max-w-[28ch] text-[20px] leading-snug font-extrabold tracking-[-0.02em] sm:text-[24px]"
       >
-        Esta funcionalidad está en desarrollo.
+        Estaremos disponibles pronto, con todo y mejoras.
       </p>
       <p class="mt-3 max-w-[56ch] text-[14px] text-pretty text-secundario">
         {{ contenido.descripcion }}
