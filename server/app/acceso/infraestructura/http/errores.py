@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.acceso.dominio.errores import (
+    AsistenteEliminadaRegistrada,
     CambioDocumentoSinConfirmar,
     ContrasenaActualIncorrecta,
     ContrasenaInsegura,
@@ -10,9 +11,12 @@ from app.acceso.dominio.errores import (
     CredencialesIncorrectas,
     CuentaBloqueada,
     CuentaNoBloqueada,
+    CuentaNoEliminada,
     CuentaNoEncontrada,
+    CuentaYaBloqueada,
     DatosDuplicados,
     DatosInvalidos,
+    DatosYaConfirmados,
     DemasiadasSolicitudes,
     DocumentoNoModificable,
     DocumentosDesactualizados,
@@ -20,6 +24,7 @@ from app.acceso.dominio.errores import (
     IncorporacionPendiente,
     LimiteCambiosNombreUsuario,
     NoAutenticado,
+    PersonaYaEnEquipo,
     ServicioNoDisponible,
     SinCambios,
     SinPermiso,
@@ -37,6 +42,11 @@ ESTADOS_HTTP: dict[type[ErrorAcceso], int] = {
     DatosDuplicados: 409,
     DocumentosDesactualizados: 409,
     LimiteCambiosNombreUsuario: 409,
+    CuentaYaBloqueada: 409,
+    PersonaYaEnEquipo: 409,
+    AsistenteEliminadaRegistrada: 409,
+    CuentaNoEliminada: 409,
+    DatosYaConfirmados: 409,
     ContrasenaInsegura: 422,
     ContrasenaRepetida: 422,
     DatosInvalidos: 422,
@@ -61,6 +71,11 @@ async def manejar_error_acceso(request: Request, exc: Exception) -> JSONResponse
         extra["requirements"] = list(exc.requisitos)
     if isinstance(exc, IncorporacionPendiente):
         extra["pending_steps"] = exc.pasos
+    if isinstance(exc, AsistenteEliminadaRegistrada):
+        extra["deleted_account"] = {
+            "id": str(exc.asistente_id),
+            "nombre_usuario": exc.nombre_usuario,
+        }
     if isinstance(exc, LimiteCambiosNombreUsuario):
         extra["renews_at"] = exc.renueva_en.isoformat()
     respuesta = respuesta_error(

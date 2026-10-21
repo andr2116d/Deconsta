@@ -36,10 +36,16 @@ def test_muestra_los_datos_descifrados_y_el_cupo_de_cambios(gerente: dict) -> No
     assert cupo["renueva_en"].endswith("-05:00")
 
 
-def test_exige_sesion_y_la_incorporacion_completa(cliente: TestClient, equipo: Equipo) -> None:
+def test_consultar_pide_sesion_y_actualizar_la_incorporacion_completa(
+    cliente: TestClient, equipo: Equipo
+) -> None:
     assert cliente.get(CUENTA).status_code == 401
     ingresar(cliente, equipo.gerente.usuario, equipo.gerente.contrasena)
-    assert cliente.get(CUENTA).json()["code"] == "INCORPORACION_PENDIENTE"
+    # Sus propios datos se consultan también durante el primer ingreso.
+    cuenta = cliente.get(CUENTA).json()
+    assert cuenta["nombres"] == "Valentina"
+    respuesta = cliente.post(DATOS, json=editable(cuenta, telefono="912345678"))
+    assert respuesta.json()["code"] == "INCORPORACION_PENDIENTE"
 
 
 def test_actualiza_los_datos_y_el_nombre_de_la_sesion(

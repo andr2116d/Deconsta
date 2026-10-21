@@ -9,7 +9,7 @@ import BaseCampo from '@/shared/components/BaseCampo.vue'
 import { formatearDiaYMes, NOMBRE_USUARIO_VALIDO, normalizarNombreUsuario } from '../datos'
 import { useCuentaStore } from '../stores/cuenta'
 import type { Cuenta } from '../types'
-import DialogoFalloGuardado from './DialogoFalloGuardado.vue'
+import DialogoFalloGuardado from '@/shared/components/DialogoFalloGuardado.vue'
 
 const props = defineProps<{ cuenta: Cuenta }>()
 const emit = defineEmits<{ 'sesion-terminada': [] }>()

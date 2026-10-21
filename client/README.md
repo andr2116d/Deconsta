@@ -15,8 +15,9 @@ src/
       composables/     lógica reutilizable (indicador de seguridad de la contraseña)
       stores/          estado de la sesión (Pinia)
       views/           pantallas enrutadas
-    incorporacion/   primer ingreso: aceptación de términos y privacidad, y la ventana de la
-                     contraseña temporal
+    incorporacion/   primer ingreso: aceptación de términos y privacidad, la ventana de la
+                     contraseña temporal y, para una asistente nueva, la confirmación de sus datos
+    equipo/          Mi equipo: lista, registro, bloqueo, eliminación y recuperación de asistentes
     espacio/         espacio de trabajo: cabecera, pestañas por rol y tarjeta de la cuenta
       layouts/         EspacioLayout, ruta padre de todas las secciones
       secciones.ts     secciones de cada rol; de aquí salen rutas, pestañas y menú
@@ -27,8 +28,10 @@ src/
       datos.ts         normalización igual a la del backend para detectar cambios reales
   shared/
     api/             cliente HTTP y estructura común de errores
+    validaciones/    filtros y avisos de DNI, carné, celular, correo y nombres
+    composables/     copiar al portapapeles y limpiar el error de un campo al editarlo
     components/      componentes base (BaseBoton, BaseCampo, BaseAviso, BaseDialogo, BaseIcono,
-                     BaseAvatar, MarcaDeconsta)
+                     BaseAvatar, MarcaDeconsta, CampoDocumento, DialogoFalloGuardado)
   router/            rutas y guardas de navegación
   assets/main.css    Tailwind y los tokens de la identidad (ciruela, rosa mineral, Manrope)
 ```
@@ -48,6 +51,26 @@ al construirla, se le asigna su `vista` y deja de usar `EnDesarrolloView`. Ocult
 la interfaz: el backend autoriza cada operación.
 El acento de color sigue al rol (`data-rol` en `<html>`): ciruela para gerencia y eucalipto para
 asistencia; la marca siempre es ciruela.
+
+## Mi equipo
+
+Solo para gerencia. «Registrar asistente» (`/equipo/nueva`) es una pantalla interna que mantiene
+marcada la pestaña Mi equipo. El gerente escribe nombres, apellidos, celular y documento (el cargo
+es opcional) y elige o deja generar el usuario y la contraseña; al crear, una ventana los muestra
+una sola vez para copiarlos. Si esa persona ya fue eliminada del equipo, se ofrece recuperar su
+cuenta o crear otra. Cada asistente se puede bloquear (con motivo), desbloquear y eliminar; las
+acciones actualizan la lista al momento.
+
+En su primer ingreso, la asistente acepta las políticas, puede cambiar su contraseña o posponerlo
+y, como paso obligatorio, confirma sus datos (completa su correo y revisa lo que registró su
+gerente). Hasta entonces no entra a su espacio.
+
+## Validación de datos personales
+
+`shared/validaciones/persona.ts` filtra lo que se escribe o pega y avisa lo que falta mientras se
+escribe: DNI de 8 dígitos, carné de 9 a 12 letras o dígitos, celular peruano de 9 dígitos que
+empieza con 9 (con +51 fijo), correo con usuario, @ y dominio con extensión, y nombres solo con
+letras. El backend aplica las mismas reglas y es la autoridad.
 
 ## Mi cuenta
 
@@ -89,6 +112,6 @@ pnpm test:e2e --project=chromium   # Playwright; requiere la API y Postgres en m
 ```
 
 Las pruebas de punta a punta crean cuentas nuevas con el comando del server
-(`app.acceso.infraestructura.cli`) en la base de desarrollo. Cada ejecución hace unos 16 ingresos
-desde la misma IP; el límite por defecto es de 20 por minuto, así que conviene esperar un minuto
-entre ejecuciones seguidas.
+(`app.acceso.infraestructura.cli`) en la base de desarrollo. La suite completa hace más de 20
+ingresos desde la misma IP y el límite por defecto es de 20 por minuto: al ejecutarla entera, la
+última prueba puede recibir 429. Conviene correr los archivos por separado o esperar un minuto.

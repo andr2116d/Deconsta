@@ -36,7 +36,7 @@ describe('FormularioDatosPersonales', () => {
     await campo('Nombres').setValue('Valentina  ')
     expect(guardar().attributes('disabled')).toBeDefined()
 
-    await campo('Teléfono').setValue('912345678')
+    await campo('Celular').setValue('912345678')
     expect(guardar().attributes('disabled')).toBeUndefined()
   })
 

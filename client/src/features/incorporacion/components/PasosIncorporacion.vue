@@ -1,23 +1,34 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import type { PasoPendiente, Usuario } from '@/features/acceso/types'
+import type { Usuario } from '@/features/acceso/types'
 
-const props = defineProps<{ usuario: Usuario; pasoActual: PasoPendiente | null }>()
+import type { Etapa } from '../types'
+
+const props = defineProps<{ usuario: Usuario; etapa: Etapa | null; conDatos: boolean }>()
 
 const iniciales = computed(() => props.usuario.nombres.slice(0, 1).toUpperCase())
 const rol = computed(() => (props.usuario.rol === 'gerente' ? 'Gerente' : 'Asistente'))
 
-// El acceso ya se completó al validar las credenciales. La contraseña temporal no es un paso: se
-// recuerda dentro del espacio.
-const pasos = computed(() => [
-  { nombre: 'Acceso', completo: true, actual: false },
-  {
-    nombre: 'Privacidad',
-    completo: false,
-    actual: props.pasoActual === 'aceptar_documentos',
-  },
-])
+// El acceso ya se completó al validar las credenciales. Una asistente nueva suma la contraseña
+// (recomendada) y la confirmación de sus datos (obligatoria).
+const pasos = computed(() => {
+  const orden: Etapa[] = props.conDatos ? ['privacidad', 'contrasena', 'datos'] : ['privacidad']
+  const nombres: Record<Etapa, string> = {
+    privacidad: 'Privacidad',
+    contrasena: 'Contraseña',
+    datos: 'Tus datos',
+  }
+  const actual = props.etapa ? orden.indexOf(props.etapa) : orden.length
+  return [
+    { nombre: 'Acceso', completo: true, actual: false },
+    ...orden.map((etapa, indice) => ({
+      nombre: nombres[etapa],
+      completo: indice < actual,
+      actual: indice === actual,
+    })),
+  ]
+})
 </script>
 
 <template>
@@ -34,7 +45,7 @@ const pasos = computed(() => [
     </span>
     <ol
       aria-label="Pasos de tu primer ingreso"
-      class="flex items-center gap-2 text-[11px] text-secundario sm:ml-auto"
+      class="flex flex-wrap items-center gap-2 text-[11px] text-secundario sm:ml-auto"
     >
       <li
         v-for="(paso, indice) in pasos"
@@ -57,7 +68,7 @@ const pasos = computed(() => [
         <span
           v-else
           aria-hidden="true"
-          class="size-2 rounded-full"
+          class="size-2 rounded-full transition-colors duration-200"
           :class="paso.actual ? 'bg-acento' : 'bg-borde'"
         />
         {{ paso.nombre }}

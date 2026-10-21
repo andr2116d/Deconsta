@@ -63,7 +63,9 @@ cargo lo fija quien crea la cuenta; la persona no puede editarlo.
 ## Primer ingreso
 
 Antes de entrar a su espacio, cada cuenta acepta los términos de uso y la política de privacidad
-vigentes. La sesión informa lo que falta en `pasos_pendientes`; mientras quede algo, las rutas de
+vigentes. Una asistente registrada desde Mi equipo (o recuperada) además confirma sus datos
+(`completar_datos`): completa su correo y revisa lo que registró su gerente; en esa primera
+confirmación aún puede corregir su documento. La sesión informa lo que falta en `pasos_pendientes`; mientras quede algo, las rutas de
 trabajo (`GerenteDep`, `SesionHabilitadaDep`) responden 403 `INCORPORACION_PENDIENTE`.
 
 Cambiar la contraseña temporal no bloquea el espacio: la sesión lo indica con
@@ -85,8 +87,14 @@ que rige, todas las cuentas deben volver a aceptarla. Las aceptaciones quedan en
 | `GET /api/v1/documentos-legales` | Términos y política vigentes, con su aceptación |
 | `POST /api/v1/documentos-legales/aceptacion` | Acepta las versiones vigentes (`{tipo, version}`) |
 | `GET /api/v1/espacio` | Entrada al espacio; exige la incorporación completa |
+| `GET /api/v1/asistentes` | Asistentes del equipo (documento enmascarado) |
+| `POST /api/v1/asistentes` | Registra una asistente y entrega su usuario y contraseña una sola vez |
+| `POST /api/v1/asistentes/{id}/bloqueo` | El gerente bloquea a su asistente y cierra sus sesiones |
 | `POST /api/v1/asistentes/{id}/desbloqueo` | El gerente desbloquea a su asistente |
+| `POST /api/v1/asistentes/{id}/eliminacion` | Baja lógica: deja de ingresar, se conserva su historial |
+| `POST /api/v1/asistentes/{id}/recuperacion` | Recupera una eliminada con una contraseña temporal nueva |
 | `GET /api/v1/cuenta` | Datos de la propia cuenta, descifrados, y el cupo de cambios de usuario |
+| `POST /api/v1/cuenta/confirmacion-datos` | La asistente confirma sus datos en su primer ingreso |
 | `POST /api/v1/cuenta/datos` | Actualiza los datos personales (envía los datos completos) |
 | `POST /api/v1/cuenta/nombre-usuario` | Cambia el usuario (pide la contraseña actual) |
 
@@ -98,6 +106,31 @@ limiting por IP y por usuario (en Redis, compartido entre instancias) responde 4
 Detrás de un proxy, arranca uvicorn con `--proxy-headers --forwarded-allow-ips=<ip del proxy>`
 para que el límite por IP use la IP real del cliente. En producción: `ENTORNO=produccion`,
 `COOKIE_SEGURA=true` y HTTPS en el borde.
+
+## Mi equipo
+
+El gerente administra a sus asistentes; cualquier otra cuenta responde 404. Las reglas viven en
+`acceso/aplicacion/equipo.py`:
+
+- Al registrar, el gerente da nombres, apellidos, celular y documento; el cargo es opcional. El
+  usuario y la contraseña los elige él (se validan) o los genera Deconsta. Se muestran una sola vez.
+- Una persona no puede tener dos cuentas vigentes: si ya está en el equipo (activa o bloqueada)
+  responde `PERSONA_YA_EN_EQUIPO`; si es de otra cuenta, `DATOS_DUPLICADOS` sin decir de quién.
+- Eliminar es una baja lógica (`eliminada_en`): la cuenta no ingresa (responde como inexistente),
+  sus sesiones se cierran y el historial se conserva. Registrar de nuevo a esa persona responde
+  `ASISTENTE_ELIMINADA` con `deleted_account`, para elegir entre recuperarla o crear otra con
+  `crear_aunque_eliminada: true`. Recuperarla le da una contraseña temporal nueva y vuelve a
+  pedirle confirmar sus datos.
+- Bloquear (causa `gerente`) cierra sus sesiones; el bloqueo por 5 intentos fallidos tiene la causa
+  `intentos_fallidos`. El mensaje de ingreso dice cuál fue.
+- El trabajo será del equipo, no de una asistente: eliminar a una no deja nada sin responsable.
+
+## Validaciones de datos personales
+
+- DNI: 8 dígitos. Carné de extranjería: de 9 a 12 letras o dígitos.
+- Celular peruano: 9 dígitos que empiezan con 9; se acepta con `+51` y se guarda sin él.
+- Correo: usuario, `@` y dominio con extensión (solo se comprueba la forma, no se envía nada).
+- Nombres y apellidos: solo letras, espacios, apóstrofo, punto o guion.
 
 ## Mi cuenta
 

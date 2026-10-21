@@ -4,6 +4,7 @@ persona usuaria: qué ocurrió y qué hacer. Ninguno incluye contraseñas, hashe
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from uuid import UUID
 
 
 class ErrorAcceso(Exception):
@@ -29,6 +30,13 @@ class CuentaBloqueada(ErrorAcceso):
         "Tu cuenta está bloqueada por varios intentos fallidos. "
         "Pide a tu gerente que la desbloquee para volver a ingresar."
     )
+
+    def __init__(self, por_gerente: bool = False) -> None:
+        super().__init__(
+            "Tu gerente bloqueó tu cuenta. Pídele que la desbloquee para volver a ingresar."
+            if por_gerente
+            else None
+        )
 
 
 class DemasiadasSolicitudes(ErrorAcceso):
@@ -57,6 +65,51 @@ class CuentaNoEncontrada(ErrorAcceso):
     mensaje = "No encontramos esa cuenta en tu equipo."
 
 
+class CuentaYaBloqueada(ErrorAcceso):
+    codigo = "CUENTA_YA_BLOQUEADA"
+    mensaje = "Esta cuenta ya está bloqueada."
+
+
+class PersonaYaEnEquipo(ErrorAcceso):
+    """El documento corresponde a una asistente vigente del mismo equipo."""
+
+    codigo = "PERSONA_YA_EN_EQUIPO"
+
+    def __init__(self, bloqueada: bool) -> None:
+        mensaje = (
+            "Ya registraste a esta persona y su cuenta está bloqueada. Desbloquéala desde "
+            "Mi equipo en lugar de crear otra."
+            if bloqueada
+            else "Esta persona ya es parte de tu equipo."
+        )
+        super().__init__(mensaje, campos={"numero_documento": mensaje})
+
+
+class AsistenteEliminadaRegistrada(ErrorAcceso):
+    """El documento corresponde a una asistente que este gerente eliminó: se ofrece recuperarla."""
+
+    codigo = "ASISTENTE_ELIMINADA"
+    mensaje = (
+        "Ya habías registrado a esta persona y eliminaste su cuenta. Puedes recuperarla con su "
+        "historial o crear una cuenta nueva desde cero."
+    )
+
+    def __init__(self, asistente_id: UUID, nombre_usuario: str) -> None:
+        self.asistente_id = asistente_id
+        self.nombre_usuario = nombre_usuario
+        super().__init__()
+
+
+class CuentaNoEliminada(ErrorAcceso):
+    codigo = "CUENTA_NO_ELIMINADA"
+    mensaje = "Esta cuenta no está eliminada: ya forma parte de tu equipo."
+
+
+class DatosYaConfirmados(ErrorAcceso):
+    codigo = "DATOS_YA_CONFIRMADOS"
+    mensaje = "Ya confirmaste tus datos. Puedes actualizarlos desde Mi cuenta."
+
+
 class CuentaNoBloqueada(ErrorAcceso):
     codigo = "CUENTA_NO_BLOQUEADA"
     mensaje = "Esta cuenta no está bloqueada. Puede ingresar con normalidad."
@@ -74,9 +127,9 @@ class ContrasenaInsegura(ErrorAcceso):
     codigo = "CONTRASENA_INSEGURA"
     mensaje = "La nueva contraseña no cumple la política de seguridad."
 
-    def __init__(self, requisitos: Mapping[str, str]) -> None:
+    def __init__(self, requisitos: Mapping[str, str], campo: str = "contrasena_nueva") -> None:
         self.requisitos = dict(requisitos)
-        super().__init__(campos={"contrasena_nueva": " ".join(self.requisitos.values())})
+        super().__init__(campos={campo: " ".join(self.requisitos.values())})
 
 
 class ContrasenaRepetida(ErrorAcceso):
@@ -152,6 +205,8 @@ class IncorporacionPendiente(ErrorAcceso):
         self.pasos = list(pasos)
         super().__init__(
             "Acepta los términos de uso y la política de privacidad vigentes para continuar."
+            if self.pasos and self.pasos[0] == "aceptar_documentos"
+            else "Confirma tus datos personales para continuar."
         )
 
 

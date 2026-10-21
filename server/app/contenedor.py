@@ -15,8 +15,19 @@ from app.acceso.aplicacion.cuenta import (
     CambiarNombreUsuario,
     ConsultarCuenta,
 )
-from app.acceso.aplicacion.desbloquear_asistente import DesbloquearAsistente
-from app.acceso.aplicacion.incorporacion import AceptarDocumentos, ConsultarDocumentos
+from app.acceso.aplicacion.equipo import (
+    BloquearAsistente,
+    DesbloquearAsistente,
+    EliminarAsistente,
+    ListarEquipo,
+    RecuperarAsistente,
+    RegistrarAsistente,
+)
+from app.acceso.aplicacion.incorporacion import (
+    AceptarDocumentos,
+    ConfirmarDatos,
+    ConsultarDocumentos,
+)
 from app.acceso.aplicacion.iniciar_sesion import IniciarSesion
 from app.acceso.aplicacion.limites import LimitesAcceso
 from app.acceso.dominio.puertos import Limite
@@ -57,6 +68,9 @@ def limites_de(config: Settings) -> LimitesAcceso:
             config.limite_actualizacion_cuenta,
             config.ventana_actualizacion_cuenta_segundos,
         ),
+        gestion_equipo=Limite(
+            "gestion_equipo", config.limite_gestion_equipo, config.ventana_gestion_equipo_segundos
+        ),
     )
 
 
@@ -76,6 +90,12 @@ class Contenedor:
     consultar_cuenta: ConsultarCuenta
     actualizar_datos_personales: ActualizarDatosPersonales
     cambiar_nombre_usuario: CambiarNombreUsuario
+    confirmar_datos: ConfirmarDatos
+    listar_equipo: ListarEquipo
+    registrar_asistente: RegistrarAsistente
+    bloquear_asistente: BloquearAsistente
+    eliminar_asistente: EliminarAsistente
+    recuperar_asistente: RecuperarAsistente
 
     @classmethod
     def crear(cls, config: Settings) -> "Contenedor":
@@ -92,6 +112,8 @@ class Contenedor:
         def unidad() -> UnidadDeTrabajoSql:
             return UnidadDeTrabajoSql(motor, cifrador)
 
+        equipo = (unidad, contrasenas, limitador, limites, reloj)
+
         return cls(
             config=config,
             motor=motor,
@@ -107,7 +129,6 @@ class Contenedor:
             autenticar=Autenticar(unidad, reloj),
             cerrar_sesion=CerrarSesion(unidad, reloj),
             cambiar_contrasena=CambiarContrasena(unidad, contrasenas, limitador, limites, reloj),
-            desbloquear_asistente=DesbloquearAsistente(unidad, limitador, limites),
             crear_cuenta=CrearCuenta(unidad, contrasenas, reloj),
             consultar_documentos=ConsultarDocumentos(unidad, reloj),
             aceptar_documentos=AceptarDocumentos(unidad, reloj),
@@ -118,6 +139,13 @@ class Contenedor:
             cambiar_nombre_usuario=CambiarNombreUsuario(
                 unidad, contrasenas, limitador, limites, reloj, zona
             ),
+            confirmar_datos=ConfirmarDatos(unidad, limitador, limites, reloj),
+            listar_equipo=ListarEquipo(*equipo),
+            registrar_asistente=RegistrarAsistente(*equipo),
+            bloquear_asistente=BloquearAsistente(*equipo),
+            desbloquear_asistente=DesbloquearAsistente(*equipo),
+            eliminar_asistente=EliminarAsistente(*equipo),
+            recuperar_asistente=RecuperarAsistente(*equipo),
         )
 
     def cerrar(self) -> None:

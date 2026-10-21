@@ -19,6 +19,11 @@ class Rol(StrEnum):
     ASISTENTE = "asistente"
 
 
+class CausaBloqueo(StrEnum):
+    INTENTOS_FALLIDOS = "intentos_fallidos"
+    GERENTE = "gerente"
+
+
 class Accion(StrEnum):
     INGRESO_EXITOSO = "INGRESO_EXITOSO"
     INGRESO_FALLIDO = "INGRESO_FALLIDO"
@@ -34,6 +39,9 @@ class Accion(StrEnum):
     DOCUMENTO_CAMBIADO = "DOCUMENTO_CAMBIADO"
     NOMBRE_USUARIO_CAMBIADO = "NOMBRE_USUARIO_CAMBIADO"
     CONFIRMACION_CONTRASENA_FALLIDA = "CONFIRMACION_CONTRASENA_FALLIDA"
+    CUENTA_ELIMINADA = "CUENTA_ELIMINADA"
+    CUENTA_RECUPERADA = "CUENTA_RECUPERADA"
+    DATOS_CONFIRMADOS = "DATOS_CONFIRMADOS"
 
 
 REGLA_NOMBRE_USUARIO = (
@@ -64,10 +72,23 @@ class Usuario:
     ultimo_ingreso_en: datetime | None
     intentos_fallidos: int
     bloqueada_en: datetime | None
+    causa_bloqueo: CausaBloqueo | None = None
+    # Baja lógica: la cuenta no ingresa ni aparece en el equipo, pero su historial se conserva.
+    eliminada_en: datetime | None = None
+    # Una asistente recién registrada (o recuperada) confirma sus datos en su primer ingreso.
+    datos_confirmados_en: datetime | None = None
 
     @property
     def bloqueada(self) -> bool:
         return self.bloqueada_en is not None
+
+    @property
+    def eliminada(self) -> bool:
+        return self.eliminada_en is not None
+
+    @property
+    def debe_confirmar_datos(self) -> bool:
+        return self.rol is Rol.ASISTENTE and self.datos_confirmados_en is None
 
     @property
     def primer_ingreso(self) -> bool:
@@ -85,6 +106,7 @@ class Usuario:
         self.intentos_fallidos += 1
         if self.rol is Rol.ASISTENTE and self.intentos_fallidos >= MAXIMO_INTENTOS_FALLIDOS:
             self.bloqueada_en = ahora
+            self.causa_bloqueo = CausaBloqueo.INTENTOS_FALLIDOS
             return True
         return False
 
@@ -100,7 +122,27 @@ class Usuario:
 
     def desbloquear(self) -> None:
         self.bloqueada_en = None
+        self.causa_bloqueo = None
         self.intentos_fallidos = 0
+
+    def bloquear_por_gerente(self, ahora: datetime) -> None:
+        self.bloqueada_en = ahora
+        self.causa_bloqueo = CausaBloqueo.GERENTE
+
+    def eliminar(self, ahora: datetime) -> None:
+        self.eliminada_en = ahora
+
+    def recuperar(self, contrasena_hash: str, ahora: datetime) -> None:
+        """Vuelve al equipo como recién registrada: contraseña temporal nueva, sin bloqueo y con
+        sus datos por confirmar."""
+        self.eliminada_en = None
+        self.desbloquear()
+        self.cambiar_contrasena(contrasena_hash, ahora)
+        self.debe_cambiar_contrasena = True
+        self.datos_confirmados_en = None
+
+    def confirmar_datos(self, ahora: datetime) -> None:
+        self.datos_confirmados_en = ahora
 
 
 @dataclass(frozen=True)

@@ -6,9 +6,10 @@ from pydantic_core import PydanticCustomError
 
 from app.acceso.aplicacion.autenticar import SesionActiva
 from app.acceso.aplicacion.cuenta import CuentaPropia
+from app.acceso.aplicacion.equipo import CredencialesEntregadas, MiembroEquipo
 from app.acceso.dominio.datos_personales import TipoDocumento
 from app.acceso.dominio.incorporacion import DocumentoVigente, PasoPendiente, TipoDocumentoLegal
-from app.acceso.dominio.modelos import Rol, Usuario
+from app.acceso.dominio.modelos import CausaBloqueo, Rol, Usuario
 
 
 def exigir(valor: str, mensaje: str) -> str:
@@ -48,10 +49,6 @@ class CambioContrasenaEntrada(BaseModel):
     @classmethod
     def validar_nueva(cls, valor: str) -> str:
         return exigir(valor, "Ingresa la nueva contraseña.")
-
-
-class DesbloqueoEntrada(BaseModel):
-    motivo: str | None = Field(None, max_length=500)
 
 
 class UsuarioSalida(BaseModel):
@@ -139,12 +136,6 @@ class EspacioSalida(BaseModel):
     disponible: bool
 
 
-class DesbloqueoSalida(BaseModel):
-    id: UUID
-    nombre_usuario: str
-    bloqueada: bool
-
-
 class DatosPersonalesEntrada(BaseModel):
     """Los datos completos tal como quedarán. Las reglas (formato, qué cambia y qué no) las aplica
     el dominio; aquí solo se acotan los tamaños."""
@@ -193,7 +184,8 @@ class CuentaSalida(BaseModel):
     nombre_usuario: str
     nombres: str
     apellidos: str
-    correo: str
+    # Nulo solo mientras una asistente recién registrada no confirma sus datos.
+    correo: str | None
     telefono: str | None
     tipo_documento: TipoDocumento
     numero_documento: str
@@ -227,6 +219,100 @@ class CuentaSalida(BaseModel):
                 restantes=cupo.restantes,
                 renueva_en=cupo.renueva_en,
             ),
+        )
+
+
+class ConfirmacionDatosEntrada(BaseModel):
+    """Datos que la asistente revisa y completa en su primer ingreso."""
+
+    nombres: str = Field("", max_length=200)
+    apellidos: str = Field("", max_length=200)
+    correo: str = Field("", max_length=300)
+    telefono: str = Field("", max_length=30)
+    tipo_documento: str = Field("", max_length=10)
+    numero_documento: str = Field("", max_length=30)
+
+
+class NuevaAsistenteEntrada(BaseModel):
+    nombres: str = Field("", max_length=200)
+    apellidos: str = Field("", max_length=200)
+    telefono: str = Field("", max_length=30)
+    tipo_documento: str = Field("", max_length=10)
+    numero_documento: str = Field("", max_length=30)
+    cargo: str | None = Field(None, max_length=120)
+    # Nulos o vacíos: Deconsta los genera.
+    nombre_usuario: str | None = Field(None, max_length=64)
+    contrasena: str | None = Field(None, max_length=256)
+    # La persona fue eliminada de este equipo y el gerente prefiere una cuenta nueva.
+    crear_aunque_eliminada: bool = False
+
+
+class MotivoEntrada(BaseModel):
+    motivo: str | None = Field(None, max_length=500)
+
+
+def enmascarar(numero: str) -> str:
+    """El gerente reconoce el documento por sus últimos dígitos; no necesita verlo completo."""
+    return f"•••• {numero[-4:]}"
+
+
+class AsistenteSalida(BaseModel):
+    id: UUID
+    nombre_usuario: str
+    nombres: str
+    apellidos: str
+    cargo: str | None
+    telefono: str | None
+    correo: str | None
+    tipo_documento: TipoDocumento
+    documento: str
+    # activa, bloqueada o pendiente (aún no confirma sus datos en su primer ingreso).
+    estado: str
+    causa_bloqueo: CausaBloqueo | None
+    bloqueada: bool
+    debe_cambiar_contrasena: bool
+    ultimo_ingreso_en: datetime | None
+
+    @classmethod
+    def desde(cls, miembro: MiembroEquipo) -> "AsistenteSalida":
+        usuario, datos = miembro.usuario, miembro.ficha.datos
+        if usuario.bloqueada:
+            estado = "bloqueada"
+        elif usuario.debe_confirmar_datos:
+            estado = "pendiente"
+        else:
+            estado = "activa"
+        return cls(
+            id=usuario.id,
+            nombre_usuario=usuario.nombre_usuario,
+            nombres=datos.nombres,
+            apellidos=datos.apellidos,
+            cargo=miembro.ficha.cargo,
+            telefono=datos.telefono,
+            correo=datos.correo,
+            tipo_documento=datos.tipo_documento,
+            documento=enmascarar(datos.numero_documento),
+            estado=estado,
+            causa_bloqueo=usuario.causa_bloqueo,
+            bloqueada=usuario.bloqueada,
+            debe_cambiar_contrasena=usuario.debe_cambiar_contrasena,
+            ultimo_ingreso_en=usuario.ultimo_ingreso_en,
+        )
+
+
+class CredencialesSalida(BaseModel):
+    """Se muestran una sola vez para copiarlas; Deconsta no vuelve a conocer la contraseña."""
+
+    asistente: AsistenteSalida
+    nombre_usuario: str
+    contrasena_temporal: str
+
+    @classmethod
+    def desde(cls, entregadas: CredencialesEntregadas) -> "CredencialesSalida":
+        return cls(
+            asistente=AsistenteSalida.desde(entregadas.miembro),
+            nombre_usuario=entregadas.miembro.usuario.nombre_usuario,
+            contrasena_temporal=entregadas.contrasena,
         )
 
 

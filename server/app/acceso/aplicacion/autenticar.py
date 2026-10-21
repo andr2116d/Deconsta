@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from uuid import UUID
 
+from app.acceso.aplicacion.pasos import pasos_de
 from app.acceso.dominio.errores import NoAutenticado
-from app.acceso.dominio.incorporacion import PasoPendiente, pasos_pendientes
+from app.acceso.dominio.incorporacion import PasoPendiente
 from app.acceso.dominio.modelos import Accion, EventoAuditoria, Usuario, huella_token
 from app.acceso.dominio.puertos import FabricaUnidadDeTrabajo, Reloj
 
@@ -28,9 +29,9 @@ class Autenticar:
             ahora = self._reloj()
             sesion = uow.sesiones.vigente(huella_token(token), ahora)
             usuario = uow.usuarios.por_id(sesion.usuario_id, bloquear=False) if sesion else None
-            if sesion is None or usuario is None or usuario.bloqueada:
+            if sesion is None or usuario is None or usuario.bloqueada or usuario.eliminada:
                 raise NoAutenticado()
-            pasos = pasos_pendientes(uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+            pasos = pasos_de(uow, usuario, ahora)
         return SesionActiva(sesion.id, usuario, pasos)
 
 

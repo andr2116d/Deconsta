@@ -2,10 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.acceso.aplicacion.limites import LimitesAcceso, exigir_cupo
+from app.acceso.aplicacion.pasos import pasos_de
 from app.acceso.dominio.errores import CredencialesIncorrectas, CuentaBloqueada, ErrorAcceso
-from app.acceso.dominio.incorporacion import PasoPendiente, pasos_pendientes
+from app.acceso.dominio.incorporacion import PasoPendiente
 from app.acceso.dominio.modelos import (
     Accion,
+    CausaBloqueo,
     EventoAuditoria,
     Usuario,
     normalizar_nombre_usuario,
@@ -59,12 +61,15 @@ class IniciarSesion:
         with self._unidad() as uow:
             ahora = self._reloj()
             usuario = uow.usuarios.por_nombre_usuario(nombre, bloquear=True)
-            if usuario is None:
+            if usuario is None or usuario.eliminada:
+                # Una cuenta eliminada responde igual que una inexistente.
                 self._contrasenas.simular_verificacion(contrasena)
                 # No se guarda el usuario escrito: podría ser una contraseña tecleada por error.
                 uow.auditoria.registrar(
                     EventoAuditoria(
-                        Accion.INGRESO_FALLIDO, detalle={"causa": "usuario_desconocido"}
+                        Accion.INGRESO_FALLIDO,
+                        cuenta_id=usuario.id if usuario else None,
+                        detalle={"causa": "cuenta_eliminada" if usuario else "usuario_desconocido"},
                     )
                 )
                 fallo = CredencialesIncorrectas()
@@ -76,7 +81,7 @@ class IniciarSesion:
                         detalle={"causa": "cuenta_bloqueada"},
                     )
                 )
-                fallo = CuentaBloqueada()
+                fallo = CuentaBloqueada(por_gerente=usuario.causa_bloqueo is CausaBloqueo.GERENTE)
             elif not self._contrasenas.verificar(usuario.contrasena_hash, contrasena):
                 se_bloqueo = usuario.registrar_intento_fallido(ahora)
                 uow.usuarios.guardar(usuario)
@@ -114,7 +119,7 @@ class IniciarSesion:
                         Accion.INGRESO_EXITOSO, actor_id=usuario.id, cuenta_id=usuario.id
                     )
                 )
-                pasos = pasos_pendientes(uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+                pasos = pasos_de(uow, usuario, ahora)
                 resultado = SesionIniciada(token, sesion.expira_en, usuario, primer_ingreso, pasos)
         # El error se lanza después de confirmar: el contador y la auditoría deben quedar guardados.
         if fallo is not None:

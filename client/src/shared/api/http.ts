@@ -9,6 +9,8 @@ export interface CuerpoError {
   fields?: Record<string, string>
   retry_after?: number
   reference?: string
+  /** Datos propios de algunos errores (por ejemplo, deleted_account). */
+  [clave: string]: unknown
 }
 
 export class ErrorApi extends Error {
@@ -17,6 +19,7 @@ export class ErrorApi extends Error {
   readonly campos: Record<string, string>
   readonly reintentarEn: number | null
   readonly referencia: string | null
+  readonly cuerpo: CuerpoError
 
   constructor(estado: number, cuerpo: CuerpoError) {
     super(cuerpo.detail)
@@ -26,6 +29,7 @@ export class ErrorApi extends Error {
     this.campos = cuerpo.fields ?? {}
     this.reintentarEn = cuerpo.retry_after ?? null
     this.referencia = cuerpo.reference ?? null
+    this.cuerpo = cuerpo
   }
 }
 

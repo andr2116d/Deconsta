@@ -38,6 +38,12 @@ describe('secciones del espacio', () => {
     ])
   })
 
+  it('registrar asistente es una pantalla interna de Mi equipo, sin pestaña propia', () => {
+    const pestanas = seccionesDe('gerente', 'pestana').map((s) => s.nombre)
+    expect(pestanas).not.toContain('registrar-asistente')
+    expect(SECCIONES.find((s) => s.nombre === 'registrar-asistente')?.padre).toBe('equipo')
+  })
+
   it('no repite nombres ni rutas', () => {
     expect(new Set(SECCIONES.map((s) => s.nombre)).size).toBe(SECCIONES.length)
     expect(new Set(SECCIONES.map((s) => s.ruta)).size).toBe(SECCIONES.length)

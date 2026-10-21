@@ -4,8 +4,8 @@ import type { RouteRecordRaw } from 'vue-router'
 import type { Rol } from '@/features/acceso/types'
 import type { NombreIcono } from '@/shared/components/iconos'
 
-/** Dónde aparece la sección dentro del espacio. */
-export type Ubicacion = 'pestana' | 'accion' | 'avisos' | 'cuenta'
+/** Dónde aparece la sección dentro del espacio. «interna» no se lista: se llega desde otra. */
+export type Ubicacion = 'pestana' | 'accion' | 'avisos' | 'cuenta' | 'interna'
 
 type PorRol<T> = T | Record<Rol, T>
 
@@ -23,6 +23,8 @@ export interface Seccion {
   vista?: () => Promise<Component>
   /** Pestaña dentro de «Mi cuenta», con su nombre corto. */
   pestanaCuenta?: string
+  /** Sección de la que depende: su pestaña se marca como activa. */
+  padre?: string
 }
 
 const RUTA_CUENTA = 'cuenta'
@@ -106,10 +108,23 @@ export const SECCIONES: readonly Seccion[] = [
     nombre: 'equipo',
     ruta: 'equipo',
     etiqueta: 'Mi equipo',
-    descripcion: 'Las cuentas de tus asistentes: crearlas, desbloquearlas y ver sus encargos.',
+    descripcion:
+      'Las cuentas de tus asistentes: crearlas, bloquearlas, eliminarlas y recuperarlas.',
     icono: 'equipo',
     ubicacion: 'pestana',
     roles: ['gerente'],
+    vista: () => import('@/features/equipo/views/EquipoView.vue'),
+  },
+  {
+    nombre: 'registrar-asistente',
+    ruta: 'equipo/nueva',
+    etiqueta: 'Registrar asistente',
+    descripcion: 'Los datos de una asistente nueva y cómo entrará a Deconsta.',
+    icono: 'mas',
+    ubicacion: 'interna',
+    roles: ['gerente'],
+    vista: () => import('@/features/equipo/views/RegistrarAsistenteView.vue'),
+    padre: 'equipo',
   },
   {
     nombre: 'registrar-deuda',

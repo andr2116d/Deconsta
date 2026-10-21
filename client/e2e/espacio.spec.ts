@@ -20,7 +20,7 @@ async function entrarAlEspacio(page: Page) {
   return gerente
 }
 
-test('gerencia recorre sus pestañas y cada sección dice que está en desarrollo', async ({
+test('gerencia recorre sus pestañas y las secciones anuncian que llegan pronto', async ({
   page,
 }) => {
   await entrarAlEspacio(page)
@@ -38,7 +38,7 @@ test('gerencia recorre sus pestañas y cada sección dice que está en desarroll
   await expect(page).toHaveURL(/\/por-verificar$/)
   await expect(page).toHaveTitle('Por verificar · Deconsta')
   await expect(page.getByRole('heading', { level: 1, name: 'Por verificar' })).toBeFocused()
-  await expect(page.getByText('Esta funcionalidad está en desarrollo.')).toBeVisible()
+  await expect(page.getByText('Estaremos disponibles pronto, con todo y mejoras.')).toBeVisible()
 
   await page.getByRole('link', { name: 'Registrar deuda' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Registrar deuda' })).toBeVisible()

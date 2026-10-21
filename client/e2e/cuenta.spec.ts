@@ -75,7 +75,7 @@ test('si falla el guardado, una ventana explica qué pasó y permite reintentar'
     }),
   )
 
-  await page.getByLabel('Teléfono').fill('912345678')
+  await page.getByLabel('Celular').fill('912345678')
   await page.getByRole('button', { name: 'Guardar mis datos' }).click()
 
   const ventana = page.getByRole('dialog', { name: 'No pudimos guardar tus datos' })
@@ -93,7 +93,7 @@ test('cambia el usuario con su contraseña y descuenta el cupo del mes', async (
 
   // La asistente no tiene nombre en recibos.
   await page.getByRole('link', { name: 'Mis datos' }).click()
-  await expect(page.getByLabel('Teléfono')).toBeVisible()
+  await expect(page.getByLabel('Celular')).toBeVisible()
   await expect(page.getByLabel('Nombre como figura en tus recibos')).toHaveCount(0)
   await page.getByRole('link', { name: 'Usuario y contraseña' }).click()
 
