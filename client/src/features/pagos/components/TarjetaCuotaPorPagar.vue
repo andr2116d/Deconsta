@@ -45,6 +45,9 @@ const cuando = computed(() => cuandoVence(props.cuota.vence_el, props.hoy))
         <p class="mt-0.5 text-[11px] text-secundario">
           Se paga en: {{ nombresLugares(cuota.lugares_pago) }}
         </p>
+        <p v-if="cuota.devuelto_por" class="mt-1.5 text-[12px] text-error">
+          Tu gerente devolvió el pago: {{ cuota.devuelto_por }}
+        </p>
         <span
           class="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold"
           :class="vencida ? 'bg-error-fondo text-error' : 'bg-fondo text-secundario'"

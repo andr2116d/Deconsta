@@ -36,6 +36,8 @@ const ICONOS: Record<Notificacion['tipo'], NombreIcono> = {
   DEUDA_ANULADA: 'cerrar',
   REGISTRO_DESBLOQUEADO: 'check',
   REGISTRO_PAGOS_DESBLOQUEADO: 'check',
+  PAGO_CONFIRMADO: 'check',
+  PAGO_DEVUELTO: 'cerrar',
 }
 
 /** El siguiente paso de cada aviso, según el rol. */
@@ -55,6 +57,12 @@ function destino(n: Notificacion): { etiqueta: string; ruta: RouteLocationRaw } 
   }
   if (n.tipo === 'REGISTRO_DESBLOQUEADO') {
     return { etiqueta: 'Registrar una deuda', ruta: { name: 'registrar-deuda' } }
+  }
+  if (n.tipo === 'PAGO_DEVUELTO' && n.deuda_id) {
+    return {
+      etiqueta: 'Subir otro comprobante',
+      ruta: { name: 'registrar-pago', query: { deuda: n.deuda_id } },
+    }
   }
   if (n.tipo === 'REGISTRO_PAGOS_DESBLOQUEADO') {
     return { etiqueta: 'Ver lo que falta pagar', ruta: { name: 'pagos-por-completar' } }

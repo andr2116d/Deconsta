@@ -75,12 +75,16 @@ function sesionTerminada() {
 async function cargar() {
   carga.value = 'cargando'
   const deudaId = String(route.query.deuda ?? '')
-  const numero = Number(route.query.cuota ?? 1)
+  // Sin cuota (desde un aviso), la próxima que falta pagar de esa deuda.
+  const numero = route.query.cuota ? Number(route.query.cuota) : null
   try {
     const porPagar = await listarPorPagar()
     hoy.value = porPagar.hoy
     pausado.value = porPagar.registro_bloqueado
-    cuota.value = porPagar.cuotas.find((c) => c.deuda_id === deudaId && c.cuota === numero) ?? null
+    cuota.value =
+      porPagar.cuotas.find(
+        (c) => c.deuda_id === deudaId && (numero === null || c.cuota === numero),
+      ) ?? null
     carga.value = cuota.value ? 'listo' : 'no_disponible'
   } catch (error) {
     if (error instanceof ErrorApi && error.codigo === 'NO_AUTENTICADO') return sesionTerminada()
@@ -210,6 +214,13 @@ onMounted(cargar)
           </p>
         </article>
 
+        <BaseAviso
+          v-if="cuota.devuelto_por && !bloqueado"
+          tono="aviso"
+          titulo="Tu gerente devolvió el pago anterior"
+        >
+          {{ cuota.devuelto_por }} Sube el comprobante correcto: el anterior ya no se puede usar.
+        </BaseAviso>
         <BaseAviso v-if="bloqueado" tono="error" titulo="Tu registro de pagos está en pausa">
           Varios comprobantes no correspondían a sus cuotas. Tu gerente ya recibió un aviso y puede
           permitirte registrar pagos otra vez.
