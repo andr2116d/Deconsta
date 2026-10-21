@@ -15,11 +15,13 @@ from app.pagos.dominio.modelos import (
 )
 from app.pagos.dominio.reglas import (
     CuotaEsperada,
+    comparar_mora,
     cuenta_para_bloqueo,
     estado_tras_analisis,
     evaluar,
+    evaluar_prueba_mora,
 )
-from tests.dobles import TEXTO_VOUCHER, VOUCHER
+from tests.dobles import TEXTO_PRUEBA_MORA, TEXTO_VOUCHER, VOUCHER
 
 HOY = date(2026, 10, 21)
 LECTURA = Lectura(TEXTO_VOUCHER, 0.97, 1)
@@ -142,3 +144,44 @@ def test_la_confianza_baja_con_cada_aviso_y_nunca_llega_a_cien() -> None:
     codigo = next(c for c in sin_codigo if c.codigo == "codigo_pago")
     assert codigo.resultado is ResultadoComprobacion.SIN_DATO
     assert confianza(sin_codigo) < limpio
+
+
+PRUEBA_MORA = replace(
+    VOUCHER, lugar=None, importe=Decimal("196.80"), total=Decimal("196.80"), mora=Decimal("14.40")
+)
+LECTURA_MORA = Lectura(TEXTO_PRUEBA_MORA, 0.97, 1)
+
+
+def test_la_prueba_de_una_mora_muestra_mas_que_la_cuota_del_mismo_codigo() -> None:
+    vencida = replace(ESPERADA, vencida=True)
+    assert evaluar_prueba_mora(PRUEBA_MORA, LECTURA_MORA, vencida, HOY) == []
+    sin_mora = evaluar_prueba_mora(
+        replace(PRUEBA_MORA, importe=Decimal("182.40"), total=Decimal("182.40")),
+        Lectura(TEXTO_PRUEBA_MORA.replace("196.80", "182.40"), 0.97, 1),
+        vencida,
+        HOY,
+    )
+    assert [s.codigo for s in sin_mora] == ["SIN_MORA"]
+    assert cuenta_para_bloqueo(sin_mora) is True
+    otra = Lectura(TEXTO_PRUEBA_MORA.replace("54871236", "99990000"), 0.97, 1)
+    ajena = evaluar_prueba_mora(replace(PRUEBA_MORA, codigo_pago="99990000"), otra, vencida, HOY)
+    assert [s.codigo for s in ajena] == ["CODIGO_DISTINTO"]
+
+
+def test_la_mora_declarada_se_compara_con_la_de_la_prueba() -> None:
+    assert comparar_mora(PRUEBA_MORA, Decimal("182.40"), Decimal("14.40")) is None
+    distinta = comparar_mora(PRUEBA_MORA, Decimal("182.40"), Decimal("30.00"))
+    assert distinta is not None and distinta.codigo == "MORA_NO_COINCIDE"
+    # Sin la mora aparte, vale lo que excede a la cuota.
+    sin_desglose = replace(PRUEBA_MORA, mora=None)
+    assert comparar_mora(sin_desglose, Decimal("182.40"), Decimal("14.40")) is None
+
+
+def test_con_la_mora_aprobada_vale_la_cuota_con_o_sin_ella() -> None:
+    aprobada = replace(ESPERADA, vencida=True, mora=Decimal("14.40"))
+    con_mora = Lectura(TEXTO_VOUCHER.replace("182.40", "196.80"), 0.97, 1)
+    assert revisar(con_mora, aprobada, importe=Decimal("196.80"))[0] is EstadoComprobante.LISTO
+    assert revisar(LECTURA, aprobada)[0] is EstadoComprobante.LISTO
+    de_mas = Lectura(TEXTO_VOUCHER.replace("182.40", "210.00"), 0.97, 1)
+    estado, codigos, cuenta = revisar(de_mas, aprobada, importe=Decimal("210.00"))
+    assert (estado, codigos, cuenta) == (EstadoComprobante.RECHAZADO, {"MONTO_MAYOR"}, True)

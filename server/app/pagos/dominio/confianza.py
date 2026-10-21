@@ -106,6 +106,19 @@ CRITERIOS = (
     ),
 )
 
+# La prueba de una mora: que muestre la mora declarada, del mismo código y sin alteraciones.
+CRITERIOS_MORA = (
+    Criterio(
+        "mora",
+        "Mora",
+        3,
+        "La mora declarada coincide con la de la prueba.",
+        avisos=frozenset({"MORA_NO_COINCIDE", "IMPORTE_NO_CONFIRMADO"}),
+    ),
+    *(c for c in CRITERIOS if c.codigo in {"codigo_pago", "autenticidad", "archivo", "empresa"}),
+)
+PESOS = {c.codigo: c.peso for c in (*CRITERIOS, *CRITERIOS_MORA)}
+
 SIN_DATO = {
     "codigo_pago": "Ni el comprobante ni la deuda permiten comparar el código de pago.",
     "empresa": "No se pudo comparar la empresa: falta en el comprobante o en la deuda.",
@@ -139,11 +152,13 @@ def _resultado(
 
 
 def comprobaciones(
-    comprobantes: Sequence[tuple[DatosComprobante, Sequence[Senal]]], esperada: CuotaEsperada
+    comprobantes: Sequence[tuple[DatosComprobante, Sequence[Senal]]],
+    esperada: CuotaEsperada,
+    criterios: Sequence[Criterio] = CRITERIOS,
 ) -> tuple[Comprobacion, ...]:
     """Una comprobación por criterio: con varios comprobantes, vale el peor resultado."""
     resultado = []
-    for criterio in CRITERIOS:
+    for criterio in criterios:
         peor = (ResultadoComprobacion.BIEN, criterio.bien)
         for datos, senales in comprobantes:
             actual = _resultado(criterio, senales, datos, esperada)
@@ -154,9 +169,8 @@ def comprobaciones(
 
 
 def confianza(lista: Sequence[Comprobacion]) -> int:
-    pesos = {c.codigo: c.peso for c in CRITERIOS}
-    total = sum(pesos[c.codigo] for c in lista)
+    total = sum(PESOS[c.codigo] for c in lista)
     if not total:
         return 0
-    obtenido = sum(pesos[c.codigo] * VALORES[c.resultado] for c in lista)
+    obtenido = sum(PESOS[c.codigo] * VALORES[c.resultado] for c in lista)
     return round(CONFIANZA_MAXIMA * obtenido / total)

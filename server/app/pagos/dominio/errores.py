@@ -41,6 +41,14 @@ class CuotaNoPagable(ErrorPagos):
         "CUOTA_YA_PAGADA": (
             "Esta cuota ya tiene un pago registrado. Si falta otra cuota, elige esa."
         ),
+        "MORA_POR_APROBAR": (
+            "La mora de esta cuota espera la aprobación del gerente: no se paga hasta que la "
+            "apruebe o la rechace."
+        ),
+        "CUOTA_NO_VENCIDA": "Esta cuota aún no vence: no puede tener mora.",
+        "MORA_YA_DECLARADA": (
+            "Esta cuota ya tiene una mora declarada. Espera la decisión del gerente."
+        ),
     }
 
     def __init__(self, codigo: str) -> None:
@@ -71,6 +79,13 @@ class ComprobanteNoUsable(ErrorPagos):
         "COMPROBANTE_DE_OTRA_CUOTA": (
             "Ese comprobante se subió para otra cuota. Súbelo otra vez desde esta cuota."
         ),
+        "COMPROBANTE_DE_MORA": (
+            "Ese archivo se subió como prueba de la mora. Para el pago, súbelo como voucher."
+        ),
+        "COMPROBANTE_DE_PAGO": (
+            "Ese archivo se subió como voucher del pago. Para la mora, súbelo como prueba."
+        ),
+        "PRUEBA_YA_USADA": "Esa prueba ya respalda otra mora. Sube la de esta cuota.",
     }
 
     def __init__(self, codigo: str) -> None:
@@ -112,6 +127,11 @@ class RegistroPagosBloqueado(ErrorPagos):
 class PagoNoEncontrado(ErrorPagos):
     codigo = "PAGO_NO_ENCONTRADO"
     mensaje = "No encontramos ese pago en tu espacio."
+
+
+class MoraNoEncontrada(ErrorPagos):
+    codigo = "MORA_NO_ENCONTRADA"
+    mensaje = "No encontramos esa mora en tu espacio."
 
 
 class PagoYaDecidido(ErrorPagos):

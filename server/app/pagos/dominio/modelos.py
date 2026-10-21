@@ -6,8 +6,11 @@ corresponde, no respalda el pago. Un pago reúne uno o varios comprobantes de la
 agente puede cobrarla por partes el mismo día.
 
 El pago de una asistente queda por verificar hasta que el gerente lo confirme; el del gerente queda
-confirmado. Lo que se comprobó se resume en una confianza de 0 a 95: nunca 100, porque una captura
-no se confirma sin mirar la cuenta que recibió el dinero.
+confirmado. La mora de una cuota vencida se declara con una prueba, que se sube y se analiza como un
+comprobante; mientras el gerente no la aprueba o la rechaza, la cuota no se paga.
+
+Lo que se comprobó se resume en una confianza de 0 a 95: nunca 100, porque una captura no se
+confirma sin mirar la cuenta que recibió el dinero.
 """
 
 from dataclasses import dataclass
@@ -32,6 +35,13 @@ class EstadoComprobante(StrEnum):
     REPETIDO = "repetido"
     # El análisis no pudo completarse por un problema técnico.
     FALLIDO = "fallido"
+
+
+class Proposito(StrEnum):
+    """Para qué se subió el archivo: el voucher de un pago o la prueba de una mora."""
+
+    PAGO = "pago"
+    MORA = "mora"
 
 
 class Moneda(StrEnum):
@@ -60,6 +70,8 @@ class DatosComprobante:
     importe: Decimal | None = None
     comision: Decimal | None = None
     total: Decimal | None = None
+    # En la prueba de una mora: la mora, si el documento la muestra aparte.
+    mora: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +103,7 @@ class Comprobante:
     analisis: AnalisisComprobante | None = None
     analizado_en: datetime | None = None
     pago_id: UUID | None = None
+    proposito: Proposito = Proposito.PAGO
 
     @property
     def datos(self) -> DatosComprobante | None:
@@ -130,6 +143,8 @@ class Pago:
     comprobaciones: tuple[Comprobacion, ...]
     registrado_en: datetime
     comprobantes: tuple[UUID, ...] = ()
+    # Lo pagado por una mora aprobada, dentro del importe.
+    mora: Decimal = Decimal("0")
     decidido_por: UUID | None = None
     decidido_en: datetime | None = None
     motivo_decision: str | None = None
@@ -152,3 +167,48 @@ class Pago:
     def devolver(self, por: UUID, ahora: datetime, motivo: str) -> None:
         """La cuota vuelve a estar por pagar; los comprobantes no respaldan otro pago."""
         self._decidir(EstadoPago.DEVUELTO, por, ahora, motivo)
+
+
+class EstadoMora(StrEnum):
+    POR_APROBAR = "por_aprobar"
+    APROBADA = "aprobada"
+    RECHAZADA = "rechazada"
+
+
+@dataclass
+class Mora:
+    id: UUID
+    gerente_id: UUID
+    deuda_id: UUID
+    cuota: int
+    declarada_por: UUID
+    importe: Decimal
+    prueba_id: UUID
+    nota: str | None
+    estado: EstadoMora
+    confianza: int
+    comprobaciones: tuple[Comprobacion, ...]
+    declarada_en: datetime
+    decidida_por: UUID | None = None
+    decidida_en: datetime | None = None
+    motivo_decision: str | None = None
+
+    def _decidir(self, estado: EstadoMora, por: UUID, ahora: datetime, motivo: str | None) -> None:
+        if self.estado is not EstadoMora.POR_APROBAR:
+            raise PagoYaDecidido(
+                "Esta mora ya fue aprobada."
+                if self.estado is EstadoMora.APROBADA
+                else "Esta mora ya fue rechazada."
+            )
+        self.estado = estado
+        self.decidida_por = por
+        self.decidida_en = ahora
+        self.motivo_decision = motivo
+
+    def aprobar(self, por: UUID, ahora: datetime) -> None:
+        """La cuota se puede pagar con la mora."""
+        self._decidir(EstadoMora.APROBADA, por, ahora, None)
+
+    def rechazar(self, por: UUID, ahora: datetime, motivo: str) -> None:
+        """La cuota se paga sin la mora; quien la declaró puede volver a declararla."""
+        self._decidir(EstadoMora.RECHAZADA, por, ahora, motivo)
