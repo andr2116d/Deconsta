@@ -3,13 +3,14 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import type { Rol } from '@/features/acceso/types'
-import { pestanasCuenta } from '@/features/espacio/secciones'
 
-// Pestañas de «Mi cuenta». Cada una es una ruta: se pueden compartir y el navegador vuelve atrás
-// entre ellas. Cambiar de pestaña no recarga los datos de la cuenta.
-const props = defineProps<{ rol: Rol }>()
+import { pestanasDe, type Grupo } from '../secciones'
 
-const pestanas = computed(() => pestanasCuenta().filter((s) => s.roles.includes(props.rol)))
+// Pestañas de una página («Mi cuenta», «Límites y categorías»). Cada una es una ruta: se pueden
+// compartir y el navegador vuelve atrás entre ellas. Cambiar de pestaña no rehace la página.
+const props = defineProps<{ grupo: Grupo; rol: Rol; etiqueta: string }>()
+
+const pestanas = computed(() => pestanasDe(props.grupo).filter((s) => s.roles.includes(props.rol)))
 
 // En pantallas angostas las pestañas se desplazan de lado: la activa siempre queda a la vista.
 const route = useRoute()
@@ -37,7 +38,7 @@ watch(
 </script>
 
 <template>
-  <nav aria-label="Secciones de Mi cuenta" class="-mx-4 mb-6 sm:mx-0 sm:mb-8">
+  <nav :aria-label="etiqueta" class="-mx-4 mb-6 sm:mx-0 sm:mb-8">
     <ul
       ref="lista"
       class="flex gap-6 overflow-x-auto overscroll-x-contain border-b border-borde px-4 [scrollbar-width:none] sm:gap-7 sm:px-0 [&::-webkit-scrollbar]:hidden"
@@ -59,7 +60,7 @@ watch(
             "
             @click="navigate"
           >
-            {{ pestana.pestanaCuenta }}
+            {{ pestana.pestana?.etiqueta }}
             <span
               aria-hidden="true"
               class="absolute inset-x-0 -bottom-px h-[2px] origin-bottom rounded-t-[2px] bg-acento transition-transform duration-200 ease-out"

@@ -7,8 +7,9 @@ import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 
+import PestanasSeccion from '@/features/espacio/components/PestanasSeccion.vue'
+
 import PaseCuenta from '../components/PaseCuenta.vue'
-import PestanasCuenta from '../components/PestanasCuenta.vue'
 import { useCuentaStore } from '../stores/cuenta'
 
 // Marco de «Mi cuenta»: el encabezado, las pestañas y la tarjeta lateral se quedan; solo cambia
@@ -46,7 +47,7 @@ onMounted(cargar)
       </p>
     </header>
 
-    <PestanasCuenta :rol="sesion.usuario.rol" />
+    <PestanasSeccion grupo="cuenta" :rol="sesion.usuario.rol" etiqueta="Secciones de Mi cuenta" />
 
     <div
       class="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-8 xl:grid-cols-[290px_minmax(0,760px)] xl:gap-10"

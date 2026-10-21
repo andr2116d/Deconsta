@@ -9,6 +9,9 @@ export type Ubicacion = 'pestana' | 'accion' | 'avisos' | 'cuenta' | 'interna'
 
 type PorRol<T> = T | Record<Rol, T>
 
+/** Páginas con pestañas: cada pestaña es una sección con su propia ruta dentro de la página. */
+export type Grupo = 'cuenta' | 'configuracion'
+
 export interface Seccion {
   /** Nombre de la ruta. */
   nombre: string
@@ -21,13 +24,21 @@ export interface Seccion {
   roles: readonly Rol[]
   /** Pantalla ya construida. Sin ella, la sección muestra que está en desarrollo. */
   vista?: () => Promise<Component>
-  /** Pestaña dentro de «Mi cuenta», con su nombre corto. */
-  pestanaCuenta?: string
+  /** Pestaña dentro de una página con pestañas, con su nombre corto. */
+  pestana?: { grupo: Grupo; etiqueta: string }
   /** Sección de la que depende: su pestaña se marca como activa. */
   padre?: string
 }
 
-const RUTA_CUENTA = 'cuenta'
+/** Ruta y marco (encabezado y pestañas) de cada página con pestañas. */
+const GRUPOS: Record<Grupo, { ruta: string; marco: () => Promise<Component> }> = {
+  cuenta: { ruta: 'cuenta', marco: () => import('@/features/cuenta/layouts/CuentaLayout.vue') },
+  configuracion: {
+    ruta: 'configuracion',
+    marco: () => import('@/features/espacio/layouts/ConfiguracionLayout.vue'),
+  },
+}
+const RUTA_CUENTA = GRUPOS.cuenta.ruta
 
 const AMBOS: readonly Rol[] = ['gerente', 'asistente']
 
@@ -155,7 +166,7 @@ export const SECCIONES: readonly Seccion[] = [
     ubicacion: 'cuenta',
     roles: AMBOS,
     vista: () => import('@/features/cuenta/views/DatosPersonalesView.vue'),
-    pestanaCuenta: 'Mis datos',
+    pestana: { grupo: 'cuenta', etiqueta: 'Mis datos' },
   },
   {
     nombre: 'acceso-cuenta',
@@ -166,7 +177,7 @@ export const SECCIONES: readonly Seccion[] = [
     ubicacion: 'cuenta',
     roles: AMBOS,
     vista: () => import('@/features/cuenta/views/AccesoCuentaView.vue'),
-    pestanaCuenta: 'Usuario y contraseña',
+    pestana: { grupo: 'cuenta', etiqueta: 'Usuario y contraseña' },
   },
   {
     nombre: 'permisos',
@@ -177,7 +188,7 @@ export const SECCIONES: readonly Seccion[] = [
     ubicacion: 'cuenta',
     roles: AMBOS,
     vista: () => import('@/features/cuenta/views/PermisosView.vue'),
-    pestanaCuenta: 'Mi rol y permisos',
+    pestana: { grupo: 'cuenta', etiqueta: 'Mi rol y permisos' },
   },
   {
     nombre: 'privacidad',
@@ -188,18 +199,30 @@ export const SECCIONES: readonly Seccion[] = [
     ubicacion: 'cuenta',
     roles: AMBOS,
     vista: () => import('@/features/cuenta/views/PrivacidadView.vue'),
-    pestanaCuenta: 'Privacidad',
+    pestana: { grupo: 'cuenta', etiqueta: 'Privacidad' },
   },
   {
     nombre: 'configuracion',
-    ruta: 'configuracion',
+    ruta: GRUPOS.configuracion.ruta,
     etiqueta: 'Límites y categorías',
     descripcion:
-      'El importe a partir del cual una deuda necesita tu autorización y las categorías de tu espacio.',
+      'Qué necesita tu autorización (el límite en soles y los titulares autorizados) y las categorías de tu espacio.',
     icono: 'configuracion',
     ubicacion: 'cuenta',
     roles: ['gerente'],
+    vista: () => import('@/features/reglas/views/ReglasView.vue'),
+    pestana: { grupo: 'configuracion', etiqueta: 'Reglas de autorización' },
+  },
+  {
+    nombre: 'categorias',
+    ruta: `${GRUPOS.configuracion.ruta}/categorias`,
+    etiqueta: 'Categorías',
+    descripcion: 'Las categorías que ordenan tus deudas para filtrarlas, resumirlas y exportarlas.',
+    icono: 'etiqueta',
+    ubicacion: 'interna',
+    roles: ['gerente'],
     vista: () => import('@/features/categorias/views/CategoriasView.vue'),
+    pestana: { grupo: 'configuracion', etiqueta: 'Categorías' },
   },
 ]
 
@@ -217,7 +240,7 @@ export function seccion(nombre: string): Seccion {
   return encontrada
 }
 
-export const pestanasCuenta = () => SECCIONES.filter((s) => s.pestanaCuenta)
+export const pestanasDe = (grupo: Grupo) => SECCIONES.filter((s) => s.pestana?.grupo === grupo)
 
 function rutaDe(s: Seccion, ruta = s.ruta): RouteRecordRaw {
   return {
@@ -233,20 +256,21 @@ function rutaDe(s: Seccion, ruta = s.ruta): RouteRecordRaw {
 }
 
 /**
- * Rutas hijas del espacio. Las pestañas de «Mi cuenta» cuelgan de una ruta padre con su propio
- * marco, así cambiar de pestaña no rehace la página. Las secciones sin pantalla dicen que están
- * en desarrollo.
+ * Rutas hijas del espacio. Las pestañas de una página («Mi cuenta», «Límites y categorías»)
+ * cuelgan de una ruta padre con su propio marco, así cambiar de pestaña no rehace la página. Las
+ * secciones sin pantalla dicen que están en desarrollo.
  */
 export function rutasDelEspacio(): RouteRecordRaw[] {
-  const prefijo = `${RUTA_CUENTA}/`
-  return [
-    ...SECCIONES.filter((s) => !s.pestanaCuenta).map((s) => rutaDe(s)),
-    {
-      path: RUTA_CUENTA,
-      component: () => import('@/features/cuenta/layouts/CuentaLayout.vue'),
-      children: pestanasCuenta().map((s) =>
+  const paginas = (Object.keys(GRUPOS) as Grupo[]).map((grupo): RouteRecordRaw => {
+    const { ruta, marco } = GRUPOS[grupo]
+    const prefijo = `${ruta}/`
+    return {
+      path: ruta,
+      component: marco,
+      children: pestanasDe(grupo).map((s) =>
         rutaDe(s, s.ruta.startsWith(prefijo) ? s.ruta.slice(prefijo.length) : ''),
       ),
-    },
-  ]
+    }
+  })
+  return [...SECCIONES.filter((s) => !s.pestana).map((s) => rutaDe(s)), ...paginas]
 }
