@@ -175,11 +175,8 @@ onMounted(() => {
           Tu calendario de pagos.
         </h1>
         <p class="mt-2 max-w-[62ch] text-[13px] text-secundario">
-          {{
-            rol === 'gerente'
-              ? 'Cada cuota de tu espacio en el día que vence, hacia atrás y hacia adelante. Elige un día para ver qué vence.'
-              : 'Cada cuota de las deudas que registraste en el día que vence. Elige un día para ver qué vence.'
-          }}
+          Cada cuota del espacio en el día que vence, hacia atrás y hacia adelante. Elige un día
+          para ver qué vence.
         </p>
       </div>
       <RouterLink
