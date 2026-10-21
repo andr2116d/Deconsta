@@ -1,0 +1,36 @@
+#!/bin/bash
+# Primer arranque de la instancia: Docker, el código desde S3 y los servicios de compose.
+set -euxo pipefail
+exec > /var/log/deconsta-arranque.log 2>&1
+
+# Memoria de respaldo para el OCR.
+if [ ! -f /swapfile ]; then
+  fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+fi
+
+dnf install -y docker
+mkdir -p /usr/libexec/docker/cli-plugins
+curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-compose \
+  https://github.com/docker/compose/releases/download/v2.39.4/docker-compose-linux-x86_64
+curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-buildx \
+  https://github.com/docker/buildx/releases/download/v0.29.1/buildx-v0.29.1.linux-amd64
+chmod +x /usr/libexec/docker/cli-plugins/*
+systemctl enable --now docker
+
+mkdir -p /opt/deconsta
+cd /opt/deconsta
+cat > .env <<'ENTORNO'
+${entorno}
+ENTORNO
+chmod 600 .env
+cat > compose.yaml <<'COMPOSE'
+${compose}
+COMPOSE
+
+aws s3 cp --region ${region} s3://${bucket}/codigo.tar.gz /opt/deconsta/codigo.tar.gz
+rm -rf app && mkdir app && tar -xzf codigo.tar.gz -C app
+
+docker compose build
+docker compose up -d
+echo "DECONSTA_LISTO"
