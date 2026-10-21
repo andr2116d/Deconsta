@@ -120,6 +120,12 @@ export function useComprobantes(
     vouchers.splice(indice, 1)
   }
 
+  /** El voucher que se completó a mano: el backend devuelve su comprobante listo. */
+  function completar(clave: number, comprobante: Comprobante) {
+    const voucher = buscar(clave)
+    if (voucher) voucher.comprobante = comprobante
+  }
+
   function reiniciar() {
     // Las claves primero: quitar cambia la lista mientras se recorre.
     for (const clave of vouchers.map((v) => v.clave)) quitar(clave)
@@ -137,7 +143,17 @@ export function useComprobantes(
 
   onBeforeUnmount(reiniciar)
 
-  return { vouchers, listos, trabajando, sumaCentimos, bloqueado, agregar, quitar, reiniciar }
+  return {
+    vouchers,
+    listos,
+    trabajando,
+    sumaCentimos,
+    bloqueado,
+    agregar,
+    quitar,
+    completar,
+    reiniciar,
+  }
 }
 
 export { aCentimos }

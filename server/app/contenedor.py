@@ -79,6 +79,7 @@ from app.notificaciones.infraestructura.avisos_redis import SuscriptorRedis
 from app.notificaciones.infraestructura.persistencia import UnidadNotificacionesSql
 from app.pagos.aplicacion.pagos import (
     AprobarMora,
+    CompletarComprobante,
     ConfirmarPago,
     ConsultarComprobante,
     ConsultarMora,
@@ -204,6 +205,7 @@ class Contenedor:
     listar_por_pagar: ListarPorPagar
     subir_comprobante: SubirComprobante
     consultar_comprobante: ConsultarComprobante
+    completar_comprobante: CompletarComprobante
     leer_comprobante: LeerComprobante
     registrar_pago: RegistrarPago
     listar_pagos: ListarPagos
@@ -387,6 +389,7 @@ class Contenedor:
                 cola=cola_comprobantes,
             ),
             consultar_comprobante=ConsultarComprobante(*pagos),
+            completar_comprobante=CompletarComprobante(*pagos, huellero=componentes.cifrador),
             leer_comprobante=LeerComprobante(*pagos, almacen=componentes.almacen),
             registrar_pago=RegistrarPago(*pagos),
             listar_pagos=ListarPagos(*pagos),

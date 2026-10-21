@@ -40,6 +40,8 @@ from app.pagos.dominio.modelos import (
 )
 from app.reglas.dominio.importes import formatear_soles
 
+DATOS_A_MANO = "DATOS_A_MANO"
+
 # Lo que impide revisar el comprobante: se pide una foto mejor.
 ILEGIBLES = frozenset({"COMPROBANTE_ILEGIBLE", "SIN_IMPORTE", "SIN_FECHA"})
 # Con riesgo alto, pero no es un intento de pasar un comprobante que no corresponde.
@@ -444,6 +446,17 @@ def comparar_mora(datos: DatosComprobante, cuota: Decimal, declarada: Decimal) -
         "MORA_NO_COINCIDE",
         f"La mora declarada ({formatear_soles(declarada)}) no coincide con la de la prueba "
         f"({leida}).",
+        Riesgo.MEDIO,
+    )
+
+
+def senal_datos_a_mano() -> Senal:
+    """La lectura automática falló y quien pagó escribió los datos del voucher."""
+    return _senal(
+        Capa.LECTURA,
+        DATOS_A_MANO,
+        "Los datos los escribió quien subió el voucher porque no se pudieron leer solos. Míralo "
+        "antes de confirmar el pago.",
         Riesgo.MEDIO,
     )
 

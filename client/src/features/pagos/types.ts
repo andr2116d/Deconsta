@@ -185,3 +185,13 @@ export interface NuevoPedido {
   asistente_id: string
   nota: string | null
 }
+
+/** Los datos de un voucher que no se pudo leer solo, como los ve quien pagó. */
+export interface DatosAMano {
+  /** En soles, como texto («182.40»). */
+  importe: string
+  pagado_el: string
+  numero_operacion: string
+  lugar: LugarPago | null
+  comision: string
+}

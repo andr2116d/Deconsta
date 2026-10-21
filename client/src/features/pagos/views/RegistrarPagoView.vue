@@ -53,6 +53,7 @@ const {
   bloqueado: bloqueadoAhora,
   agregar,
   quitar,
+  completar,
 } = useComprobantes(
   () => cuota.value?.deuda_id ?? '',
   () => cuota.value?.cuota ?? 1,
@@ -371,7 +372,10 @@ onMounted(cargar)
             :voucher="voucher"
             :numero="indice + 1"
             :bloqueado="enviando"
+            :importe="cuota.importe"
+            :hoy="hoy"
             @quitar="quitar(voucher.clave)"
+            @completado="(c) => completar(voucher.clave, c)"
             @declarar-mora="declararDesde(voucher)"
           />
         </TransitionGroup>

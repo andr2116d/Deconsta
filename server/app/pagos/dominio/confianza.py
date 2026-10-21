@@ -3,7 +3,8 @@
 Cada comprobación pesa según lo que prueba: el importe, el código de pago y la ausencia de señales
 de alteración pesan más que el titular o el lugar. Bien vale completo; sin dato, la mitad; con
 aviso, nada. El resultado se escala a 95 como máximo: una captura no se confirma del todo sin
-mirar la cuenta que recibió el dinero.
+mirar la cuenta que recibió el dinero. Si quien pagó escribió los datos a mano (porque la lectura
+automática falló), la confianza no pasa de CONFIANZA_A_MANO: el gerente debe mirar el voucher.
 """
 
 from collections.abc import Sequence
@@ -11,9 +12,10 @@ from dataclasses import dataclass
 
 from app.documentos.dominio.modelos import Senal
 from app.pagos.dominio.modelos import Comprobacion, DatosComprobante, ResultadoComprobacion
-from app.pagos.dominio.reglas import CuotaEsperada
+from app.pagos.dominio.reglas import DATOS_A_MANO, CuotaEsperada
 
 CONFIANZA_MAXIMA = 95
+CONFIANZA_A_MANO = 40
 VALORES = {
     ResultadoComprobacion.BIEN: 1.0,
     ResultadoComprobacion.SIN_DATO: 0.5,
@@ -34,6 +36,13 @@ class Criterio:
 
 CRITERIOS = (
     Criterio(
+        "lectura",
+        "Lectura del voucher",
+        3,
+        "Los datos se leyeron del voucher.",
+        avisos=frozenset({DATOS_A_MANO}),
+    ),
+    Criterio(
         "importe",
         "Importe",
         3,
@@ -53,6 +62,8 @@ CRITERIOS = (
         3,
         "La revisión no encontró señales de alteración.",
         avisos=frozenset({"AUTENTICIDAD_DUDOSA"}),
+        # Sin lectura automática, nadie revisó si el voucher fue alterado.
+        sin_dato=frozenset({DATOS_A_MANO}),
     ),
     Criterio(
         "archivo",
@@ -173,4 +184,8 @@ def confianza(lista: Sequence[Comprobacion]) -> int:
     if not total:
         return 0
     obtenido = sum(PESOS[c.codigo] * VALORES[c.resultado] for c in lista)
-    return round(CONFIANZA_MAXIMA * obtenido / total)
+    valor = round(CONFIANZA_MAXIMA * obtenido / total)
+    a_mano = any(
+        c.codigo == "lectura" and c.resultado is ResultadoComprobacion.AVISO for c in lista
+    )
+    return min(valor, CONFIANZA_A_MANO) if a_mano else valor

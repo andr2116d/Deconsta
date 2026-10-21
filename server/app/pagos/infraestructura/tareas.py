@@ -69,4 +69,10 @@ def analizar_comprobante(tarea: Task, comprobante_id: str) -> str | None:
         logger.warning("El comprobante %s no se pudo procesar como archivo válido", comprobante_id)
         MarcarComprobanteFallido(_unidad, ahora_utc).ejecutar(identificador)
         return None
+    except Exception:
+        # Un fallo que no se espera: el comprobante queda «fallido» y quien lo subió puede
+        # escribir sus datos a mano, en vez de esperar para siempre.
+        logger.exception("El análisis del comprobante %s falló de forma inesperada", comprobante_id)
+        MarcarComprobanteFallido(_unidad, ahora_utc).ejecutar(identificador)
+        return None
     return estado.value if estado else None
