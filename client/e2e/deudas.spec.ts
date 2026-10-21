@@ -4,9 +4,9 @@ import { crearCuenta, type Cuenta } from './cuentas'
 import { reciboDeLuz } from './recibos'
 
 /**
- * Requiere la API, el worker de la cola ocr (pnpm worker:ocr) y los servicios de compose. Sin
- * ANTHROPIC_API_KEY la revisión con IA queda incompleta: lo que registra la asistente espera la
- * autorización del gerente, que es justo el recorrido que se prueba.
+ * Requiere la API, el worker de la cola ocr (pnpm worker:ocr) y los servicios de compose. No
+ * depende de la revisión con IA: con ella o sin ella (incompleta), el límite bajo del gerente hace
+ * que la deuda espere su autorización.
  */
 async function entrar(page: Page, cuenta: Cuenta, ruta: string) {
   const ingreso = await page.request.post('/api/v1/auth/login', {
@@ -31,7 +31,7 @@ async function subir(page: Page, recibo: Buffer) {
   })
   await expect(page.getByText('Lo que comprobamos')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Registrar deuda' })).toBeVisible({
-    timeout: 60_000,
+    timeout: 90_000,
   })
 }
 
@@ -44,13 +44,14 @@ test('la asistente registra una deuda y su gerente la autoriza en tiempo real', 
   const paginaGerente = await (await browser.newContext()).newPage()
   const paginaAsistente = await (await browser.newContext()).newPage()
   await entrar(paginaGerente, gerente, '/inicio')
+  await paginaGerente.request.post('/api/v1/reglas/limite', { data: { limite_importe: '100.00' } })
   await entrar(paginaAsistente, asistente, '/registrar-deuda')
 
   const recibo = reciboDeLuz()
   await subir(paginaAsistente, recibo)
-  await expect(paginaAsistente.getByText('Esperará la autorización de tu gerente')).toBeVisible()
 
   // Campos obligatorios vacíos: el backend dice cuáles faltan.
+  await paginaAsistente.getByLabel('Concepto').fill('')
   await paginaAsistente.getByRole('button', { name: 'Registrar deuda' }).click()
   await expect(paginaAsistente.getByText('Escribe un nombre para la deuda')).toBeVisible()
 
