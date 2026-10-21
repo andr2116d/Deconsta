@@ -64,7 +64,8 @@ class Deuda:
     categoria_id: UUID | None
     tipo_documento: TipoDocumento
     cuotas: tuple[Cuota, ...]
-    lugar_pago: LugarPago
+    # Dónde se puede pagar: uno o varios, sin repetir y en el orden de LugarPago.
+    lugares_pago: tuple[LugarPago, ...]
     titular_nombre: str | None
     titular_documento: Documento | None
     codigo_pago: str | None

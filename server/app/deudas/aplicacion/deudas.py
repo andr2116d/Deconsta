@@ -80,7 +80,7 @@ def _recortar(texto: str, largo: int) -> str:
 class NuevaDeuda:
     documento_id: UUID
     concepto: str
-    lugar_pago: str | None
+    lugares_pago: list[str]
     cuotas: list[CuotaEnviada]
     categoria_id: UUID | None = None
     titular_nombre: str | None = None
@@ -171,7 +171,7 @@ class RegistrarDeuda(_OperacionDeudas):
         exigir_cupo(self._limitador, (self._limite, str(usuario.id)))
         datos = DatosDeuda.crear(
             concepto=nueva.concepto,
-            lugar_pago=nueva.lugar_pago,
+            lugares_pago=nueva.lugares_pago,
             cuotas=nueva.cuotas,
             titular_nombre=nueva.titular_nombre,
             titular_tipo_documento=nueva.titular_tipo_documento,
@@ -211,7 +211,7 @@ class RegistrarDeuda(_OperacionDeudas):
                 categoria_id=nueva.categoria_id,
                 tipo_documento=documento.tipo_documento or TipoDocumento.OTRO,
                 cuotas=datos.cuotas,
-                lugar_pago=datos.lugar_pago,
+                lugares_pago=datos.lugares_pago,
                 titular_nombre=datos.titular_nombre,
                 titular_documento=datos.titular_documento,
                 codigo_pago=datos.codigo_pago,

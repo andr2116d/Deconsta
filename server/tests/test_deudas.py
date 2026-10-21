@@ -33,7 +33,7 @@ def registrar(cliente: TestClient, documento_id: str, **cambios: Any) -> httpx.R
     cuerpo = {
         "documento_id": documento_id,
         "concepto": "Luz de la casa",
-        "lugar_pago": "agente",
+        "lugares_pago": ["agente"],
         "cuotas": [{"vence_el": VENCE, "importe": "182.40"}],
         "titular_nombre": "Valentina Ramos Díaz",
         "codigo_pago": "54871236",
@@ -57,15 +57,15 @@ def test_el_formulario_con_campos_obligatorios_vacios_dice_cuales_faltan(
     asistente: TestClient,
 ) -> None:
     documento = subir(asistente, imagen(1))
-    respuesta = registrar(asistente, documento["id"], concepto=" ", lugar_pago=None, cuotas=[])
+    respuesta = registrar(asistente, documento["id"], concepto=" ", lugares_pago=[], cuotas=[])
 
     assert respuesta.status_code == 422
     assert respuesta.json()["code"] == "CAMPOS_OBLIGATORIOS"
     assert set(respuesta.json()["fields"]) == {"concepto"}
     # Con el concepto, el dominio marca los demás.
-    respuesta = registrar(asistente, documento["id"], lugar_pago=None, cuotas=[])
+    respuesta = registrar(asistente, documento["id"], lugares_pago=[], cuotas=[])
     assert respuesta.json()["code"] == "DATOS_INVALIDOS"
-    assert set(respuesta.json()["fields"]) == {"lugar_pago", "cuotas"}
+    assert set(respuesta.json()["fields"]) == {"lugares_pago", "cuotas"}
 
 
 def test_lo_que_registra_la_asistente_se_paga_y_se_notifica_al_gerente(

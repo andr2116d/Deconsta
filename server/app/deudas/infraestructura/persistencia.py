@@ -31,7 +31,7 @@ from app.reglas.infraestructura.persistencia import RepositorioReglasSql
 
 COLUMNAS = """
     id, gerente_id, registrada_por, documento_id, concepto, categoria_id, tipo_documento,
-    lugar_pago, titular_cifrado, titular_tipo_documento, titular_documento_cifrado,
+    lugares_pago, titular_cifrado, titular_tipo_documento, titular_documento_cifrado,
     codigo_pago_cifrado, estado, motivos_autorizacion, revision_pendiente, campos_corregidos,
     decidida_por, decidida_en, motivo_decision, creado_en
 """
@@ -87,7 +87,7 @@ class RepositorioDeudasSql:
                     categoria_id=fila.categoria_id,
                     tipo_documento=TipoDocumento(fila.tipo_documento),
                     cuotas=tuple(cuotas.get(fila.id, [])),
-                    lugar_pago=LugarPago(fila.lugar_pago),
+                    lugares_pago=tuple(LugarPago(lugar) for lugar in fila.lugares_pago),
                     titular_nombre=self._descifrar(fila.titular_cifrado, "titular", fila.id),
                     titular_documento=Documento(
                         TipoDocumentoTitular(fila.titular_tipo_documento), numero
@@ -111,11 +111,13 @@ class RepositorioDeudasSql:
         sentencia = text(
             f"INSERT INTO deuda ({COLUMNAS}, importe, vence_el) VALUES (:id, :gerente_id,"
             " :registrada_por, :documento_id, :concepto, :categoria_id, :tipo_documento,"
-            " :lugar_pago, :titular, :titular_tipo_documento, :titular_documento, :codigo_pago,"
+            " :lugares_pago, :titular, :titular_tipo_documento, :titular_documento, :codigo_pago,"
             " :estado, :motivos, :revision_pendiente, :corregidos, NULL, NULL, NULL, :creado_en,"
             " :importe, :vence_el)"
         ).bindparams(
-            bindparam("motivos", type_=ARRAY(TEXT)), bindparam("corregidos", type_=ARRAY(TEXT))
+            bindparam("lugares_pago", type_=ARRAY(TEXT)),
+            bindparam("motivos", type_=ARRAY(TEXT)),
+            bindparam("corregidos", type_=ARRAY(TEXT)),
         )
         documento = deuda.titular_documento
         try:
@@ -131,7 +133,7 @@ class RepositorioDeudasSql:
                         "concepto": deuda.concepto,
                         "categoria_id": deuda.categoria_id,
                         "tipo_documento": deuda.tipo_documento.value,
-                        "lugar_pago": deuda.lugar_pago.value,
+                        "lugares_pago": [lugar.value for lugar in deuda.lugares_pago],
                         "titular": self._cifrar(deuda.titular_nombre, "titular", deuda.id),
                         "titular_tipo_documento": documento.tipo.value if documento else None,
                         "titular_documento": self._cifrar(

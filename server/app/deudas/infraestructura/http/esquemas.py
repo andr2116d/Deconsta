@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -23,7 +24,10 @@ class DeudaEntrada(Entrada):
     # Los topes son holgados: el dominio da el mensaje preciso de cada regla.
     concepto: str = Field("", max_length=200, validate_default=True)
     categoria_id: UUID | None = None
-    lugar_pago: str | None = Field(None, max_length=30)
+    # Uno o varios: la luz, por ejemplo, se paga en un agente, por Yape o por banca por internet.
+    lugares_pago: list[Annotated[str, Field(max_length=30)]] = Field(
+        default_factory=list, max_length=10
+    )
     cuotas: list[CuotaEntrada] = Field(default_factory=list, max_length=400)
     titular_nombre: str | None = Field(None, max_length=200)
     titular_tipo_documento: str | None = Field(None, max_length=10)
@@ -39,7 +43,7 @@ class DeudaEntrada(Entrada):
         return NuevaDeuda(
             documento_id=self.documento_id,
             concepto=self.concepto,
-            lugar_pago=self.lugar_pago,
+            lugares_pago=self.lugares_pago,
             cuotas=[CuotaEnviada(c.vence_el, c.importe) for c in self.cuotas],
             categoria_id=self.categoria_id,
             titular_nombre=self.titular_nombre,
@@ -73,7 +77,7 @@ class DeudaSalida(BaseModel):
     importe: str
     vence_el: date
     cuotas: list[CuotaSalida]
-    lugar_pago: LugarPago
+    lugares_pago: list[LugarPago]
     titular_nombre: str | None
     titular_tipo_documento: str | None
     # Enmascarado: el gerente lo reconoce por sus últimos dígitos.
@@ -103,7 +107,7 @@ class DeudaSalida(BaseModel):
                 CuotaSalida(numero=c.numero, vence_el=c.vence_el, importe=str(c.importe))
                 for c in deuda.cuotas
             ],
-            lugar_pago=deuda.lugar_pago,
+            lugares_pago=list(deuda.lugares_pago),
             titular_nombre=deuda.titular_nombre,
             titular_tipo_documento=documento.tipo.value if documento else None,
             titular_documento=enmascarar(documento.numero) if documento else None,
@@ -134,7 +138,7 @@ class VencimientoSalida(BaseModel):
     concepto: str
     categoria_id: UUID | None
     tipo_documento: TipoDocumento
-    lugar_pago: LugarPago
+    lugares_pago: list[LugarPago]
     estado: EstadoDeuda
     revision_pendiente: bool
     vence_el: date
@@ -153,7 +157,7 @@ class VencimientoSalida(BaseModel):
             concepto=deuda.concepto,
             categoria_id=deuda.categoria_id,
             tipo_documento=deuda.tipo_documento,
-            lugar_pago=deuda.lugar_pago,
+            lugares_pago=list(deuda.lugares_pago),
             estado=deuda.estado,
             revision_pendiente=deuda.revision_pendiente,
             vence_el=cuota.vence_el,

@@ -42,7 +42,7 @@ LEIDO = DatosLeidos(
 def datos(**cambios: object) -> DatosDeuda:
     base: dict[str, object] = {
         "concepto": "Luz de la casa",
-        "lugar_pago": "agente",
+        "lugares_pago": ["agente"],
         "cuotas": [CuotaEnviada(date(2026, 10, 28), "1820.40")],
         "titular_nombre": "Valentina Ramos Díaz",
         "titular_tipo_documento": None,
@@ -74,8 +74,17 @@ def evaluar(
 
 def test_los_campos_obligatorios_vacios_se_marcan_uno_por_uno() -> None:
     with pytest.raises(DeudaInvalida) as error:
-        datos(concepto="  ", lugar_pago=None, cuotas=[])
-    assert set(error.value.campos) == {"concepto", "lugar_pago", "cuotas"}
+        datos(concepto="  ", lugares_pago=[], cuotas=[])
+    assert set(error.value.campos) == {"concepto", "lugares_pago", "cuotas"}
+
+
+def test_una_deuda_se_paga_en_uno_o_varios_lugares_de_la_lista() -> None:
+    elegidos = datos(lugares_pago=["billetera", "agente", "billetera"]).lugares_pago
+    # Sin repetir y siempre en el mismo orden, elija como los elija.
+    assert elegidos == (LugarPago.AGENTE, LugarPago.BILLETERA)
+    with pytest.raises(DeudaInvalida) as error:
+        datos(lugares_pago=["agente", "criptomonedas"])
+    assert error.value.campos == {"lugares_pago": "Elige lugares de pago de la lista."}
 
 
 def test_el_concepto_admite_los_signos_de_un_nombre_de_deuda() -> None:
@@ -186,7 +195,7 @@ def deuda(estado: EstadoDeuda, revision: bool = False) -> Deuda:
         categoria_id=None,
         tipo_documento=TipoDocumento.RECIBO_SERVICIO,
         cuotas=(Cuota(1, HOY, Decimal("10.00")),),
-        lugar_pago=LugarPago.AGENTE,
+        lugares_pago=(LugarPago.AGENTE,),
         titular_nombre=None,
         titular_documento=None,
         codigo_pago=None,
