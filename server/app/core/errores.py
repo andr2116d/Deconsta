@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 UBICACIONES = {"body", "query", "path", "header", "cookie"}
 OBLIGATORIOS = {"missing", "obligatorio"}
+# Errores propios de los esquemas: su mensaje ya está escrito para la persona usuaria.
+CON_MENSAJE_PROPIO = {"obligatorio", "caracteres_invalidos"}
 
 CODIGOS_HTTP = {
     401: ("NO_AUTENTICADO", "Inicia sesión para continuar."),
@@ -48,7 +50,7 @@ def respuesta_error(
 def _mensaje_validacion(error: Mapping[str, Any]) -> str:
     tipo = error["type"]
     contexto = error.get("ctx") or {}
-    if tipo == "obligatorio":
+    if tipo in CON_MENSAJE_PROPIO:
         return str(error["msg"])
     if tipo == "missing":
         return "Este campo es obligatorio."

@@ -4,12 +4,13 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.acceso.infraestructura.http.esquemas import enmascarar, exigir
+from app.core.esquemas import Entrada
 from app.reglas.aplicacion.reglas import DocumentoPorEvaluar, NuevoTitular, ReglasDelEspacio
 from app.reglas.dominio.evaluacion import Evaluacion, MotivoAutorizacion
 from app.reglas.dominio.titulares import MAXIMO_TITULARES, TipoDocumentoTitular, TitularAutorizado
 
 
-class LimiteEntrada(BaseModel):
+class LimiteEntrada(Entrada):
     # Texto («2900.50»), nunca float: los céntimos se conservan exactos. null quita el límite.
     limite_importe: str | None = Field(..., max_length=20)
 
@@ -19,7 +20,7 @@ class LimiteEntrada(BaseModel):
         return None if valor is None else exigir(valor, "Escribe el límite en soles.")
 
 
-class TitularEntrada(BaseModel):
+class TitularEntrada(Entrada):
     # Los topes son holgados: el dominio da el mensaje preciso de cada regla.
     nombre: str = Field("", max_length=300, validate_default=True)
     tipo_documento: str | None = Field(None, max_length=10)
@@ -42,7 +43,7 @@ class TitularEntrada(BaseModel):
         )
 
 
-class EdicionTitularEntrada(BaseModel):
+class EdicionTitularEntrada(Entrada):
     nombre: str = Field("", max_length=300, validate_default=True)
     relacion: str | None = Field(None, max_length=100)
 
@@ -52,7 +53,7 @@ class EdicionTitularEntrada(BaseModel):
         return exigir(valor, "Escribe el nombre como aparece en sus recibos.")
 
 
-class EvaluacionEntrada(BaseModel):
+class EvaluacionEntrada(Entrada):
     importe: str = Field("", max_length=20, validate_default=True)
     titular_nombre: str | None = Field(None, max_length=300)
     titular_tipo_documento: str | None = Field(None, max_length=10)
