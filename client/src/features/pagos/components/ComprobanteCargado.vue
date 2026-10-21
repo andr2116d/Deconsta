@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 import { formatearFecha, LUGARES_PAGO } from '@/features/deudas/catalogo'
 import type { Riesgo } from '@/features/deudas/types'
@@ -9,13 +9,28 @@ import BaseIcono from '@/shared/components/BaseIcono.vue'
 import type { NombreIcono } from '@/shared/components/iconos'
 
 import type { Voucher } from '../composables/useComprobantes'
+import type { Comprobante } from '../types'
+import DatosAMano from './DatosAMano.vue'
 
 /**
  * Un voucher subido: cómo va su revisión, lo que leímos y, si no sirve, por qué. Lo que muestra
  * orienta; el backend decide con las mismas señales al registrar el pago.
  */
-const props = defineProps<{ voucher: Voucher; numero: number; bloqueado?: boolean }>()
-const emit = defineEmits<{ quitar: []; 'declarar-mora': [] }>()
+const props = defineProps<{
+  voucher: Voucher
+  numero: number
+  bloqueado?: boolean
+  /** Para escribir a mano los datos de un voucher que no se pudo leer: la cuota y el día. */
+  importe?: string
+  hoy?: string
+}>()
+const emit = defineEmits<{
+  quitar: []
+  'declarar-mora': []
+  completado: [comprobante: Comprobante]
+}>()
+
+const escribiendo = ref(false)
 
 type Tono = 'proceso' | 'bien' | 'aviso' | 'mal'
 
@@ -66,10 +81,21 @@ const resumen = computed(() => {
 })
 const detalle = computed(() => {
   if (props.voucher.etapa === 'error') return props.voucher.error?.message ?? null
-  if (clave.value === 'fallido')
-    return 'No pudimos terminar de revisarlo. Quítalo y súbelo otra vez en unos minutos.'
+  if (clave.value === 'fallido' && !escribiendo.value)
+    return 'No pudimos leerlo solo. Escribe sus datos o quítalo y súbelo otra vez.'
   return null
 })
+// Solo un voucher de pago que falló al leerse se completa a mano.
+const completable = computed(
+  () =>
+    clave.value === 'fallido' &&
+    comprobante.value?.proposito === 'pago' &&
+    props.importe !== undefined &&
+    props.hoy !== undefined,
+)
+const aMano = computed(
+  () => comprobante.value?.senales.some((s) => s.codigo === 'DATOS_A_MANO') ?? false,
+)
 // Pagó por más en una cuota vencida: el voucher puede servir de prueba de la mora.
 const posibleMora = computed(
   () => comprobante.value?.senales.some((s) => s.codigo === 'POSIBLE_MORA') ?? false,
@@ -77,7 +103,9 @@ const posibleMora = computed(
 // Lo que conviene que vea: primero lo que impide usarlo, después los avisos.
 const senales = computed(() => {
   const orden: Record<Riesgo, number> = { alto: 0, medio: 1, bajo: 2 }
-  return [...(comprobante.value?.senales ?? [])].sort((a, b) => orden[a.riesgo] - orden[b.riesgo])
+  return (comprobante.value?.senales ?? [])
+    .filter((s) => s.codigo !== 'DATOS_A_MANO')
+    .sort((a, b) => orden[a.riesgo] - orden[b.riesgo])
 })
 </script>
 
@@ -127,6 +155,9 @@ const senales = computed(() => {
         <p class="mt-0.5 truncate text-[11px] text-secundario">
           {{ resumen || voucher.archivo.name }}
         </p>
+        <p v-if="aMano" class="text-[11px] font-bold text-aviso">
+          Datos escritos a mano: tu gerente revisará el voucher.
+        </p>
         <p v-if="lectura?.comision" class="text-[11px] text-secundario">
           Más {{ formatearSoles(lectura.comision) }} de comisión, aparte.
         </p>
@@ -157,7 +188,23 @@ const senales = computed(() => {
       </li>
     </ul>
 
+    <DatosAMano
+      v-if="completable && escribiendo && comprobante && importe !== undefined && hoy"
+      :comprobante-id="comprobante.id"
+      :importe="importe"
+      :hoy="hoy"
+      @completado="(c) => emit('completado', c)"
+    />
+
     <div class="mt-2 flex flex-wrap justify-end gap-2">
+      <BaseBoton
+        v-if="completable && !escribiendo"
+        variante="secundario"
+        :deshabilitado="bloqueado"
+        @click="escribiendo = true"
+      >
+        Escribir los datos
+      </BaseBoton>
       <BaseBoton
         v-if="posibleMora"
         variante="secundario"
