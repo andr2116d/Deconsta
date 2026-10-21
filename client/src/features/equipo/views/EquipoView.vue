@@ -5,6 +5,8 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useSesionStore } from '@/features/acceso/stores/sesion'
 import { levantarBloqueo, listarBloqueos } from '@/features/deudas/api/deudas'
 import type { BloqueoRegistro } from '@/features/deudas/types'
+import { levantarBloqueoPagos, listarBloqueosPagos } from '@/features/pagos/api/pagos'
+import type { BloqueoPagos } from '@/features/pagos/types'
 import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
@@ -32,6 +34,9 @@ const fallo = ref<ErrorApi | null>(null)
 const bloqueos = ref<BloqueoRegistro[]>([])
 const bloqueoDe = (a: Asistente) =>
   bloqueos.value.find((b) => b.asistente_id === a.id)?.bloqueado_en ?? null
+const bloqueosPagos = ref<BloqueoPagos[]>([])
+const pagosBloqueadosDe = (a: Asistente) =>
+  bloqueosPagos.value.find((b) => b.asistente_id === a.id)?.bloqueado_en ?? null
 
 const cantidad = computed(() => equipo.asistentes?.length ?? 0)
 const nombreDe = (a: Asistente) => `${a.nombres} ${a.apellidos}`
@@ -55,7 +60,9 @@ function mostrarFallo(error: unknown) {
 async function cargar() {
   try {
     await equipo.cargar()
-    bloqueos.value = await listarBloqueos()
+    const [deDeudas, dePagos] = await Promise.all([listarBloqueos(), listarBloqueosPagos()])
+    bloqueos.value = deDeudas
+    bloqueosPagos.value = dePagos
   } catch (error) {
     if (error instanceof ErrorApi && error.codigo === 'NO_AUTENTICADO') sesionTerminada()
   }
@@ -113,6 +120,20 @@ async function permitirRegistro(asistente: Asistente) {
     await levantarBloqueo(asistente.id)
     bloqueos.value = bloqueos.value.filter((b) => b.asistente_id !== asistente.id)
     aviso.value = `${nombreDe(asistente)} ya puede registrar deudas otra vez. Le avisamos.`
+  } catch (error) {
+    mostrarFallo(error)
+  } finally {
+    ocupada.value = null
+  }
+}
+
+async function permitirPagos(asistente: Asistente) {
+  ocupada.value = asistente.id
+  aviso.value = null
+  try {
+    await levantarBloqueoPagos(asistente.id)
+    bloqueosPagos.value = bloqueosPagos.value.filter((b) => b.asistente_id !== asistente.id)
+    aviso.value = `${nombreDe(asistente)} ya puede registrar pagos otra vez. Le avisamos.`
   } catch (error) {
     mostrarFallo(error)
   } finally {
@@ -229,7 +250,9 @@ onMounted(() => {
             :asistente="asistente"
             :ocupada="ocupada === asistente.id"
             :registro-bloqueado="bloqueoDe(asistente)"
+            :pagos-bloqueados="pagosBloqueadosDe(asistente)"
             @permitir-registro="permitirRegistro(asistente)"
+            @permitir-pagos="permitirPagos(asistente)"
             @bloquear="accion = { tipo: 'bloquear', asistente }"
             @desbloquear="desbloquear(asistente)"
             @eliminar="accion = { tipo: 'eliminar', asistente }"
