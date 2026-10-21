@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import type { Usuario } from '@/features/acceso/types'
+import { useNotificacionesStore } from '@/features/notificaciones/stores/notificaciones'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 import MarcaDeconsta from '@/shared/components/MarcaDeconsta.vue'
 
@@ -11,6 +12,7 @@ import PestanasEspacio from './PestanasEspacio.vue'
 
 const props = defineProps<{ usuario: Usuario; contrasenaTemporal: boolean; saliendo: boolean }>()
 const emit = defineEmits<{ 'cambiar-contrasena': []; salir: [] }>()
+const notificaciones = useNotificacionesStore()
 
 const espacio = computed(() =>
   props.usuario.rol === 'gerente'
@@ -47,11 +49,24 @@ const espacio = computed(() =>
           </RouterLink>
           <RouterLink
             :to="{ name: 'notificaciones' }"
-            aria-label="Notificaciones"
-            class="grid size-11 place-items-center rounded-[9px] text-tinta transition-colors duration-200 hover:bg-acento-suave hover:text-acento"
+            :aria-label="
+              notificaciones.noLeidas
+                ? `Notificaciones, ${notificaciones.noLeidas} sin leer`
+                : 'Notificaciones'
+            "
+            class="relative grid size-11 place-items-center rounded-[9px] text-tinta transition-colors duration-200 hover:bg-acento-suave hover:text-acento"
             exact-active-class="bg-acento-suave !text-acento"
           >
             <BaseIcono nombre="avisos" class="size-5" />
+            <Transition name="vista">
+              <span
+                v-if="notificaciones.noLeidas"
+                aria-hidden="true"
+                class="absolute top-1.5 right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-acento px-1 text-[10px] font-bold text-white"
+              >
+                {{ notificaciones.noLeidas > 9 ? '9+' : notificaciones.noLeidas }}
+              </span>
+            </Transition>
           </RouterLink>
           <MenuCuenta
             :usuario="usuario"

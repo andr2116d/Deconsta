@@ -156,6 +156,7 @@ export const SECCIONES: readonly Seccion[] = [
     icono: 'avisos',
     ubicacion: 'avisos',
     roles: AMBOS,
+    vista: () => import('@/features/notificaciones/views/NotificacionesView.vue'),
   },
   {
     nombre: 'mis-datos',

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { useSesionStore } from '@/features/acceso/stores/sesion'
 import { obtenerEspacio } from '@/features/incorporacion/api/incorporacion'
 import ModalCambioContrasena from '@/features/incorporacion/components/ModalCambioContrasena.vue'
+import AvisoEnVivo from '@/features/notificaciones/components/AvisoEnVivo.vue'
+import { useNotificacionesStore } from '@/features/notificaciones/stores/notificaciones'
 import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 
@@ -13,6 +15,7 @@ import CabeceraEspacio from '../components/CabeceraEspacio.vue'
 const router = useRouter()
 const route = useRoute()
 const sesion = useSesionStore()
+const notificaciones = useNotificacionesStore()
 const saliendo = ref(false)
 // Aviso que deja la pantalla anterior (por ejemplo, al terminar la bienvenida).
 const aviso = ref(typeof history.state?.aviso === 'string' ? (history.state.aviso as string) : null)
@@ -79,6 +82,9 @@ function enfocarTitulo() {
 onMounted(async () => {
   try {
     await obtenerEspacio()
+    // Avisos de la cuenta: los guardados y, en adelante, los que lleguen en tiempo real.
+    notificaciones.cargar().catch(() => undefined)
+    notificaciones.conectar()
   } catch (error) {
     if (!(error instanceof ErrorApi)) return
     if (error.codigo === 'NO_AUTENTICADO') {
@@ -89,6 +95,8 @@ onMounted(async () => {
     }
   }
 })
+// Al salir del espacio (cerrar sesión o sesión vencida) se corta el flujo y se olvidan los avisos.
+onBeforeUnmount(() => notificaciones.olvidar())
 </script>
 
 <template>
@@ -120,6 +128,8 @@ onMounted(async () => {
         </Transition>
       </RouterView>
     </main>
+
+    <AvisoEnVivo />
 
     <ModalCambioContrasena
       v-if="mostrarContrasena"
