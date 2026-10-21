@@ -46,6 +46,15 @@ from app.categorias.aplicacion.categorias import (
 from app.categorias.infraestructura.persistencia import UnidadCategoriasSql
 from app.core.config import Settings
 from app.core.database import crear_motor
+from app.reglas.aplicacion.reglas import (
+    AgregarTitular,
+    CambiarLimite,
+    ConsultarReglas,
+    EditarTitular,
+    EvaluarDocumento,
+    QuitarTitular,
+)
+from app.reglas.infraestructura.persistencia import UnidadReglasSql
 
 
 def ahora_utc() -> datetime:
@@ -111,6 +120,12 @@ class Contenedor:
     editar_categoria: EditarCategoria
     archivar_categoria: ArchivarCategoria
     reactivar_categoria: ReactivarCategoria
+    consultar_reglas: ConsultarReglas
+    cambiar_limite: CambiarLimite
+    agregar_titular: AgregarTitular
+    editar_titular: EditarTitular
+    quitar_titular: QuitarTitular
+    evaluar_documento: EvaluarDocumento
 
     @classmethod
     def crear(cls, config: Settings) -> "Contenedor":
@@ -135,6 +150,16 @@ class Contenedor:
                 "gestion_categorias",
                 config.limite_gestion_categorias,
                 config.ventana_gestion_categorias_segundos,
+            ),
+            reloj,
+        )
+        reglas = (
+            lambda: UnidadReglasSql(motor, cifrador),
+            limitador,
+            Limite(
+                "gestion_reglas",
+                config.limite_gestion_reglas,
+                config.ventana_gestion_reglas_segundos,
             ),
             reloj,
         )
@@ -177,6 +202,12 @@ class Contenedor:
             editar_categoria=EditarCategoria(*categorias),
             archivar_categoria=ArchivarCategoria(*categorias),
             reactivar_categoria=ReactivarCategoria(*categorias),
+            consultar_reglas=ConsultarReglas(*reglas),
+            cambiar_limite=CambiarLimite(*reglas),
+            agregar_titular=AgregarTitular(*reglas),
+            editar_titular=EditarTitular(*reglas),
+            quitar_titular=QuitarTitular(*reglas),
+            evaluar_documento=EvaluarDocumento(*reglas),
         )
 
     def cerrar(self) -> None:

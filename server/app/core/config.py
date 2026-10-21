@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # Altas, ediciones, archivos y reactivaciones de categorías de un mismo gerente.
     limite_gestion_categorias: int = Field(default=60, ge=1)
     ventana_gestion_categorias_segundos: int = Field(default=3600, ge=1)
+    # Cambios del límite y de los titulares autorizados, y pruebas de las reglas, por gerente.
+    limite_gestion_reglas: int = Field(default=60, ge=1)
+    ventana_gestion_reglas_segundos: int = Field(default=3600, ge=1)
 
     @field_validator("clave_cifrado_datos", "clave_huella_datos")
     @classmethod

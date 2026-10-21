@@ -14,6 +14,7 @@ from app.core.config import Settings, settings
 from app.core.errores import registrar_manejadores
 from app.core.migraciones import aplicar_pendientes
 from app.core.registro import configurar_registro, crear_middleware_seguridad
+from app.reglas.infraestructura.http.errores import registrar_manejadores_reglas
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ def crear_app(config: Settings = settings, contenedor: Contenedor | None = None)
     registrar_manejadores(app)
     registrar_manejadores_acceso(app)
     registrar_manejadores_categorias(app)
+    registrar_manejadores_reglas(app)
     app.middleware("http")(crear_middleware_seguridad(hsts=produccion))
     app.add_middleware(
         CORSMiddleware,
