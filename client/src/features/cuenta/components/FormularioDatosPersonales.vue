@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, useId, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 
 import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseCampo from '@/shared/components/BaseCampo.vue'
+import CampoDocumento from '@/shared/components/CampoDocumento.vue'
+import {
+  avisoCelular,
+  avisoCorreo,
+  filtrarCelular,
+  filtrarCorreo,
+  filtrarNombre,
+} from '@/shared/validaciones/persona'
 
 import { camposCambiados, datosDe, requiereContrasena } from '../datos'
 import { useCuentaStore } from '../stores/cuenta'
@@ -21,7 +29,7 @@ const ETIQUETAS: Record<Campo, string> = {
   nombres: 'Nombres',
   apellidos: 'Apellidos',
   correo: 'Correo',
-  telefono: 'Teléfono',
+  telefono: 'Celular',
   tipo_documento: 'Tipo de documento',
   numero_documento: 'Número de documento',
   nombre_recibos: 'Nombre como figura en tus recibos',
@@ -33,7 +41,6 @@ const CONTRASENA_REQUERIDA = 'Confirma este cambio con tu contraseña actual.'
 const ERROR_INESPERADO = 'Ocurrió un error inesperado. Inténtalo de nuevo.'
 
 const store = useCuentaStore()
-const idTipo = useId()
 const formulario = ref<HTMLFormElement>()
 
 interface Formulario {
@@ -86,9 +93,6 @@ const puedeGuardar = computed(() => hayCambios.value && !numeroBloqueado.value)
 const errorNumero = computed(() =>
   numeroBloqueado.value ? DOCUMENTO_FIJO : errores.numero_documento,
 )
-const etiquetaNumero = computed(() =>
-  datos.tipo_documento === 'dni' ? 'Número de DNI' : 'Número de carné de extranjería',
-)
 const ayudaCargo = computed(() =>
   esGerente.value
     ? 'Se registró al crear tu cuenta y no se edita desde aquí.'
@@ -114,19 +118,20 @@ watch(hayCambios, (hay) => {
   if (hay) guardado.value = false
 })
 
-function elegirTipo(evento: Event) {
-  const elemento = evento.target as HTMLSelectElement
-  const tipo = elemento.value as TipoDocumento
-  if (tipo === props.cuenta.tipo_documento) {
-    datos.tipo_documento = tipo
-    datos.numero_documento = props.cuenta.numero_documento
-    documentoConfirmado.value = false
-    return
-  }
-  // El select vuelve a su valor hasta que la persona pase las advertencias.
-  elemento.value = datos.tipo_documento
-  dialogoDocumento.value = 'inicio'
-}
+// Volver al tipo guardado restaura el documento; pasar a carné espera a las advertencias (mientras
+// tanto, el selector sigue en DNI).
+const tipoDocumento = computed<TipoDocumento>({
+  get: () => datos.tipo_documento,
+  set: (tipo) => {
+    if (tipo === props.cuenta.tipo_documento) {
+      datos.tipo_documento = tipo
+      datos.numero_documento = props.cuenta.numero_documento
+      documentoConfirmado.value = false
+    } else {
+      dialogoDocumento.value = 'inicio'
+    }
+  },
+})
 
 async function confirmarDocumento() {
   if (dialogoDocumento.value === 'final') {
@@ -220,6 +225,7 @@ async function enviar() {
         autocompletar="given-name"
         capitalizar
         :maximo="80"
+        :filtro="filtrarNombre"
         :error="errores.nombres"
       />
       <BaseCampo
@@ -228,6 +234,7 @@ async function enviar() {
         autocompletar="family-name"
         capitalizar
         :maximo="80"
+        :filtro="filtrarNombre"
         :error="errores.apellidos"
       />
       <BaseCampo
@@ -235,48 +242,33 @@ async function enviar() {
         etiqueta="Correo"
         tipo="email"
         autocompletar="email"
+        modo-entrada="email"
         :maximo="254"
+        :filtro="filtrarCorreo"
+        :aviso="avisoCorreo(datos.correo)"
         :error="errores.correo"
       />
       <BaseCampo
         v-model="datos.telefono"
-        etiqueta="Teléfono"
+        etiqueta="Celular"
         tipo="tel"
-        autocompletar="tel"
-        ayuda="Opcional. De 9 a 15 dígitos."
-        :maximo="20"
+        autocompletar="tel-national"
+        modo-entrada="numeric"
+        prefijo="+51"
+        ayuda="Opcional. 9 dígitos, empieza con 9."
+        :filtro="filtrarCelular"
+        :aviso="avisoCelular(datos.telefono)"
         :error="errores.telefono"
       />
     </div>
 
-    <fieldset>
-      <legend class="sr-only">Documento de identidad</legend>
-      <div class="grid gap-x-5 sm:grid-cols-[minmax(0,220px)_1fr]">
-        <div class="mb-4 flex flex-col gap-1.5">
-          <label :for="idTipo" class="text-[12px] font-bold">Tipo de documento</label>
-          <select
-            :id="idTipo"
-            :value="datos.tipo_documento"
-            :disabled="cuenta.tipo_documento === 'ce'"
-            class="min-h-[46px] w-full rounded-[7px] border border-control bg-white px-3 text-[14px] text-tinta transition-colors duration-200 enabled:hover:border-tinta disabled:border-borde disabled:bg-fondo disabled:text-secundario"
-            @change="elegirTipo"
-          >
-            <option value="dni">DNI</option>
-            <option value="ce">Carné de extranjería</option>
-          </select>
-        </div>
-        <div data-campo="numero_documento">
-          <BaseCampo
-            v-model="datos.numero_documento"
-            :etiqueta="etiquetaNumero"
-            :maximo="20"
-            :error="errorNumero"
-            :ayuda="
-              cuenta.tipo_documento === 'ce' ? 'Tu documento no se cambia desde aquí.' : undefined
-            "
-          />
-        </div>
-      </div>
+    <CampoDocumento
+      v-model:tipo="tipoDocumento"
+      v-model:numero="datos.numero_documento"
+      :tipo-bloqueado="cuenta.tipo_documento === 'ce'"
+      :error="errorNumero"
+      :ayuda="cuenta.tipo_documento === 'ce' ? 'Tu documento no se cambia desde aquí.' : undefined"
+    >
       <Transition
         enter-active-class="transition duration-200 ease-out"
         enter-from-class="opacity-0 -translate-y-1"
@@ -291,7 +283,7 @@ async function enviar() {
           vuelve a elegir DNI.
         </BaseAviso>
       </Transition>
-    </fieldset>
+    </CampoDocumento>
 
     <BaseCampo
       v-if="esGerente"
