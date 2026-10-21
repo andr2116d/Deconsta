@@ -1,35 +1,97 @@
-@import './base.css';
+@import 'tailwindcss';
 
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  font-weight: normal;
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
 }
 
-a,
-.green {
-  text-decoration: none;
-  color: hsla(160, 100%, 37%, 1);
-  transition: 0.4s;
-  padding: 3px;
-}
+/* Identidad de Deconsta (DECONSTA/DESIGN.md e identidad.md). */
+@theme {
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
 
-@media (hover: hover) {
-  a:hover {
-    background-color: hsla(160, 100%, 37%, 0.2);
+  --color-ciruela: #6b304f;
+  --color-ciruela-hover: #51233d;
+  --color-rosa: #f1dde7;
+  --color-rosa-suave: #fbf4f8;
+  --color-acceso: #efe6ed;
+  --color-fondo: #f7f5f7;
+  --color-tinta: #302330;
+  --color-secundario: #736773;
+  --color-borde: #e4dce3;
+  --color-control: #91818e;
+  --color-exito: #286849;
+  --color-exito-fondo: #e6f2eb;
+  --color-aviso: #885d16;
+  --color-aviso-fondo: #fff3d8;
+  --color-error: #a33b40;
+  --color-error-fondo: #fcecee;
+
+  --animate-aparecer: aparecer 220ms ease-out both;
+  --animate-flotar: flotar 6s ease-in-out infinite;
+  --animate-girar: girar 0.8s linear infinite;
+
+  @keyframes aparecer {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+  }
+
+  @keyframes flotar {
+    50% {
+      translate: 0 -6px;
+    }
+  }
+
+  @keyframes girar {
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 
-@media (min-width: 1024px) {
+@layer base {
+  html {
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
   body {
-    display: flex;
-    place-items: center;
+    @apply bg-fondo font-sans text-sm leading-relaxed text-tinta;
+    font-variant-numeric: tabular-nums;
   }
 
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 0 2rem;
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ciruela;
+  }
+}
+
+/* Transición entre vistas: 200 ms, dentro del rango de 180–240 ms de la identidad. */
+.vista-enter-active,
+.vista-leave-active {
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+.vista-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.vista-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
