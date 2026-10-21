@@ -51,6 +51,8 @@ function mostrarFallo(error: unknown) {
 }
 
 async function guardar(limite: string | null) {
+  // Un segundo envío mientras el primero sigue en curso se ignora.
+  if (enviando.value) return
   fallo.value = null
   if (limite !== null && !normalizarImporte(limite)) {
     errores.limite_importe = 'Escribe el límite en soles.'

@@ -49,7 +49,7 @@ function alGuardarTitular(titular: Titular, agregado: boolean) {
 
 async function quitar(motivo: string | null) {
   const titular = porQuitar.value
-  if (!titular) return
+  if (!titular || ocupado.value) return
   ocupado.value = titular.id
   aviso.value = null
   try {

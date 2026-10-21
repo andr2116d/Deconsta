@@ -115,6 +115,8 @@ function mostrarFallo(error: unknown) {
 }
 
 async function guardar() {
+  // Un segundo envío mientras el primero sigue en curso se ignora.
+  if (enviando.value) return
   fallo.value = null
   if (!validar() || !hayCambios.value) return
   enviando.value = true

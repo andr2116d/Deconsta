@@ -74,6 +74,7 @@ function alGuardar(categoria: Categoria, creada: boolean) {
 }
 
 async function reactivar(id: string) {
+  if (ocupada.value) return
   formulario.value = null
   aviso.value = null
   ocupada.value = id
@@ -90,7 +91,7 @@ async function reactivar(id: string) {
 
 async function archivar(motivo: string | null) {
   const categoria = porArchivar.value
-  if (!categoria) return
+  if (!categoria || ocupada.value) return
   ocupada.value = categoria.id
   aviso.value = null
   try {

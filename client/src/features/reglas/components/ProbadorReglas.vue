@@ -30,6 +30,7 @@ watch(datos, () => {
 })
 
 async function probar() {
+  if (probando.value) return
   fallo.value = null
   if (!normalizarImporte(datos.importe)) {
     errores.importe = 'Escribe el importe del documento.'
