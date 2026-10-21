@@ -6,9 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 from app.acceso.infraestructura.http.esquemas import exigir
 from app.categorias.aplicacion.categorias import NuevaCategoria
 from app.categorias.dominio.modelos import Categoria, Color, Icono
+from app.core.esquemas import Entrada
 
 
-class CategoriaEntrada(BaseModel):
+class CategoriaEntrada(Entrada):
     # Los topes son holgados: el dominio da el mensaje preciso de cada regla.
     nombre: str = Field("", max_length=200, validate_default=True)
     descripcion: str | None = Field(None, max_length=1000)

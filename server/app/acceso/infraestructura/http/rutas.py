@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request, Response, status
 
+from app.acceso.infraestructura.http.cookie import borrar_cookie_sesion
 from app.acceso.infraestructura.http.dependencias import (
     ContenedorDep,
     OrigenDep,
@@ -68,9 +69,9 @@ def sesion(sesion: SesionDep) -> SesionSalida:
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 def cerrar_sesion(request: Request, response: Response, contenedor: ContenedorDep) -> None:
-    nombre = contenedor.config.cookie_sesion_nombre
-    contenedor.cerrar_sesion.ejecutar(request.cookies.get(nombre))
-    response.delete_cookie(nombre, path="/api")
+    config = contenedor.config
+    contenedor.cerrar_sesion.ejecutar(request.cookies.get(config.cookie_sesion_nombre))
+    borrar_cookie_sesion(response, config)
 
 
 @router.post("/auth/contrasena", responses=ERRORES)

@@ -29,6 +29,7 @@ from app.acceso.dominio.errores import (
     SinCambios,
     SinPermiso,
 )
+from app.acceso.infraestructura.http.cookie import borrar_cookie_sesion
 from app.core.errores import respuesta_error
 
 ESTADOS_HTTP: dict[type[ErrorAcceso], int] = {
@@ -88,8 +89,7 @@ async def manejar_error_acceso(request: Request, exc: Exception) -> JSONResponse
     )
     if isinstance(exc, NoAutenticado):
         # Una cookie vencida o revocada se borra para no seguir enviándola.
-        config = request.app.state.contenedor.config
-        respuesta.delete_cookie(config.cookie_sesion_nombre, path="/api")
+        borrar_cookie_sesion(respuesta, request.app.state.contenedor.config)
     return respuesta
 
 

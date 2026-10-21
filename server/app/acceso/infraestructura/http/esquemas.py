@@ -10,6 +10,7 @@ from app.acceso.aplicacion.equipo import CredencialesEntregadas, MiembroEquipo
 from app.acceso.dominio.datos_personales import TipoDocumento
 from app.acceso.dominio.incorporacion import DocumentoVigente, PasoPendiente, TipoDocumentoLegal
 from app.acceso.dominio.modelos import CausaBloqueo, Rol, Usuario
+from app.core.esquemas import Entrada
 
 
 def exigir(valor: str, mensaje: str) -> str:
@@ -19,7 +20,7 @@ def exigir(valor: str, mensaje: str) -> str:
     return valor
 
 
-class IngresoEntrada(BaseModel):
+class IngresoEntrada(Entrada):
     # El valor por defecto vacío se valida: un campo ausente recibe el mismo mensaje que uno vacío.
     nombre_usuario: str = Field("", max_length=64, validate_default=True)
     contrasena: str = Field("", max_length=128, validate_default=True)
@@ -35,7 +36,7 @@ class IngresoEntrada(BaseModel):
         return exigir(valor, "Ingresa tu contraseña.")
 
 
-class CambioContrasenaEntrada(BaseModel):
+class CambioContrasenaEntrada(Entrada):
     contrasena_actual: str = Field("", max_length=128, validate_default=True)
     # Mayor que la política para que una contraseña larga reciba el mensaje de la política.
     contrasena_nueva: str = Field("", max_length=256, validate_default=True)
@@ -88,13 +89,13 @@ class IngresoSalida(SesionSalida):
     primer_ingreso: bool
 
 
-class DocumentoAceptadoEntrada(BaseModel):
+class DocumentoAceptadoEntrada(Entrada):
     tipo: TipoDocumentoLegal
     # La versión que la persona leyó; se compara con la vigente.
     version: int = Field(ge=1)
 
 
-class AceptacionEntrada(BaseModel):
+class AceptacionEntrada(Entrada):
     documentos: list[DocumentoAceptadoEntrada] = Field(default_factory=list, max_length=10)
 
 
@@ -136,7 +137,7 @@ class EspacioSalida(BaseModel):
     disponible: bool
 
 
-class DatosPersonalesEntrada(BaseModel):
+class DatosPersonalesEntrada(Entrada):
     """Los datos completos tal como quedarán. Las reglas (formato, qué cambia y qué no) las aplica
     el dominio; aquí solo se acotan los tamaños."""
 
@@ -153,7 +154,7 @@ class DatosPersonalesEntrada(BaseModel):
     confirmar_cambio_documento: bool = False
 
 
-class NombreUsuarioEntrada(BaseModel):
+class NombreUsuarioEntrada(Entrada):
     nombre_usuario: str = Field("", max_length=64, validate_default=True)
     contrasena_actual: str = Field("", max_length=128, validate_default=True)
 
@@ -222,7 +223,7 @@ class CuentaSalida(BaseModel):
         )
 
 
-class ConfirmacionDatosEntrada(BaseModel):
+class ConfirmacionDatosEntrada(Entrada):
     """Datos que la asistente revisa y completa en su primer ingreso."""
 
     nombres: str = Field("", max_length=200)
@@ -233,7 +234,7 @@ class ConfirmacionDatosEntrada(BaseModel):
     numero_documento: str = Field("", max_length=30)
 
 
-class NuevaAsistenteEntrada(BaseModel):
+class NuevaAsistenteEntrada(Entrada):
     nombres: str = Field("", max_length=200)
     apellidos: str = Field("", max_length=200)
     telefono: str = Field("", max_length=30)
@@ -247,7 +248,7 @@ class NuevaAsistenteEntrada(BaseModel):
     crear_aunque_eliminada: bool = False
 
 
-class MotivoEntrada(BaseModel):
+class MotivoEntrada(Entrada):
     motivo: str | None = Field(None, max_length=500)
 
 

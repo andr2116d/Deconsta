@@ -71,6 +71,18 @@ describe('DialogoCategoria', () => {
     expect(dialogo.emitted('guardada')).toEqual([[creada, true]])
   })
 
+  it('ignora un segundo envío mientras el primero sigue en curso', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(() => new Promise<Response>(() => {}))
+    vi.stubGlobal('fetch', fetch)
+    const { dialogo, nombre } = montar()
+
+    await nombre().setValue('Luz')
+    await dialogo.get('form').trigger('submit')
+    await dialogo.get('form').trigger('submit')
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('ofrece reactivar la categoría archivada con el mismo nombre', async () => {
     const mensaje =
       'Ya tienes una categoría archivada llamada «Agua». Reactívala para volver a usarla.'
