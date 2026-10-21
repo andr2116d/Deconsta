@@ -7,7 +7,7 @@ describe('DialogoCredenciales', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('copia el usuario y la contraseña al portapapeles', async () => {
-    const writeText = vi.fn(() => Promise.resolve())
+    const writeText = vi.fn<(texto: string) => Promise<void>>(() => Promise.resolve())
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     const dialogo = mount(DialogoCredenciales, {
       props: {
