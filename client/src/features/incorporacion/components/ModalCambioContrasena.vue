@@ -3,14 +3,13 @@ import FormularioCambioContrasena from '@/features/acceso/components/FormularioC
 import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseDialogo from '@/shared/components/BaseDialogo.vue'
 
-// Obligatoria: no se cierra con Escape ni con un botón. La única salida es cerrar la sesión.
-// Al guardar, la sesión pasa al paso siguiente y la vista que la contiene la retira.
-const emit = defineEmits<{ salir: []; 'sesion-terminada': [] }>()
-defineProps<{ saliendo: boolean }>()
+// Recordatorio de la contraseña temporal: se puede cerrar (Escape, la X o «Ahora no») y vuelve en
+// el siguiente ingreso mientras el backend la siga marcando como temporal.
+const emit = defineEmits<{ cerrar: []; cambiada: []; 'sesion-terminada': [] }>()
 </script>
 
 <template>
-  <BaseDialogo abierto obligatorio titulo="Crea tu contraseña personal.">
+  <BaseDialogo abierto titulo="Crea tu contraseña personal." @cerrar="emit('cerrar')">
     <template #icono>
       <svg
         viewBox="0 0 24 24"
@@ -22,18 +21,16 @@ defineProps<{ saliendo: boolean }>()
       </svg>
     </template>
     <p class="mt-2 mb-5 text-[13px] text-secundario">
-      Ingresaste con una contraseña temporal. Para entrar a tu espacio, reemplázala por una que solo
-      tú conozcas.
+      Sigues usando la contraseña temporal que te entregaron. Reemplázala por una que solo tú
+      conozcas; te lo recordaremos en cada ingreso hasta que lo hagas.
     </p>
-    <FormularioCambioContrasena inicial @sesion-terminada="emit('sesion-terminada')" />
-    <BaseBoton
-      variante="discreto"
-      ancho="completo"
-      class="mt-2"
-      :cargando="saliendo"
-      @click="emit('salir')"
-    >
-      Salir de la sesión
+    <FormularioCambioContrasena
+      inicial
+      @cambiada="emit('cambiada')"
+      @sesion-terminada="emit('sesion-terminada')"
+    />
+    <BaseBoton variante="discreto" ancho="completo" class="mt-2" @click="emit('cerrar')">
+      Ahora no
     </BaseBoton>
   </BaseDialogo>
 </template>
