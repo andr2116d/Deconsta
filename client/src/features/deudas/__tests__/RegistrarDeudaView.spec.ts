@@ -46,8 +46,8 @@ describe('RegistrarDeudaView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.useFakeTimers()
-    URL.createObjectURL = vi.fn(() => 'blob:vista')
-    URL.revokeObjectURL = vi.fn()
+    URL.createObjectURL = vi.fn<typeof URL.createObjectURL>(() => 'blob:vista')
+    URL.revokeObjectURL = vi.fn<typeof URL.revokeObjectURL>()
   })
   afterEach(() => {
     vi.useRealTimers()
