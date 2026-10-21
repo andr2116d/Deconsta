@@ -69,6 +69,7 @@ function simularApi() {
   const mock = vi.fn<typeof fetch>((entrada, opciones) => {
     const ruta = new URL(String(entrada), 'http://localhost').pathname
     if (ruta.endsWith('/contenido')) return Promise.resolve(new Response(new Blob(['png'])))
+    if (ruta.endsWith('/pagos/moras')) return Promise.resolve(respuesta(200, []))
     if (opciones?.method === 'POST')
       return Promise.resolve(respuesta(200, { ...DETALLE, estado: 'devuelto' }))
     if (ruta.endsWith('/pagos/p1')) return Promise.resolve(respuesta(200, DETALLE))
