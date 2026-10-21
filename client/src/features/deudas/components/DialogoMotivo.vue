@@ -5,15 +5,36 @@ import BaseBoton from '@/shared/components/BaseBoton.vue'
 import BaseDialogo from '@/shared/components/BaseDialogo.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
-/** Rechazar o anular siempre deja un motivo: la asistente lo ve en su aviso. */
+/** Rechazar o anular una deuda, o devolver un pago, siempre deja un motivo: la asistente lo ve. */
 const props = defineProps<{
   abierto: boolean
-  accion: 'rechazar' | 'anular'
+  accion: 'rechazar' | 'anular' | 'devolver'
   concepto: string
   enviando: boolean
   error?: string
 }>()
 const emit = defineEmits<{ confirmar: [motivo: string]; cerrar: [] }>()
+
+const TEXTOS = {
+  rechazar: {
+    titulo: 'Rechaza la deuda con contexto.',
+    detalle: 'no se pagará. Tu asistente verá el motivo.',
+    ejemplo: 'Por ejemplo: el recibo es de la casa de mi hermano, no corresponde.',
+    boton: 'Rechazar deuda',
+  },
+  anular: {
+    titulo: 'Anula la deuda con contexto.',
+    detalle: 'dejará de estar en la agenda y no se pagará. Tu asistente verá el motivo.',
+    ejemplo: 'Por ejemplo: el recibo es de la casa de mi hermano, no corresponde.',
+    boton: 'Anular deuda',
+  },
+  devolver: {
+    titulo: 'Devuelve el pago con contexto.',
+    detalle: 'volverá a estar por pagar. Tu asistente verá el motivo y subirá otro comprobante.',
+    ejemplo: 'Por ejemplo: el voucher es de otro mes, el importe no llegó a la cuenta.',
+    boton: 'Devolver pago',
+  },
+}
 
 const motivo = ref('')
 const id = useId()
@@ -24,23 +45,13 @@ watch(
 </script>
 
 <template>
-  <BaseDialogo
-    :abierto="abierto"
-    :titulo="
-      accion === 'rechazar' ? 'Rechaza la deuda con contexto.' : 'Anula la deuda con contexto.'
-    "
-    @cerrar="emit('cerrar')"
-  >
+  <BaseDialogo :abierto="abierto" :titulo="TEXTOS[accion].titulo" @cerrar="emit('cerrar')">
     <template #icono>
       <BaseIcono nombre="alerta" class="size-5" />
     </template>
     <p class="mt-3 text-[13px] text-secundario">
       «{{ concepto }}»
-      {{
-        accion === 'rechazar'
-          ? 'no se pagará. Tu asistente verá el motivo.'
-          : 'dejará de estar en la agenda y no se pagará. Tu asistente verá el motivo.'
-      }}
+      {{ TEXTOS[accion].detalle }}
     </p>
     <form class="mt-4" novalidate @submit.prevent="emit('confirmar', motivo)">
       <label :for="id" class="text-[12px] font-bold">Motivo</label>
@@ -50,7 +61,7 @@ watch(
         rows="3"
         maxlength="500"
         :aria-invalid="error ? 'true' : undefined"
-        placeholder="Por ejemplo: el recibo es de la casa de mi hermano, no corresponde."
+        :placeholder="TEXTOS[accion].ejemplo"
         class="mt-1.5 w-full rounded-[7px] border bg-white px-3 py-2.5 text-[14px]"
         :class="error ? 'border-error' : 'border-control hover:border-tinta'"
       />
@@ -58,7 +69,7 @@ watch(
       <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <BaseBoton variante="discreto" @click="emit('cerrar')">Volver</BaseBoton>
         <BaseBoton tipo="submit" :cargando="enviando">
-          {{ accion === 'rechazar' ? 'Rechazar deuda' : 'Anular deuda' }}
+          {{ TEXTOS[accion].boton }}
         </BaseBoton>
       </div>
     </form>
