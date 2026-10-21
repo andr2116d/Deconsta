@@ -1,6 +1,7 @@
 """Puertos de las deudas: lo que los casos de uso necesitan del exterior."""
 
 from collections.abc import Callable
+from datetime import date
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
@@ -35,6 +36,13 @@ class RepositorioDeudas(Protocol):
         ...
 
     def registradas_por(self, usuario_id: UUID) -> list[Deuda]: ...
+
+    def con_vencimientos_entre(
+        self, gerente_id: UUID, desde: date, hasta: date, *, registrada_por: UUID | None
+    ) -> list[Deuda]:
+        """Las deudas vigentes (por autorizar o registradas) con alguna cuota que vence en el
+        rango, ambos días incluidos. Con `registrada_por`, solo las que registró esa cuenta."""
+        ...
 
 
 class UnidadDeudas(Protocol):
