@@ -30,10 +30,16 @@ function posponerContrasena() {
   sesion.posponerCambioContrasena()
 }
 
-function contrasenaCambiada() {
-  contrasenaPedida.value = false
-  aviso.value = 'Contraseña actualizada. Ya puedes usarla en tus próximos ingresos.'
-}
+// Se deduce del cambio de estado y no de un evento de la ventana: al guardar, la sesión se
+// actualiza y la ventana se desmonta antes de poder avisar.
+watch(
+  () => sesion.debeCambiarContrasena,
+  (debe, antes) => {
+    if (!antes || debe || !sesion.autenticada) return
+    contrasenaPedida.value = false
+    aviso.value = 'Contraseña actualizada. Ya puedes usarla en tus próximos ingresos.'
+  },
+)
 
 function irAlIngreso() {
   router.replace({ name: 'inicio-sesion' })
@@ -119,7 +125,6 @@ onMounted(async () => {
     <ModalCambioContrasena
       v-if="mostrarContrasena"
       @cerrar="posponerContrasena"
-      @cambiada="contrasenaCambiada"
       @sesion-terminada="sesionTerminada"
     />
   </div>

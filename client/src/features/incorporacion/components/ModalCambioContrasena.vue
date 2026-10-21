@@ -5,7 +5,7 @@ import BaseDialogo from '@/shared/components/BaseDialogo.vue'
 
 // Recordatorio de la contraseña temporal: se puede cerrar (Escape, la X o «Ahora no») y vuelve en
 // el siguiente ingreso mientras el backend la siga marcando como temporal.
-const emit = defineEmits<{ cerrar: []; cambiada: []; 'sesion-terminada': [] }>()
+const emit = defineEmits<{ cerrar: []; 'sesion-terminada': [] }>()
 </script>
 
 <template>
@@ -24,11 +24,7 @@ const emit = defineEmits<{ cerrar: []; cambiada: []; 'sesion-terminada': [] }>()
       Sigues usando la contraseña temporal que te entregaron. Reemplázala por una que solo tú
       conozcas; te lo recordaremos en cada ingreso hasta que lo hagas.
     </p>
-    <FormularioCambioContrasena
-      inicial
-      @cambiada="emit('cambiada')"
-      @sesion-terminada="emit('sesion-terminada')"
-    />
+    <FormularioCambioContrasena inicial @sesion-terminada="emit('sesion-terminada')" />
     <BaseBoton variante="discreto" ancho="completo" class="mt-2" @click="emit('cerrar')">
       Ahora no
     </BaseBoton>
