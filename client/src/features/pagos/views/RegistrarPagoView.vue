@@ -10,6 +10,7 @@ import { formatearSoles } from '@/features/reglas/importes'
 import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
+import BaseDialogo from '@/shared/components/BaseDialogo.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
 import { listarPorPagar, registrarPago } from '../api/pagos'
@@ -153,16 +154,36 @@ function alSoltar(evento: DragEvent) {
   if (!sinSubir.value) tomar(evento.dataTransfer?.files)
 }
 
-async function registrar() {
-  if (!cuota.value || !puedeRegistrar.value || enviando.value) return
+// El gerente puede registrar el pago aunque el sistema no acepte sus vouchers; el backend lo
+// permite solo a él y nunca con un voucher repetido o que aún se revisa.
+const OMITIBLES = new Set(['listo', 'rechazado', 'ilegible', 'fallido'])
+const omitibles = computed(() =>
+  vouchers.filter((v) => v.etapa === 'terminado' && OMITIBLES.has(v.comprobante?.estado ?? '')),
+)
+const puedeOmitir = computed(
+  () =>
+    rol.value === 'gerente' &&
+    !puedeRegistrar.value &&
+    !trabajando.value &&
+    !moraEspera.value &&
+    omitibles.value.length > 0,
+)
+const confirmandoOmision = ref(false)
+
+async function registrar(omitir = false) {
+  if (!cuota.value || enviando.value || !(omitir ? puedeOmitir.value : puedeRegistrar.value)) {
+    return
+  }
   enviando.value = true
   fallo.value = null
   try {
     pago.value = await registrarPago({
       deuda_id: cuota.value.deuda_id,
       cuota: cuota.value.cuota,
-      comprobantes: listos.value.map((v) => v.comprobante!.id),
+      comprobantes: (omitir ? omitibles.value : listos.value).map((v) => v.comprobante!.id),
+      ...(omitir ? { omitir_verificacion: true } : {}),
     })
+    confirmandoOmision.value = false
     await nextTick()
     document.getElementById('titulo-seccion')?.focus()
   } catch (error) {
@@ -441,10 +462,20 @@ onMounted(cargar)
             ancho="completo"
             :cargando="enviando"
             :deshabilitado="!puedeRegistrar"
-            @click="registrar"
+            @click="registrar()"
           >
             Registrar pago
             <BaseIcono nombre="derecha" class="size-4" />
+          </BaseBoton>
+          <BaseBoton
+            v-if="puedeOmitir"
+            class="mt-2"
+            variante="secundario"
+            ancho="completo"
+            :deshabilitado="enviando"
+            @click="confirmandoOmision = true"
+          >
+            Registrar sin la verificación
           </BaseBoton>
           <p class="mt-2.5 text-[11px] text-secundario">
             {{
@@ -456,5 +487,25 @@ onMounted(cargar)
         </div>
       </aside>
     </div>
+
+    <BaseDialogo
+      :abierto="confirmandoOmision"
+      titulo="¿Registrar el pago sin la verificación?"
+      @cerrar="confirmandoOmision = false"
+    >
+      <template #icono>
+        <BaseIcono nombre="alerta" class="size-5" />
+      </template>
+      <p class="mt-3 text-[13px] text-secundario">
+        El sistema no aceptó el voucher. Si lo registras igual, el pago de
+        <strong class="text-tinta">{{ formatearSoles(cuota?.importe ?? 0) }}</strong> quedará
+        confirmado a tu nombre, con la verificación omitida y confianza 0 %.
+      </p>
+      <BaseAviso v-if="fallo" tono="error" class="mt-3">{{ fallo.message }}</BaseAviso>
+      <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <BaseBoton variante="discreto" @click="confirmandoOmision = false">Volver</BaseBoton>
+        <BaseBoton :cargando="enviando" @click="registrar(true)">Registrar igual</BaseBoton>
+      </div>
+    </BaseDialogo>
   </section>
 </template>

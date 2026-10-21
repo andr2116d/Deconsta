@@ -626,3 +626,51 @@ def test_la_operacion_escrita_a_mano_no_respalda_otro_pago(
     repetida = a_mano(asistente, fallido["id"], numero_operacion="0458888")
 
     assert (repetida.status_code, repetida.json()["code"]) == (409, "COMPROBANTE_REPETIDO")
+
+
+def omitiendo(cliente: TestClient, deuda_id: str, *ids: str) -> httpx.Response:
+    return cliente.post(
+        PAGOS,
+        json={"deuda_id": deuda_id, "cuota": 1, "comprobantes": ids, "omitir_verificacion": True},
+    )
+
+
+def test_solo_el_gerente_registra_el_pago_sin_la_verificacion_del_voucher(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    deuda = deuda_de(gerente, 28)
+    voucher(asistente, importe=Decimal("100.00"), lugar=LugarPago.BILLETERA)
+    de_asistente = comprobante(asistente, deuda["id"], 504)
+    assert de_asistente["estado"] == "rechazado"
+    negado = omitiendo(asistente, deuda["id"], de_asistente["id"])
+    assert (negado.status_code, negado.json()["code"]) == (403, "SIN_PERMISO")
+    voucher(gerente, importe=Decimal("100.00"), lugar=LugarPago.BILLETERA, numero_operacion="0459")
+    rechazado = comprobante(gerente, deuda["id"], 505)
+    assert rechazado["estado"] == "rechazado"
+    sin_omitir = pagar(gerente, deuda["id"], rechazado["id"])
+    assert sin_omitir.json()["code"] == "COMPROBANTE_RECHAZADO"
+
+    respuesta = omitiendo(gerente, deuda["id"], rechazado["id"])
+
+    assert respuesta.status_code == 201, respuesta.json()
+    pago = respuesta.json()
+    assert (pago["estado"], pago["importe"], pago["confianza"]) == ("confirmado", "182.40", 0)
+    assert pago["comprobaciones"][0]["codigo"] == "verificacion"
+    # Lo que ya respalda un pago no se reutiliza, ni omitiendo la verificación.
+    otra_vez = omitiendo(gerente, deuda["id"], rechazado["id"])
+    assert (otra_vez.status_code, otra_vez.json()["code"]) == (409, "CUOTA_YA_PAGADA")
+
+
+def test_el_gerente_paga_aunque_el_voucher_no_se_haya_podido_leer(gerente: TestClient) -> None:
+    deuda = deuda_de(gerente, 29)
+    dobles(gerente).revisor.falla = True
+    fallido = comprobante(gerente, deuda["id"], 506)
+    assert fallido["estado"] == "fallido"
+
+    pago = omitiendo(gerente, deuda["id"], fallido["id"]).json()
+
+    assert (pago["estado"], pago["importe"], pago["pagado_el"]) == (
+        "confirmado",
+        "182.40",
+        hoy().isoformat(),
+    )

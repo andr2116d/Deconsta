@@ -193,6 +193,8 @@ class PagoEntrada(Entrada):
     deuda_id: UUID
     cuota: int = Field(ge=1, le=360)
     comprobantes: list[UUID] = Field(default_factory=list, max_length=10)
+    # Solo el gerente: registra el pago aunque el sistema no haya aceptado los vouchers.
+    omitir_verificacion: bool = False
 
 
 class ComprobacionSalida(BaseModel):

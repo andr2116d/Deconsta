@@ -160,6 +160,8 @@ export interface NuevoPago {
   deuda_id: string
   cuota: number
   comprobantes: string[]
+  /** Solo el gerente: registra el pago aunque el sistema no haya aceptado los vouchers. */
+  omitir_verificacion?: boolean
 }
 
 export interface BloqueoPagos {
