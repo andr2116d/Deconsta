@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from app.deudas.dominio.modelos import LugarPago
-from app.documentos.dominio.modelos import Lectura
+from app.documentos.dominio.modelos import Capa, Lectura, Riesgo, Senal
 from app.pagos.dominio.confianza import CONFIANZA_MAXIMA, comprobaciones, confianza
 from app.pagos.dominio.modelos import (
     AnalisisComprobante,
@@ -97,6 +97,19 @@ def test_lo_que_no_es_un_comprobante_en_soles_no_sirve() -> None:
         {"NO_ES_COMPROBANTE"},
     )
     assert revisar(moneda=Moneda.DOLARES)[:2] == (EstadoComprobante.RECHAZADO, {"OTRA_MONEDA"})
+
+
+def test_una_captura_alterada_se_rechaza_aunque_no_se_lea_el_importe() -> None:
+    alteracion = Senal(Capa.IA, "POSIBLE_ALTERACION", "Cifras superpuestas.", Riesgo.ALTO)
+    senales = (*evaluar(replace(VOUCHER, importe=None), LECTURA, ESPERADA, HOY), alteracion)
+
+    assert estado_tras_analisis(AnalisisComprobante(VOUCHER, senales)) is (
+        EstadoComprobante.RECHAZADO
+    )
+    assert cuenta_para_bloqueo(senales) is True
+    # Sin alteración, lo mismo es solo una foto que no se lee: no castiga.
+    sin_importe = evaluar(replace(VOUCHER, importe=None), LECTURA, ESPERADA, HOY)
+    assert cuenta_para_bloqueo(sin_importe) is False
 
 
 def test_sin_importe_o_sin_fecha_se_pide_otra_foto_sin_castigo() -> None:
