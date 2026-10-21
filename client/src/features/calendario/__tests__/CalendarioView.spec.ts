@@ -19,6 +19,7 @@ const VENCIMIENTO = {
   importe: '182.40',
   cuota: 1,
   cuotas: 1,
+  pago: null,
   registrada_por: 'Lucía Vega',
 }
 
@@ -48,6 +49,7 @@ async function montar(query = '?mes=2026-10&dia=2026-10-21') {
       { path: '/ingresar', name: 'inicio-sesion', component: { template: '<p />' } },
       { path: '/registrar-deuda', name: 'registrar-deuda', component: { template: '<p />' } },
       { path: '/por-autorizar', name: 'por-autorizar', component: { template: '<p />' } },
+      { path: '/pagos/registrar', name: 'registrar-pago', component: { template: '<p />' } },
     ],
   })
   await router.push(`/calendario${query}`)

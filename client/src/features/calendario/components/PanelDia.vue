@@ -43,9 +43,14 @@ function estado(v: Vencimiento) {
   return ESTADOS[v.estado]
 }
 
-// Solo lo que espera la decisión del gerente tiene a dónde ir por ahora.
 const decidible = (v: Vencimiento) =>
   props.rol === 'gerente' && (v.estado === 'por_autorizar' || v.revision_pendiente)
+// Lo registrado se paga, lo pague quien lo pague del espacio; lo que espera autorización, no.
+const pagable = (v: Vencimiento) => v.estado === 'registrada' && !v.pago
+const PAGOS = {
+  confirmado: { texto: 'Pagada', clase: 'bg-exito-fondo text-exito' },
+  por_verificar: { texto: 'Pago por verificar', clase: 'bg-rosa text-ciruela' },
+}
 </script>
 
 <template>
@@ -93,6 +98,14 @@ const decidible = (v: Vencimiento) =>
             <p class="text-[11px] text-secundario">Registró {{ v.registrada_por }}</p>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <span
+                v-if="v.pago"
+                class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                :class="PAGOS[v.pago].clase"
+              >
+                {{ PAGOS[v.pago].texto }}
+              </span>
+              <span
+                v-else
                 class="rounded-full px-2 py-0.5 text-[10px] font-bold"
                 :class="TONOS[cercania(v.vence_el, hoy)]"
               >
@@ -102,14 +115,24 @@ const decidible = (v: Vencimiento) =>
                 {{ estado(v).texto }}
               </span>
             </div>
-            <RouterLink
-              v-if="decidible(v)"
-              :to="{ name: 'por-autorizar', query: { deuda: v.deuda_id } }"
-              class="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-acento hover:underline"
-            >
-              {{ v.estado === 'por_autorizar' ? 'Autorizar o rechazar' : 'Revisar' }}
-              <BaseIcono nombre="derecha" class="size-3.5" />
-            </RouterLink>
+            <div v-if="decidible(v) || pagable(v)" class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+              <RouterLink
+                v-if="decidible(v)"
+                :to="{ name: 'por-autorizar', query: { deuda: v.deuda_id } }"
+                class="inline-flex items-center gap-1 text-[12px] font-bold text-acento hover:underline"
+              >
+                {{ v.estado === 'por_autorizar' ? 'Autorizar o rechazar' : 'Revisar' }}
+                <BaseIcono nombre="derecha" class="size-3.5" />
+              </RouterLink>
+              <RouterLink
+                v-if="pagable(v)"
+                :to="{ name: 'registrar-pago', query: { deuda: v.deuda_id, cuota: v.cuota } }"
+                class="inline-flex items-center gap-1 text-[12px] font-bold text-acento hover:underline"
+              >
+                Registrar pago
+                <BaseIcono nombre="derecha" class="size-3.5" />
+              </RouterLink>
+            </div>
           </div>
         </div>
       </li>
