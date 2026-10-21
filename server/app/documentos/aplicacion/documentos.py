@@ -20,6 +20,7 @@ from app.acceso.dominio.modelos import Accion, EventoAuditoria, Rol
 from app.acceso.dominio.puertos import LimitadorSolicitudes, Limite, Reloj
 from app.categorias.aplicacion.categorias import espacio_de
 from app.documentos.dominio.analisis import (
+    NO_ES_DEUDA,
     clave_negocio,
     contrastar,
     estado_tras_analisis,
@@ -28,6 +29,8 @@ from app.documentos.dominio.analisis import (
     numeros_largos,
     senal_ilegible,
     senal_legibilidad,
+    senal_naturaleza,
+    senal_naturaleza_lectura,
     senal_revision_incompleta,
     senal_veredicto,
 )
@@ -285,7 +288,11 @@ class AnalizarDocumento(_OperacionDocumentos):
         lectura = self._lector.leer(contenido, tipo)
         datos: DatosLeidos | None = None
         ilegible = senal_legibilidad(lectura)
-        if ilegible is None:
+        # Un comprobante de pago o un documento de identidad no llega a la IA: no es una deuda.
+        naturaleza = None if ilegible else senal_naturaleza_lectura(lectura)
+        if naturaleza:
+            senales.append(naturaleza)
+        elif ilegible is None:
             try:
                 revision = self._revisor.revisar(contenido, tipo, lectura, categorias)
             except ErrorRevision:
@@ -294,6 +301,8 @@ class AnalizarDocumento(_OperacionDocumentos):
             else:
                 if revision.legible:
                     datos = revision.datos
+                    if no_es := senal_naturaleza(datos, revision.motivos):
+                        senales.append(no_es)
                     senales.extend(contrastar(datos, lectura))
                     if veredicto := senal_veredicto(revision.veredicto, revision.motivos):
                         senales.append(veredicto)
@@ -323,7 +332,14 @@ class AnalizarDocumento(_OperacionDocumentos):
             documento = uow.documentos.por_id(documento_id, bloquear=True)
             if documento is None or documento.estado is not EstadoDocumento.ANALIZANDO:
                 return None
-            repetido = None if ilegible else self._repetido(uow, documento, numeros, huella_clave)
+            # Lo que no es una deuda no se compara: el comprobante del pago de un recibo comparte
+            # sus números y no debe contar como el recibo repetido.
+            no_es_deuda = any(s.codigo in NO_ES_DEUDA for s in analisis.senales)
+            repetido = (
+                None
+                if ilegible or no_es_deuda
+                else self._repetido(uow, documento, numeros, huella_clave)
+            )
             if ilegible:
                 documento.estado = EstadoDocumento.ILEGIBLE
             elif repetido:

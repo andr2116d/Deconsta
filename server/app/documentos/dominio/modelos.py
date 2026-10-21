@@ -35,6 +35,9 @@ class EstadoDocumento(StrEnum):
     REPETIDO = "repetido"
     # Muestra señales claras de alteración y lo subió una asistente.
     RECHAZADO = "rechazado"
+    # No es una deuda por pagar (un comprobante de un pago ya hecho, una cotización) y lo subió una
+    # asistente.
+    NO_ES_DEUDA = "no_es_deuda"
     # El análisis no pudo completarse por un problema técnico.
     FALLIDO = "fallido"
 
@@ -44,9 +47,25 @@ class TipoDocumento(StrEnum):
     BOLETA = "boleta"
     FACTURA = "factura"
     CRONOGRAMA = "cronograma"
+    # De una tarjeta de crédito: el pago del mes es la deuda.
+    ESTADO_CUENTA = "estado_cuenta"
     PAPELETA = "papeleta"
     TRIBUTO = "tributo"
+    # Constancia de un pago ya hecho (Yape, Plin, transferencia, depósito, voucher de POS).
+    COMPROBANTE_PAGO = "comprobante_pago"
     OTRO = "otro"
+
+
+class Naturaleza(StrEnum):
+    """Qué es el documento respecto de una deuda."""
+
+    POR_PAGAR = "por_pagar"
+    # Cobra algo que ya figura pagado: sello CANCELADO, nada por pagar, boleta al contado.
+    YA_PAGADA = "ya_pagada"
+    # Prueba un pago hecho: no cobra nada.
+    PAGO_REALIZADO = "pago_realizado"
+    # No es un documento de cobro: cotización, proforma, guía, nota de crédito, identidad, chat.
+    NO_ES_DEUDA = "no_es_deuda"
 
 
 class Riesgo(StrEnum):
@@ -88,6 +107,7 @@ class DatosLeidos:
     """Lo que la revisión con IA leyó del documento. Cualquier campo puede faltar."""
 
     tipo: TipoDocumento = TipoDocumento.OTRO
+    naturaleza: Naturaleza = Naturaleza.POR_PAGAR
     emisor: str | None = None
     emisor_ruc: str | None = None
     concepto: str | None = None

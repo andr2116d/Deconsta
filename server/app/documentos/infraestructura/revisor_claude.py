@@ -25,6 +25,7 @@ from app.documentos.dominio.modelos import (
     CuotaLeida,
     DatosLeidos,
     Lectura,
+    Naturaleza,
     TipoArchivo,
     TipoDocumento,
 )
@@ -57,8 +58,21 @@ como null: no inventes ni deduzcas números.
 motivos.
 - Fechas en formato AAAA-MM-DD.
 - tipo_documento: recibo_servicio (luz, agua, gas, telefonía, internet, cable), boleta o factura \
-(comprobantes electrónicos con serie y número), cronograma (de un préstamo o crédito), papeleta \
-(multas de tránsito o municipales), tributo (impuestos, arbitrios, predial) u otro.
+(comprobantes electrónicos con serie y número), cronograma (de un préstamo o crédito), \
+estado_cuenta (de una tarjeta de crédito), papeleta (multas de tránsito o municipales), tributo \
+(impuestos, arbitrios, predial), comprobante_pago (constancia de un pago ya hecho: Yape, Plin, \
+transferencia, depósito, voucher de POS o de agente) u otro.
+- naturaleza: qué es el documento respecto de una deuda. "por_pagar" si cobra algo pendiente: un \
+recibo con importe a pagar, una factura o boleta a crédito o con saldo pendiente, un cronograma \
+con cuotas pendientes, un estado de cuenta con su pago del mes, una papeleta, un tributo, una \
+pensión. "ya_pagada" si cobra algo que ya figura pagado: sello CANCELADO o PAGADO, nada por \
+pagar (S/ 0.00), una boleta o factura al contado sin saldo pendiente. "pago_realizado" si prueba \
+un pago hecho en vez de cobrarlo: la pantalla o constancia de un Yape, un Plin, una \
+transferencia, un depósito, un pago en agente o banca por internet, el voucher de una tarjeta. \
+"no_es_deuda" si no cobra nada: cotización, proforma, presupuesto, nota de pedido, guía de \
+remisión, nota de crédito (es un saldo a favor), un documento de identidad, un contrato sin \
+montos, una captura de un chat, publicidad o una foto que no es un documento; explica en motivos \
+qué es.
 - emisor: la empresa o entidad que emite el documento; emisor_ruc, su RUC si aparece.
 - titular: la persona o empresa a cuyo nombre está el documento (cliente, usuario, deudor o \
 comprador), nunca el emisor. titular_tipo_documento: dni, ce o ruc.
@@ -66,7 +80,8 @@ comprador), nunca el emisor. titular_tipo_documento: dni, ce o ruc.
 de crédito.
 - numero_documento: serie y número del comprobante, número del recibo o de la papeleta.
 - periodo: el mes facturado, AAAA-MM, si el documento lo indica.
-- importe_total: el total a pagar. En un cronograma, la suma de las cuotas que listas.
+- importe_total: el total a pagar. En un cronograma, la suma de las cuotas que listas. En un \
+estado de cuenta, el pago total del mes. Si no hay nada por pagar, null.
 - vence_el: la fecha límite de pago. En un cronograma, la de la primera cuota pendiente.
 - cuotas: solo en cronogramas; cada cuota pendiente con su número, su vencimiento y el importe \
 total de esa cuota (no solo el capital). En los demás documentos, una lista vacía.
@@ -90,8 +105,17 @@ sin nombres, documentos de identidad ni otros datos personales.
 
 Esfuerzo = Literal["low", "medium", "high", "xhigh", "max"]
 TipoIa = Literal[
-    "recibo_servicio", "boleta", "factura", "cronograma", "papeleta", "tributo", "otro"
+    "recibo_servicio",
+    "boleta",
+    "factura",
+    "cronograma",
+    "estado_cuenta",
+    "papeleta",
+    "tributo",
+    "comprobante_pago",
+    "otro",
 ]
+NaturalezaIa = Literal["por_pagar", "ya_pagada", "pago_realizado", "no_es_deuda"]
 LugarIa = Literal[
     "ventanilla", "agente", "banca_digital", "transferencia", "billetera", "debito_automatico"
 ]
@@ -106,6 +130,7 @@ class CuotaIa(BaseModel):
 class RespuestaIa(BaseModel):
     legible: bool
     tipo_documento: TipoIa
+    naturaleza: NaturalezaIa
     emisor: str | None
     emisor_ruc: str | None
     titular_nombre: str | None
@@ -162,6 +187,7 @@ def datos_de(respuesta: RespuestaIa, categorias: list[CategoriaConocida]) -> Dat
     existente = respuesta.categoria_existente if respuesta.categoria_existente in nombres else None
     return DatosLeidos(
         tipo=TipoDocumento(respuesta.tipo_documento),
+        naturaleza=Naturaleza(respuesta.naturaleza),
         emisor=_texto(respuesta.emisor, 120),
         emisor_ruc=_texto(respuesta.emisor_ruc, 11),
         concepto=_texto(respuesta.concepto_sugerido, 80),

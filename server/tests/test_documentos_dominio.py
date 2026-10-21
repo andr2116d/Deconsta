@@ -12,6 +12,8 @@ from app.documentos.dominio.analisis import (
     evaluar_metadatos,
     mismos_numeros,
     senal_legibilidad,
+    senal_naturaleza,
+    senal_naturaleza_lectura,
 )
 from app.documentos.dominio.archivos import detectar_tipo, limpiar_nombre, validar_archivo
 from app.documentos.dominio.errores import ArchivoDemasiadoGrande, ArchivoInvalido, ArchivoVacio
@@ -22,6 +24,7 @@ from app.documentos.dominio.modelos import (
     DatosLeidos,
     EstadoDocumento,
     Lectura,
+    Naturaleza,
     Riesgo,
     Senal,
     TipoArchivo,
@@ -147,3 +150,52 @@ def test_la_fecha_de_modificacion_posterior_es_solo_informativa() -> None:
     assert [(s.codigo, s.riesgo) for s in senales] == [
         ("FECHA_MODIFICACION_POSTERIOR", Riesgo.BAJO)
     ]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "¡Yapeaste!\nS/ 50\nMaría Pérez\n21 oct. 2026 - 10:15 am\nNro. de operación 01234567",
+        "¡Te yapearon!\nS/ 120.00\nJuan Torres",
+        "Plineaste S/ 35.00 a Rosa Díaz\nCódigo de operación 998877",
+        "CONSTANCIA DE TRANSFERENCIA\nOperación realizada con éxito\nCuenta destino 191-...",
+        "Constancia de Pago\nHIDRANDINA S.A. Suministro 54871236\nImporte pagado S/ 182.40",
+        "Transferencia exitosa\nInterbank\nMonto S/ 300.00",
+    ],
+)
+def test_la_constancia_de_un_pago_hecho_no_es_una_deuda(texto: str) -> None:
+    senal = senal_naturaleza_lectura(Lectura(texto, 0.95, 1))
+    assert senal is not None
+    assert (senal.codigo, senal.riesgo) == ("COMPROBANTE_DE_PAGO", Riesgo.ALTO)
+
+
+def test_un_recibo_por_pagar_no_se_confunde_con_una_constancia() -> None:
+    # Los recibos también dicen dónde pagar y traen números de operación de su pago anterior.
+    texto = TEXTO_RECIBO + "\nPaga en agentes BCP, Yape o banca por internet\nN° de operación 123"
+    assert senal_naturaleza_lectura(Lectura(texto, 0.95, 1)) is None
+
+
+def test_un_documento_de_identidad_no_es_una_deuda() -> None:
+    texto = "REPÚBLICA DEL PERÚ\nREGISTRO NACIONAL DE IDENTIFICACIÓN Y ESTADO CIVIL\nDNI 45678912"
+    senal = senal_naturaleza_lectura(Lectura(texto, 0.95, 1))
+    assert senal is not None and senal.codigo == "NO_ES_DEUDA"
+
+
+def test_la_naturaleza_que_lee_la_ia_decide_si_es_una_deuda() -> None:
+    pago = senal_naturaleza(DatosLeidos(naturaleza=Naturaleza.PAGO_REALIZADO))
+    cotizacion = senal_naturaleza(
+        DatosLeidos(naturaleza=Naturaleza.NO_ES_DEUDA), ["Es una cotización de un taller"]
+    )
+    pagada = senal_naturaleza(DatosLeidos(naturaleza=Naturaleza.YA_PAGADA))
+    assert pago is not None and (pago.codigo, pago.riesgo) == ("COMPROBANTE_DE_PAGO", Riesgo.ALTO)
+    assert cotizacion is not None and cotizacion.detalle == "Es una cotización de un taller."
+    assert pagada is not None and (pagada.codigo, pagada.riesgo) == ("YA_PAGADA", Riesgo.MEDIO)
+    assert senal_naturaleza(DatosLeidos(naturaleza=Naturaleza.POR_PAGAR)) is None
+
+
+def test_lo_que_no_es_deuda_no_lo_registra_la_asistente_y_al_gerente_se_le_advierte() -> None:
+    voucher = Analisis(
+        None, (Senal(Capa.LECTURA, "COMPROBANTE_DE_PAGO", "Es un Yape.", Riesgo.ALTO),)
+    )
+    assert estado_tras_analisis(voucher, Rol.ASISTENTE) is EstadoDocumento.NO_ES_DEUDA
+    assert estado_tras_analisis(voucher, Rol.GERENTE) is EstadoDocumento.LISTO

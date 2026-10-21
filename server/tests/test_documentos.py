@@ -4,9 +4,9 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from app.documentos.dominio.modelos import DatosLeidos, TipoDocumento
+from app.documentos.dominio.modelos import DatosLeidos, Naturaleza, TipoDocumento
 from tests.conftest import Equipo, consultar
-from tests.dobles import Dobles, imagen, pdf
+from tests.dobles import TEXTO_RECIBO, Dobles, imagen, pdf
 from tests.test_categorias import sesion
 from tests.test_contrasena_y_desbloqueo import base_de
 
@@ -173,6 +173,70 @@ def test_la_ia_recibe_las_categorias_del_espacio(
     gerente.post("/api/v1/categorias", json={"nombre": "Luz", "descripcion": "Recibos de luz"})
     subir(asistente, imagen(8))
     assert [c.nombre for c in dobles(cliente).revisor.categorias] == ["Luz"]
+
+
+VOUCHER_YAPE = "¡Yapeaste!\nS/ 182.40\nHidrandina\n21 oct. 2026\nNro. de operación 01234567"
+
+
+def test_un_voucher_de_yape_no_es_una_deuda_ni_llega_a_la_ia(
+    cliente: TestClient, asistente: TestClient
+) -> None:
+    from tests.test_deudas import registrar
+
+    dobles(cliente).lector.texto = VOUCHER_YAPE
+    documento = subir(asistente, imagen(20))
+
+    assert documento["estado"] == "no_es_deuda"
+    assert [s["codigo"] for s in documento["senales"]] == ["COMPROBANTE_DE_PAGO"]
+    assert dobles(cliente).revisor.revisiones == 0
+    respuesta = registrar(asistente, documento["id"])
+    assert (respuesta.status_code, respuesta.json()["code"]) == (409, "DOCUMENTO_NO_ES_DEUDA")
+
+
+def test_al_gerente_un_voucher_solo_se_le_advierte(
+    cliente: TestClient, gerente: TestClient
+) -> None:
+    from tests.test_deudas import registrar
+
+    dobles(cliente).lector.texto = VOUCHER_YAPE
+    documento = subir(gerente, imagen(21))
+    assert documento["estado"] == "listo"
+    registro = registrar(gerente, documento["id"]).json()
+    assert any("pago ya hecho" in aviso for aviso in registro["avisos"])
+
+
+def test_la_ia_reconoce_lo_que_no_cobra_nada_y_lo_ya_pagado(
+    cliente: TestClient, asistente: TestClient
+) -> None:
+    revisor = dobles(cliente).revisor
+    revisor.datos = replace(LEIDO, naturaleza=Naturaleza.NO_ES_DEUDA)
+    revisor.motivos = ("Es una cotización de un taller mecánico",)
+    cotizacion = subir(asistente, imagen(22))
+    assert cotizacion["estado"] == "no_es_deuda"
+    assert cotizacion["senales"][0]["detalle"] == "Es una cotización de un taller mecánico."
+
+    revisor.datos = replace(LEIDO, naturaleza=Naturaleza.YA_PAGADA, periodo="2026-11")
+    revisor.motivos = ()
+    pagada = subir(asistente, imagen(23))
+    assert (pagada["estado"], pagada["riesgo"]) == ("listo", "medio")
+    assert "YA_PAGADA" in [s["codigo"] for s in pagada["senales"]]
+
+
+def test_el_voucher_del_pago_de_un_recibo_no_cuenta_como_recibo_repetido(
+    cliente: TestClient, asistente: TestClient
+) -> None:
+    from tests.test_deudas import registrar
+
+    recibo = subir(asistente, imagen(24))
+    registrar(asistente, recibo["id"])
+    # La constancia de pago repite el suministro, el número de recibo y el RUC del recibo.
+    dobles(cliente).lector.texto = "Constancia de pago\n" + TEXTO_RECIBO
+    voucher = subir(asistente, imagen(25))
+
+    assert voucher["estado"] == "no_es_deuda"
+    assert voucher["repetido_de"] is None
+    intentos = consultar(base_de(cliente), "SELECT count(*) FROM intento_documento_repetido")
+    assert intentos == [(0,)]
 
 
 def test_un_pdf_editado_despues_queda_dudoso(cliente: TestClient, asistente: TestClient) -> None:
