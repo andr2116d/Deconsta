@@ -200,6 +200,27 @@ def bloque_documento(contenido: bytes, tipo: TipoArchivo) -> dict[str, Any]:
     return {"type": "image", "source": {"type": "base64", "media_type": media, "data": datos}}
 
 
+def contexto_de(lectura: Lectura, categorias: list[CategoriaConocida]) -> str:
+    """Lo que acompaña al documento: las categorías del espacio y el texto que leyó el OCR."""
+    lista = "\n".join(
+        f"- {c.nombre}" + (f": {c.descripcion}" if c.descripcion else "") for c in categorias
+    )
+    return (
+        f"Categorías del espacio:\n{lista or '(ninguna)'}\n\n"
+        "Texto que leyó el OCR (puede tener errores; úsalo solo para contrastar):\n"
+        f"<texto_ocr>\n{lectura.texto[:MAXIMO_TEXTO_LECTURA]}\n</texto_ocr>"
+    )
+
+
+def revision_de(resultado: RespuestaIa, categorias: list[CategoriaConocida]) -> RevisionIa:
+    return RevisionIa(
+        legible=resultado.legible,
+        datos=datos_de(resultado, categorias),
+        veredicto=resultado.veredicto,
+        motivos=tuple(m for m in (_texto(m, 200) for m in resultado.motivos[:3]) if m),
+    )
+
+
 class RevisorClaude:
     def __init__(self, api_key: str | None, modelo: str, esfuerzo: Esfuerzo) -> None:
         self._cliente = (
@@ -218,14 +239,7 @@ class RevisorClaude:
         if self._cliente is None:
             logger.warning("Falta ANTHROPIC_API_KEY: la revisión con IA no se ejecuta")
             raise ErrorRevision("Sin clave de API")
-        lista = "\n".join(
-            f"- {c.nombre}" + (f": {c.descripcion}" if c.descripcion else "") for c in categorias
-        )
-        contexto = (
-            f"Categorías del espacio:\n{lista or '(ninguna)'}\n\n"
-            "Texto que leyó el OCR (puede tener errores; úsalo solo para contrastar):\n"
-            f"<texto_ocr>\n{lectura.texto[:MAXIMO_TEXTO_LECTURA]}\n</texto_ocr>"
-        )
+        contexto = contexto_de(lectura, categorias)
         try:
             respuesta = self._cliente.beta.messages.parse(
                 model=self._modelo,
@@ -255,10 +269,4 @@ class RevisorClaude:
         if respuesta.stop_reason == "refusal" or respuesta.parsed_output is None:
             logger.warning("La revisión con IA no devolvió datos (%s)", respuesta.stop_reason)
             raise ErrorRevision("Sin respuesta usable")
-        resultado = respuesta.parsed_output
-        return RevisionIa(
-            legible=resultado.legible,
-            datos=datos_de(resultado, categorias),
-            veredicto=resultado.veredicto,
-            motivos=tuple(m for m in (_texto(m, 200) for m in resultado.motivos[:3]) if m),
-        )
+        return revision_de(respuesta.parsed_output, categorias)
