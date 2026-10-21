@@ -18,11 +18,11 @@ Requisitos: Node (versión de `.nvmrc`) con corepack, uv y Docker.
 ```bash
 corepack enable
 pnpm install
-(cd server && uv sync)
-cp server/.env.example server/.env   # y genera CLAVE_CIFRADO_DATOS y CLAVE_HUELLA_DATOS
+(cd server && uv sync --group ocr)
+cp server/.env.example server/.env   # y genera las tres claves CLAVE_*
 pnpm services:up                      # Postgres, Redis y SeaweedFS
 pnpm init:gerente --nombres ...       # crea el primer gerente; ver server/README.md
-pnpm dev                              # client, server y worker
+pnpm dev                              # client, server y worker OCR
 ```
 
 La API aplica las migraciones pendientes al arrancar. El client queda en http://localhost:5173 y
