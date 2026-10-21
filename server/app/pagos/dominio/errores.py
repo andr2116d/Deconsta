@@ -109,6 +109,15 @@ class RegistroPagosBloqueado(ErrorPagos):
         super().__init__()
 
 
+class PagoNoEncontrado(ErrorPagos):
+    codigo = "PAGO_NO_ENCONTRADO"
+    mensaje = "No encontramos ese pago en tu espacio."
+
+
+class PagoYaDecidido(ErrorPagos):
+    codigo = "ESTADO_NO_PERMITE"
+
+
 class BloqueoPagosNoEncontrado(ErrorPagos):
     codigo = "BLOQUEO_NO_ENCONTRADO"
     mensaje = "Esa asistente puede registrar pagos: no tiene un bloqueo vigente."

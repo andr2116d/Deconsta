@@ -12,6 +12,8 @@ from app.pagos.dominio.errores import (
     ErrorPagos,
     ImporteNoCoincide,
     PagoInvalido,
+    PagoNoEncontrado,
+    PagoYaDecidido,
     RegistroPagosBloqueado,
 )
 
@@ -19,6 +21,8 @@ ESTADOS_HTTP: dict[type[ErrorPagos], int] = {
     RegistroPagosBloqueado: 403,
     ComprobanteNoEncontrado: 404,
     BloqueoPagosNoEncontrado: 404,
+    PagoNoEncontrado: 404,
+    PagoYaDecidido: 409,
     CuotaNoPagable: 409,
     ComprobanteNoUsable: 409,
     CamposFaltantes: 422,

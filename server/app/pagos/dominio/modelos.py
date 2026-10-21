@@ -18,6 +18,7 @@ from uuid import UUID
 
 from app.deudas.dominio.modelos import EstadoPago, LugarPago
 from app.documentos.dominio.modelos import Riesgo, Senal, TipoArchivo
+from app.pagos.dominio.errores import PagoYaDecidido
 
 
 class EstadoComprobante(StrEnum):
@@ -129,3 +130,25 @@ class Pago:
     comprobaciones: tuple[Comprobacion, ...]
     registrado_en: datetime
     comprobantes: tuple[UUID, ...] = ()
+    decidido_por: UUID | None = None
+    decidido_en: datetime | None = None
+    motivo_decision: str | None = None
+
+    def _decidir(self, estado: EstadoPago, por: UUID, ahora: datetime, motivo: str | None) -> None:
+        if self.estado is not EstadoPago.POR_VERIFICAR:
+            raise PagoYaDecidido(
+                "Este pago ya fue confirmado."
+                if self.estado is EstadoPago.CONFIRMADO
+                else "Este pago ya fue devuelto."
+            )
+        self.estado = estado
+        self.decidido_por = por
+        self.decidido_en = ahora
+        self.motivo_decision = motivo
+
+    def confirmar(self, por: UUID, ahora: datetime) -> None:
+        self._decidir(EstadoPago.CONFIRMADO, por, ahora, None)
+
+    def devolver(self, por: UUID, ahora: datetime, motivo: str) -> None:
+        """La cuota vuelve a estar por pagar; los comprobantes no respaldan otro pago."""
+        self._decidir(EstadoPago.DEVUELTO, por, ahora, motivo)

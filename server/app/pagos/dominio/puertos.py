@@ -8,6 +8,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from app.acceso.dominio.puertos import RegistroAuditoria
+from app.deudas.dominio.modelos import EstadoPago
 from app.deudas.dominio.puertos import RepositorioDeudas
 from app.documentos.dominio.bloqueos import Bloqueo
 from app.documentos.dominio.modelos import Lectura, TipoArchivo
@@ -55,6 +56,8 @@ class RepositorioComprobantes(Protocol):
 
     def operacion_usada(self, gerente_id: UUID, huella: bytes) -> bool: ...
 
+    def del_pago(self, pago_id: UUID) -> list[Comprobante]: ...
+
     def vincular(self, comprobantes: list[UUID], pago_id: UUID) -> None:
         """Lanza ComprobanteNoUsable("COMPROBANTE_YA_USADO") si el archivo o la operación de
         alguno ya respaldan otro pago del espacio."""
@@ -66,8 +69,18 @@ class RepositorioPagos(Protocol):
         """Lanza CuotaNoPagable("CUOTA_YA_PAGADA") si la cuota ya tiene un pago vigente."""
         ...
 
-    def del_espacio(self, gerente_id: UUID) -> list[Pago]:
+    def por_id(self, pago_id: UUID, *, bloquear: bool = False) -> Pago | None: ...
+
+    def guardar(self, pago: Pago) -> None:
+        """Guarda el estado y la decisión del gerente."""
+        ...
+
+    def del_espacio(self, gerente_id: UUID, *, estado: EstadoPago | None = None) -> list[Pago]:
         """Los más recientes primero, con los ids de sus comprobantes."""
+        ...
+
+    def devoluciones(self, gerente_id: UUID) -> dict[tuple[UUID, int], str]:
+        """El motivo de la última devolución de cada cuota que sigue por pagar."""
         ...
 
 

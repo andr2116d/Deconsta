@@ -6,10 +6,19 @@ import { ErrorApi } from '@/shared/api/http'
 import { descargarDocumento } from '../api/deudas'
 
 /**
- * Muestra el archivo de una deuda. Llega por la API, con la sesión, como un blob local: no hay
- * enlaces públicos ni el archivo queda en la caché del navegador.
+ * Muestra el archivo de una deuda o de un comprobante. Llega por la API, con la sesión, como un blob
+ * local: no hay enlaces públicos ni el archivo queda en la caché del navegador.
  */
-const props = defineProps<{ documentoId: string; tipo: string; titulo: string }>()
+const props = withDefaults(
+  defineProps<{
+    documentoId: string
+    tipo: string
+    titulo: string
+    /** De dónde se descarga: por omisión, el documento de una deuda. */
+    descargar?: (id: string) => Promise<Blob>
+  }>(),
+  { descargar: descargarDocumento },
+)
 
 const url = ref<string | null>(null)
 const fallo = ref<string | null>(null)
@@ -25,7 +34,7 @@ async function cargar(id: string) {
   liberar()
   fallo.value = null
   try {
-    const archivo = await descargarDocumento(id)
+    const archivo = await props.descargar(id)
     if (propio === turno) url.value = URL.createObjectURL(archivo)
   } catch (error) {
     if (propio === turno)

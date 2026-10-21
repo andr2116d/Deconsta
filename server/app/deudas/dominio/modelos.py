@@ -51,10 +51,11 @@ class MotivoEspera(StrEnum):
 
 
 class EstadoPago(StrEnum):
-    """El pago vigente de una cuota."""
+    """Por verificar y confirmado son vigentes: cuentan para su cuota. Devuelto, no."""
 
     POR_VERIFICAR = "por_verificar"
     CONFIRMADO = "confirmado"
+    DEVUELTO = "devuelto"
 
 
 @dataclass(frozen=True)

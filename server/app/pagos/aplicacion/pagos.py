@@ -17,7 +17,7 @@ por verificar y se avisa al gerente con la confianza calculada; el del gerente q
 
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -58,6 +58,7 @@ from app.pagos.dominio.errores import (
     CuotaNoPagable,
     ImporteNoCoincide,
     PagoInvalido,
+    PagoNoEncontrado,
     RegistroPagosBloqueado,
 )
 from app.pagos.dominio.modelos import (
@@ -87,6 +88,9 @@ from app.pagos.dominio.reglas import (
 from app.reglas.dominio.importes import formatear_soles
 
 logger = logging.getLogger(__name__)
+
+LARGO_MOTIVO = 500
+LARGO_MOTIVO_EN_AVISO = 280
 
 ESTADOS_COMPROBANTE = {
     EstadoComprobante.ANALIZANDO: "COMPROBANTE_EN_ANALISIS",
@@ -513,6 +517,8 @@ class CuotaPorPagar:
     cuota: Cuota
     vencida_hace: int | None
     registrada_por: str
+    # Por qué el gerente devolvió el último pago de esta cuota, si lo devolvió.
+    devuelto_por: str | None = None
 
 
 @dataclass(frozen=True)
@@ -539,7 +545,9 @@ class ListarPorPagar(_OperacionPagos):
         primero."""
         hoy = self._hoy()
         with self._unidad() as uow:
-            deudas = uow.deudas.por_pagar(espacio_de(sesion))
+            gerente_id = espacio_de(sesion)
+            deudas = uow.deudas.por_pagar(gerente_id)
+            devueltas = uow.pagos.devoluciones(gerente_id)
             nombres: dict[UUID, str] = {}
             cuotas = [
                 CuotaPorPagar(
@@ -547,6 +555,7 @@ class ListarPorPagar(_OperacionPagos):
                     d.por_pagar[0],
                     d.vencida_hace(hoy),
                     _nombre(uow, d.registrada_por, nombres),
+                    devueltas.get((d.id, d.por_pagar[0].numero)),
                 )
                 for d in deudas
                 if d.por_pagar
@@ -702,10 +711,12 @@ class RegistrarPago(_OperacionPagos):
 
 
 class ListarPagos(_OperacionPagos):
-    def ejecutar(self, sesion: SesionActiva) -> list[PagoConDetalle]:
-        """Los pagos del espacio, los más recientes primero."""
+    def ejecutar(
+        self, sesion: SesionActiva, *, estado: EstadoPago | None = None
+    ) -> list[PagoConDetalle]:
+        """Los pagos del espacio, los más recientes primero; con `estado`, solo esos."""
         with self._unidad() as uow:
-            pagos = uow.pagos.del_espacio(espacio_de(sesion))
+            pagos = uow.pagos.del_espacio(espacio_de(sesion), estado=estado)
             nombres: dict[UUID, str] = {}
             conceptos: dict[UUID, str] = {}
             resultado = []
@@ -721,6 +732,114 @@ class ListarPagos(_OperacionPagos):
                     )
                 )
             return resultado
+
+
+@dataclass(frozen=True)
+class PagoConComprobantes:
+    detalle: PagoConDetalle
+    comprobantes: list[Comprobante]
+    cuotas: int
+
+
+class ConsultarPago(_OperacionPagos):
+    def ejecutar(self, sesion: SesionActiva, pago_id: UUID) -> PagoConComprobantes:
+        """Del espacio: lo ven el gerente y sus asistentes."""
+        with self._unidad() as uow:
+            pago = uow.pagos.por_id(pago_id)
+            if pago is None or pago.gerente_id != espacio_de(sesion):
+                raise PagoNoEncontrado()
+            deuda = uow.deudas.por_id(pago.deuda_id)
+            return PagoConComprobantes(
+                PagoConDetalle(
+                    pago, deuda.concepto if deuda else "", _nombre(uow, pago.registrado_por, {})
+                ),
+                uow.comprobantes.del_pago(pago.id),
+                len(deuda.cuotas) if deuda else 1,
+            )
+
+
+def _motivo(motivo: str | None) -> str:
+    limpio = " ".join((motivo or "").split())
+    if not limpio:
+        mensaje = "Escribe por qué devuelves este pago: tu asistente lo verá."
+        raise PagoInvalido(mensaje, campos={"motivo": mensaje})
+    if len(limpio) > LARGO_MOTIVO:
+        mensaje = f"Usa como máximo {LARGO_MOTIVO} caracteres."
+        raise PagoInvalido(mensaje, campos={"motivo": mensaje})
+    return limpio
+
+
+class _DecisionPago(_OperacionPagos):
+    """Solo el gerente decide, con la fila del pago tomada con FOR UPDATE: dos decisiones
+    simultáneas no se pisan. Se audita y, si lo registró una asistente, se le avisa."""
+
+    def _decidir(self, sesion: SesionActiva, pago_id: UUID, motivo: str | None) -> Pago:
+        if sesion.usuario.rol is not Rol.GERENTE:
+            raise SinPermiso()
+        self._cupo(sesion)
+        avisos = Avisos(self._publicador)
+        with self._unidad() as uow:
+            pago = uow.pagos.por_id(pago_id, bloquear=True)
+            if pago is None or pago.gerente_id != sesion.usuario.id:
+                raise PagoNoEncontrado()
+            ahora = self._reloj()
+            if motivo is None:
+                pago.confirmar(sesion.usuario.id, ahora)
+            else:
+                pago.devolver(sesion.usuario.id, ahora, motivo)
+            uow.pagos.guardar(pago)
+            confirmado = pago.estado is EstadoPago.CONFIRMADO
+            uow.auditoria.registrar(
+                EventoAuditoria(
+                    Accion.PAGO_CONFIRMADO if confirmado else Accion.PAGO_DEVUELTO,
+                    actor_id=sesion.usuario.id,
+                    cuenta_id=pago.registrado_por,
+                    motivo=pago.motivo_decision,
+                    detalle={"pago_id": str(pago.id), "deuda_id": str(pago.deuda_id)},
+                )
+            )
+            deuda = uow.deudas.por_id(pago.deuda_id)
+            if pago.registrado_por != sesion.usuario.id and deuda:
+                avisos.guardar(uow.notificaciones, self._aviso(pago, deuda.concepto, ahora))
+        avisos.enviar()
+        return pago
+
+    @staticmethod
+    def _aviso(pago: Pago, concepto: str, ahora: datetime) -> Notificacion:
+        importe = formatear_soles(pago.importe)
+        if pago.estado is EstadoPago.CONFIRMADO:
+            return nueva_notificacion(
+                pago.registrado_por,
+                TipoNotificacion.PAGO_CONFIRMADO,
+                f"pago:{pago.id}:confirmado",
+                "Tu gerente confirmó un pago",
+                f"El pago de «{concepto}» por {importe} quedó confirmado.",
+                ahora,
+                deuda_id=pago.deuda_id,
+            )
+        motivo = pago.motivo_decision or ""
+        if len(motivo) > LARGO_MOTIVO_EN_AVISO:
+            motivo = motivo[: LARGO_MOTIVO_EN_AVISO - 1].rstrip() + "…"
+        return nueva_notificacion(
+            pago.registrado_por,
+            TipoNotificacion.PAGO_DEVUELTO,
+            f"pago:{pago.id}:devuelto",
+            "Tu gerente devolvió un pago",
+            f"Devolvió el pago de «{concepto}» por {importe}: {motivo} La cuota vuelve a estar "
+            "por pagar; sube el comprobante correcto.",
+            ahora,
+            deuda_id=pago.deuda_id,
+        )
+
+
+class ConfirmarPago(_DecisionPago):
+    def ejecutar(self, sesion: SesionActiva, pago_id: UUID) -> Pago:
+        return self._decidir(sesion, pago_id, None)
+
+
+class DevolverPago(_DecisionPago):
+    def ejecutar(self, sesion: SesionActiva, pago_id: UUID, motivo: str | None) -> Pago:
+        return self._decidir(sesion, pago_id, _motivo(motivo))
 
 
 class _OperacionBloqueosPagos(_OperacionPagos):

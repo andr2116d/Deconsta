@@ -1,6 +1,14 @@
 import { descargar, enviarFormulario, enviarJson, solicitar } from '@/shared/api/http'
 
-import type { BloqueoPagos, Comprobante, NuevoPago, Pago, PorPagar } from '../types'
+import type {
+  BloqueoPagos,
+  Comprobante,
+  EstadoPago,
+  NuevoPago,
+  Pago,
+  PagoDetalle,
+  PorPagar,
+} from '../types'
 
 const comprobante = (id: string) => `/pagos/comprobantes/${encodeURIComponent(id)}`
 
@@ -22,7 +30,18 @@ export const descargarComprobante = (id: string) => descargar(`${comprobante(id)
 
 export const registrarPago = (datos: NuevoPago) => enviarJson<Pago>('/pagos', datos)
 
-export const listarPagos = () => solicitar<Pago[]>('/pagos')
+const pago = (id: string, accion = '') =>
+  `/pagos/${encodeURIComponent(id)}${accion ? `/${accion}` : ''}`
+
+export const listarPagos = (estado?: EstadoPago) =>
+  solicitar<Pago[]>(estado ? `/pagos?estado=${estado}` : '/pagos')
+
+export const consultarPago = (id: string) => solicitar<PagoDetalle>(pago(id))
+
+export const confirmarPago = (id: string) => enviarJson<PagoDetalle>(pago(id, 'confirmacion'))
+
+export const devolverPago = (id: string, motivo: string) =>
+  enviarJson<PagoDetalle>(pago(id, 'devolucion'), { motivo })
 
 export const listarBloqueosPagos = () => solicitar<BloqueoPagos[]>('/registro-pagos/bloqueos')
 

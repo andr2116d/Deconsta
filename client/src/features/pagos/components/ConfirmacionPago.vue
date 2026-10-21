@@ -16,7 +16,9 @@ import type { Pago } from '../types'
 const props = defineProps<{ pago: Pago; rol: Rol }>()
 
 const confirmado = computed(() => props.pago.estado === 'confirmado')
-const avisos = computed(() => props.pago.comprobaciones.filter((c) => c.resultado === 'aviso'))
+const avisos = computed(
+  () => props.pago.comprobaciones?.filter((c) => c.resultado === 'aviso') ?? [],
+)
 </script>
 
 <template>

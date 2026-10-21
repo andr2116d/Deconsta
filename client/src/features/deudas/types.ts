@@ -21,8 +21,8 @@ export type LugarPago =
 
 export type EstadoDeuda = 'por_autorizar' | 'registrada' | 'rechazada' | 'anulada'
 
-/** El pago vigente de una cuota. */
-export type EstadoPago = 'por_verificar' | 'confirmado'
+/** Por verificar y confirmado cuentan para su cuota; devuelto, no. */
+export type EstadoPago = 'por_verificar' | 'confirmado' | 'devuelto'
 
 export type MotivoEspera =
   'IMPORTE_SOBRE_LIMITE' | 'TITULAR_DISTINTO' | 'DOCUMENTO_DUDOSO' | 'DATOS_CORREGIDOS'

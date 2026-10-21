@@ -79,6 +79,7 @@ export const SECCIONES: readonly Seccion[] = [
     icono: 'check',
     ubicacion: 'pestana',
     roles: ['gerente'],
+    vista: () => import('@/features/pagos/views/PorVerificarView.vue'),
   },
   {
     nombre: 'pagos-por-completar',

@@ -99,10 +99,14 @@ def test_la_asistente_paga_con_su_voucher_y_el_gerente_recibe_la_confianza(
         "182.40",
         "agente",
     )
-    assert 0 < pago["confianza"] <= 95
-    assert {c["codigo"] for c in pago["comprobaciones"]} >= {"importe", "codigo_pago", "fecha"}
+    # La confianza es para el gerente: a la asistente no se le dice qué comprobaciones pasó.
+    assert (pago["confianza"], pago["comprobaciones"]) == (None, None)
+    [por_verificar] = gerente.get(PAGOS, params={"estado": "por_verificar"}).json()
+    assert 0 < por_verificar["confianza"] <= 95
+    codigos = {c["codigo"] for c in por_verificar["comprobaciones"]}
+    assert codigos >= {"importe", "codigo_pago", "fecha"}
     [aviso] = [n for n in notificaciones(gerente) if n["tipo"] == "PAGO_POR_VERIFICAR"]
-    assert f"{pago['confianza']} %" in aviso["cuerpo"]
+    assert f"{por_verificar['confianza']} %" in aviso["cuerpo"]
     # La cuota ya no falta pagarse y la deuda no se anula mientras el pago espera.
     assert rosa.get(f"{PAGOS}/por-pagar").json()["cuotas"] == []
     detalle = gerente.get(f"{DEUDAS}/{deuda['id']}").json()
@@ -273,3 +277,66 @@ def test_dos_registros_simultaneos_de_la_misma_cuota_crean_un_solo_pago(
 
     assert sorted(r.status_code for r in respuestas) == [201, 409]
     assert len(gerente.get(PAGOS).json()) == 1
+
+
+def registrado(asistente: TestClient, gerente: TestClient, semilla: int) -> tuple[dict, dict]:
+    """Una deuda del gerente que la asistente pagó con un voucher: el pago espera verificación."""
+    deuda = deuda_de(gerente, semilla)
+    voucher(asistente, numero_operacion=f"07{semilla:06d}")
+    leido = comprobante(asistente, deuda["id"], 200 + semilla)
+    pago = pagar(asistente, deuda["id"], leido["id"])
+    assert pago.status_code == 201, pago.json()
+    return deuda, pago.json()
+
+
+def test_el_gerente_ve_los_comprobantes_y_confirma_el_pago(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    deuda, pago = registrado(asistente, gerente, 11)
+    detalle = gerente.get(f"{PAGOS}/{pago['id']}").json()
+    [voucher_leido] = detalle["detalle_comprobantes"]
+    assert voucher_leido["lectura"]["numero_operacion"] == "07000011"
+    assert detalle["confianza"] is not None
+
+    confirmado = gerente.post(f"{PAGOS}/{pago['id']}/confirmacion")
+
+    assert (confirmado.status_code, confirmado.json()["estado"]) == (200, "confirmado")
+    assert "PAGO_CONFIRMADO" in [n["tipo"] for n in notificaciones(asistente)]
+    cuota = gerente.get(f"{DEUDAS}/{deuda['id']}").json()["cuotas"][0]
+    assert cuota["pago"] == "confirmado"
+    otra_vez = gerente.post(f"{PAGOS}/{pago['id']}/devolucion", json={"motivo": "No"})
+    assert (otra_vez.status_code, otra_vez.json()["code"]) == (409, "ESTADO_NO_PERMITE")
+
+
+def test_un_pago_devuelto_vuelve_la_cuota_por_pagar_y_su_voucher_no_se_reutiliza(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    deuda, pago = registrado(asistente, gerente, 12)
+    sin_motivo = gerente.post(f"{PAGOS}/{pago['id']}/devolucion", json={"motivo": "  "})
+    assert (sin_motivo.status_code, set(sin_motivo.json()["fields"])) == (422, {"motivo"})
+
+    devuelto = gerente.post(
+        f"{PAGOS}/{pago['id']}/devolucion", json={"motivo": "El voucher es de otro mes."}
+    )
+
+    assert devuelto.json()["estado"] == "devuelto"
+    [aviso] = [n for n in notificaciones(asistente) if n["tipo"] == "PAGO_DEVUELTO"]
+    assert "El voucher es de otro mes." in aviso["cuerpo"]
+    [cuota] = asistente.get(f"{PAGOS}/por-pagar").json()["cuotas"]
+    assert (cuota["deuda_id"], cuota["devuelto_por"]) == (deuda["id"], "El voucher es de otro mes.")
+    # El mismo voucher no respalda otro pago, ni siquiera de la misma cuota.
+    voucher(asistente, numero_operacion="07000012")
+    assert comprobante(asistente, deuda["id"], 212)["estado"] == "repetido"
+
+
+def test_solo_el_gerente_de_su_espacio_decide_un_pago(
+    cliente: TestClient, asistente: TestClient, gerente: TestClient, equipo: Equipo
+) -> None:
+    _, pago = registrado(asistente, gerente, 13)
+    otro = sesion(cliente, equipo.otro_gerente)
+
+    propio = asistente.post(f"{PAGOS}/{pago['id']}/confirmacion")
+    assert (propio.status_code, propio.json()["code"]) == (403, "SIN_PERMISO")
+    ajeno = otro.post(f"{PAGOS}/{pago['id']}/confirmacion")
+    assert (ajeno.status_code, ajeno.json()["code"]) == (404, "PAGO_NO_ENCONTRADO")
+    assert otro.get(f"{PAGOS}/{pago['id']}").status_code == 404
