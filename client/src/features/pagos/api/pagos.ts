@@ -3,6 +3,7 @@ import { descargar, enviarFormulario, enviarJson, solicitar } from '@/shared/api
 import type {
   BloqueoPagos,
   Comprobante,
+  DatosAMano,
   EstadoMora,
   EstadoPago,
   Mora,
@@ -40,6 +41,10 @@ export function subirComprobante(
 }
 
 export const consultarComprobante = (id: string) => solicitar<Comprobante>(comprobante(id))
+
+/** Si la lectura automática falló, quien lo subió escribe sus datos; el gerente lo verá. */
+export const completarComprobante = (id: string, datos: DatosAMano) =>
+  enviarJson<Comprobante>(`${comprobante(id)}/datos`, datos)
 
 /** El archivo descifrado, solo para quien lo subió y su gerente. */
 export const descargarComprobante = (id: string) => descargar(`${comprobante(id)}/contenido`)
