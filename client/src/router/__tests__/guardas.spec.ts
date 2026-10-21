@@ -56,6 +56,34 @@ describe('guardas de navegación', () => {
     },
   )
 
+  it('deja entrar al espacio con la contraseña temporal si no queda ningún paso', async () => {
+    simularFetch(respuesta(200, { ...SESION, pasos_pendientes: [] }))
+    const router = await routerNuevo()
+
+    await router.push('/calendario')
+
+    expect(router.currentRoute.value.name).toBe('calendario')
+  })
+
+  it('lleva al inicio propio a quien abre una sección de otro rol', async () => {
+    simularFetch(respuesta(200, SESION_HABILITADA))
+    const router = await routerNuevo()
+
+    await router.push('/por-autorizar')
+
+    expect(router.currentRoute.value.name).toBe('inicio')
+  })
+
+  it('pone en el título de la pestaña el nombre de la sección según el rol', async () => {
+    simularFetch(respuesta(200, SESION_HABILITADA))
+    const router = await routerNuevo()
+
+    await router.push('/')
+
+    expect(router.currentRoute.value.name).toBe('inicio')
+    expect(document.title).toBe('Mi jornada · Deconsta')
+  })
+
   it('saca de la bienvenida a quien ya completó los pasos', async () => {
     simularFetch(respuesta(200, SESION_HABILITADA))
     const router = await routerNuevo()

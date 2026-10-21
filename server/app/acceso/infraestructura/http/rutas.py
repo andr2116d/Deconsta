@@ -1,7 +1,7 @@
 """Rutas HTTP del acceso.
 
 Resultados del inicio de sesión: 200 con la sesión (pasos_pendientes indica qué falta del primer
-ingreso: cambiar la contraseña temporal y aceptar los documentos vigentes), 422
+ingreso: aceptar los documentos vigentes; debe_cambiar_contrasena, si sigue la temporal), 422
 CAMPOS_OBLIGATORIOS, 401 CREDENCIALES_INCORRECTAS, 423 CUENTA_BLOQUEADA,
 429 DEMASIADAS_SOLICITUDES con Retry-After, 503 SERVICIO_NO_DISPONIBLE y 500 ERROR_INTERNO.
 

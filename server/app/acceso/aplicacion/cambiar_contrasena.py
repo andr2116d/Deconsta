@@ -73,7 +73,7 @@ class CambiarContrasena:
                         detalle={"era_inicial": era_inicial, "sesiones_cerradas": cerradas},
                     )
                 )
-                pasos = pasos_pendientes(usuario, uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+                pasos = pasos_pendientes(uow.documentos.hay_sin_aceptar(usuario.id, ahora))
         if fallo is not None:
             raise fallo
         return SesionActiva(sesion.sesion_id, usuario, pasos)

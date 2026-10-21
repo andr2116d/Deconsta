@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import { useSesionStore } from '@/features/acceso/stores/sesion'
+import type { Rol } from '@/features/acceso/types'
+import { rutasDelEspacio, textoPorRol, type Seccion } from '@/features/espacio/secciones'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -9,13 +11,16 @@ declare module 'vue-router' {
     soloInvitados?: boolean
     /** Pantalla de los pasos del primer ingreso: solo mientras quede alguno pendiente. */
     incorporacion?: boolean
+    /** Sección del espacio de trabajo que muestra la ruta. */
+    seccion?: Seccion
+    /** Roles que ven la ruta. Sin indicarlo, cualquier cuenta con sesión. */
+    roles?: readonly Rol[]
   }
 }
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', redirect: { name: 'inicio' } },
     {
       path: '/ingresar',
       name: 'inicio-sesion',
@@ -35,10 +40,10 @@ const router = createRouter({
       meta: { titulo: 'Cambia tu contraseña', requiereSesion: true },
     },
     {
-      path: '/inicio',
-      name: 'inicio',
-      component: () => import('@/features/proximamente/views/ProximamenteView.vue'),
-      meta: { titulo: 'Inicio', requiereSesion: true },
+      path: '/',
+      component: () => import('@/features/espacio/layouts/EspacioLayout.vue'),
+      meta: { titulo: 'Tu espacio', requiereSesion: true },
+      children: [{ path: '', redirect: { name: 'inicio' } }, ...rutasDelEspacio()],
     },
     { path: '/:ruta(.*)*', redirect: { name: 'inicio' } },
   ],
@@ -60,10 +65,16 @@ router.beforeEach(async (destino) => {
     return { name: 'incorporacion' }
   }
   if (destino.meta.incorporacion && !pendiente) return { name: 'inicio' }
+  // Una sección de otro rol lleva al inicio propio (por ejemplo, un enlace compartido).
+  const rol = sesion.usuario?.rol
+  if (rol && destino.meta.roles && !destino.meta.roles.includes(rol)) return { name: 'inicio' }
 })
 
 router.afterEach((destino) => {
-  document.title = `${destino.meta.titulo} · Deconsta`
+  // El inicio se llama distinto para cada rol (Resumen o Mi jornada).
+  const rol = useSesionStore().usuario?.rol
+  const { seccion, titulo } = destino.meta
+  document.title = `${seccion && rol ? textoPorRol(seccion.etiqueta, rol) : titulo} · Deconsta`
 })
 
 export default router

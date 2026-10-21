@@ -162,8 +162,8 @@ def consultar(url: str, sql: str, *parametros: object) -> list[tuple[Any, ...]]:
 
 
 def habilitar(url: str, *usuarios: uuid.UUID) -> None:
-    """Deja cuentas con la incorporación completa (contraseña cambiada y documentos vigentes
-    aceptados) para probar rutas de trabajo sin repetir el flujo."""
+    """Deja cuentas con la contraseña cambiada y los documentos vigentes aceptados para probar
+    rutas de trabajo sin repetir el flujo."""
     with psycopg.connect(conninfo(url)) as conexion:
         for usuario in usuarios:
             conexion.execute(

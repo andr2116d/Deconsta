@@ -103,12 +103,9 @@ class IncorporacionPendiente(ErrorAcceso):
 
     def __init__(self, pasos: Sequence[str]) -> None:
         self.pasos = list(pasos)
-        mensaje = (
-            "Primero cambia tu contraseña temporal."
-            if "cambiar_contrasena" in self.pasos
-            else "Acepta los términos de uso y la política de privacidad vigentes para continuar."
+        super().__init__(
+            "Acepta los términos de uso y la política de privacidad vigentes para continuar."
         )
-        super().__init__(mensaje)
 
 
 class DocumentosDesactualizados(ErrorAcceso):

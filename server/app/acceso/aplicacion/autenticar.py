@@ -30,7 +30,7 @@ class Autenticar:
             usuario = uow.usuarios.por_id(sesion.usuario_id, bloquear=False) if sesion else None
             if sesion is None or usuario is None or usuario.bloqueada:
                 raise NoAutenticado()
-            pasos = pasos_pendientes(usuario, uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+            pasos = pasos_pendientes(uow.documentos.hay_sin_aceptar(usuario.id, ahora))
         return SesionActiva(sesion.id, usuario, pasos)
 
 

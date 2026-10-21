@@ -6,14 +6,12 @@ import { useSesionStore } from '@/features/acceso/stores/sesion'
 import type { Sesion } from '@/features/acceso/types'
 import MarcaDeconsta from '@/shared/components/MarcaDeconsta.vue'
 
-import ModalCambioContrasena from '../components/ModalCambioContrasena.vue'
 import PasoPrivacidad from '../components/PasoPrivacidad.vue'
 import PasosIncorporacion from '../components/PasosIncorporacion.vue'
 
 // El paso que se muestra sale de la sesión que devuelve el backend, nunca de la navegación.
 const router = useRouter()
 const sesion = useSesionStore()
-const contrasenaCambiada = ref(false)
 const saliendo = ref(false)
 
 function irAlIngreso() {
@@ -25,17 +23,6 @@ function sesionTerminada() {
   irAlIngreso()
 }
 
-// Se deduce del cambio de paso y no de un evento de la ventana: al guardar, la sesión se actualiza
-// y la ventana se desmonta antes de poder avisar.
-watch(
-  () => sesion.pasoActual,
-  (actual, anterior) => {
-    if (anterior === 'cambiar_contrasena' && actual === 'aceptar_documentos') {
-      contrasenaCambiada.value = true
-    }
-  },
-)
-
 // Sin pasos pendientes, la cuenta ya puede entrar a su espacio.
 watch(
   () => sesion.autenticada && sesion.pasoActual === null,
@@ -43,7 +30,7 @@ watch(
     if (!completa) return
     router.replace({
       name: 'inicio',
-      state: { aviso: 'Todo listo. Tu contraseña y tus autorizaciones quedaron registradas.' },
+      state: { aviso: 'Todo listo. Tus autorizaciones quedaron registradas.' },
     })
   },
 )
@@ -83,16 +70,9 @@ async function salir() {
           :paso-actual="sesion.pasoActual"
           class="mt-8 mb-6"
         />
-        <ModalCambioContrasena
-          v-if="sesion.pasoActual === 'cambiar_contrasena'"
-          :saliendo="saliendo"
-          @salir="salir"
-          @sesion-terminada="sesionTerminada"
-        />
         <PasoPrivacidad
-          v-else-if="sesion.pasoActual === 'aceptar_documentos'"
+          v-if="sesion.pasoActual === 'aceptar_documentos'"
           :usuario="sesion.usuario"
-          :contrasena-cambiada="contrasenaCambiada"
           :saliendo="saliendo"
           @aceptada="alAceptar"
           @salir="salir"

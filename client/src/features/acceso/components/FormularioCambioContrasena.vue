@@ -11,7 +11,8 @@ import { useSesionStore } from '../stores/sesion'
 import MedidorSeguridad from './MedidorSeguridad.vue'
 
 defineProps<{ inicial: boolean }>()
-// Con la contraseña temporal (inicial) el cambio es obligatorio: no hay forma de omitirlo.
+// Con la contraseña temporal (inicial) no hay «Volver»: la ventana que lo contiene decide cómo
+// posponer el cambio.
 const emit = defineEmits<{ cambiada: []; volver: []; 'sesion-terminada': [] }>()
 
 type Campo = 'contrasena_actual' | 'contrasena_nueva' | 'confirmacion'

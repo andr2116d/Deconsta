@@ -1,10 +1,9 @@
 from collections.abc import Mapping
 
 from app.acceso.aplicacion.autenticar import SesionActiva
-from app.acceso.dominio.errores import IncorporacionPendiente, NoAutenticado
+from app.acceso.dominio.errores import NoAutenticado
 from app.acceso.dominio.incorporacion import (
     DocumentoVigente,
-    PasoPendiente,
     TipoDocumentoLegal,
     documentos_a_aceptar,
     pasos_pendientes,
@@ -42,8 +41,6 @@ class AceptarDocumentos:
             usuario = uow.usuarios.por_id(sesion.usuario.id, bloquear=True)
             if usuario is None or usuario.bloqueada:
                 raise NoAutenticado()
-            if usuario.debe_cambiar_contrasena:
-                raise IncorporacionPendiente([PasoPendiente.CAMBIAR_CONTRASENA])
             documentos = documentos_a_aceptar(uow.documentos.vigentes(ahora), aceptados)
             registrar = uow.documentos.registrar_aceptacion
             nuevos = [d for d in documentos if registrar(usuario.id, d.id, ahora)]
@@ -60,5 +57,5 @@ class AceptarDocumentos:
                         },
                     )
                 )
-            pasos = pasos_pendientes(usuario, uow.documentos.hay_sin_aceptar(usuario.id, ahora))
+            pasos = pasos_pendientes(uow.documentos.hay_sin_aceptar(usuario.id, ahora))
         return SesionActiva(sesion.sesion_id, usuario, pasos)

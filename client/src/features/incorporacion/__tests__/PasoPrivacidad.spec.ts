@@ -25,7 +25,6 @@ async function montar() {
   const paso = mount(PasoPrivacidad, {
     props: {
       usuario: SESION_HABILITADA.usuario as Usuario,
-      contrasenaCambiada: true,
       saliendo: false,
     },
   })

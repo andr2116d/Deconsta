@@ -1,7 +1,8 @@
 """Incorporación de una cuenta: los pasos obligatorios antes de entrar a su espacio.
 
-Primero se reemplaza la contraseña temporal; después se aceptan los términos de uso y la política
-de privacidad vigentes. Mientras quede un paso, la sesión solo sirve para completarlo.
+El único paso obligatorio es aceptar los términos de uso y la política de privacidad vigentes.
+Mientras quede pendiente, la sesión solo sirve para completarlo. Cambiar la contraseña temporal es
+recomendado pero no bloquea: la sesión lo informa en `debe_cambiar_contrasena` para recordarlo.
 """
 
 from collections.abc import Iterable, Mapping
@@ -10,13 +11,11 @@ from datetime import datetime
 from enum import StrEnum
 
 from app.acceso.dominio.errores import DatosInvalidos, DocumentosDesactualizados
-from app.acceso.dominio.modelos import Usuario
 
 ACEPTACION_INCOMPLETA = "Acepta los términos de uso y la política de privacidad para continuar."
 
 
 class PasoPendiente(StrEnum):
-    CAMBIAR_CONTRASENA = "cambiar_contrasena"
     ACEPTAR_DOCUMENTOS = "aceptar_documentos"
 
 
@@ -48,13 +47,8 @@ class DocumentoVigente:
     aceptado_en: datetime | None
 
 
-def pasos_pendientes(
-    usuario: Usuario, hay_documentos_sin_aceptar: bool
-) -> tuple[PasoPendiente, ...]:
+def pasos_pendientes(hay_documentos_sin_aceptar: bool) -> tuple[PasoPendiente, ...]:
     """Pasos que faltan, en el orden en que deben completarse."""
-    if usuario.debe_cambiar_contrasena:
-        # Los documentos se piden después: aceptar con una contraseña temporal no vale.
-        return (PasoPendiente.CAMBIAR_CONTRASENA,)
     if hay_documentos_sin_aceptar:
         return (PasoPendiente.ACEPTAR_DOCUMENTOS,)
     return ()

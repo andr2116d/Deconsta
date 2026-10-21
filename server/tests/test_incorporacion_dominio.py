@@ -9,8 +9,7 @@ from app.acceso.dominio.incorporacion import (
     documentos_a_aceptar,
     pasos_pendientes,
 )
-from app.acceso.dominio.modelos import Rol
-from tests.test_acceso_dominio import AHORA, usuario
+from tests.test_acceso_dominio import AHORA
 
 TERMINOS, PRIVACIDAD = TipoDocumentoLegal.TERMINOS, TipoDocumentoLegal.PRIVACIDAD
 
@@ -22,12 +21,10 @@ def documento(tipo: TipoDocumentoLegal, version: int) -> DocumentoLegal:
 VIGENTES = [documento(TERMINOS, 2), documento(PRIVACIDAD, 1)]
 
 
-def test_la_contrasena_temporal_va_antes_que_los_documentos() -> None:
-    cuenta = usuario(Rol.ASISTENTE)
-    assert pasos_pendientes(cuenta, True) == (PasoPendiente.CAMBIAR_CONTRASENA,)
-    cuenta.debe_cambiar_contrasena = False
-    assert pasos_pendientes(cuenta, True) == (PasoPendiente.ACEPTAR_DOCUMENTOS,)
-    assert pasos_pendientes(cuenta, False) == ()
+def test_solo_los_documentos_sin_aceptar_retienen_la_cuenta() -> None:
+    # La contraseña temporal no es un paso: se recuerda, pero no bloquea el espacio.
+    assert pasos_pendientes(True) == (PasoPendiente.ACEPTAR_DOCUMENTOS,)
+    assert pasos_pendientes(False) == ()
 
 
 def test_acepta_solo_las_versiones_vigentes_de_todos_los_documentos() -> None:
