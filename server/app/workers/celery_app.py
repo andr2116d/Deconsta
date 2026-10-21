@@ -8,8 +8,3 @@ celery_app.conf.update(
     timezone=settings.timezone,
     enable_utc=True,
 )
-
-
-@celery_app.task
-def sumar(a: int, b: int) -> int:
-    return a + b

@@ -17,8 +17,6 @@ uv run celery -A app.workers.celery_app:celery_app worker -Q general --loglevel=
 uv run pytest                                      # tests
 uv run ruff check . && uv run ruff format .        # lint y formato
 uv run mypy app                                    # tipos
-uv run alembic revision --autogenerate -m "..."    # nueva migración
-uv run alembic upgrade head                        # aplicar migraciones
 ```
 
 ## Dependencias
