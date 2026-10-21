@@ -4,5 +4,5 @@ for i in $(seq 1 30); do
   fi
   sleep 1
 done
-docker compose exec -T seaweedfs sh -c 'echo "s3.bucket.create -name control-pagos" | weed shell' >/dev/null 2>&1 || true
-echo "Bucket control-pagos listo"
+docker compose exec -T seaweedfs sh -c 'echo "s3.bucket.create -name deconsta" | weed shell' >/dev/null 2>&1 || true
+echo "Bucket deconsta listo"

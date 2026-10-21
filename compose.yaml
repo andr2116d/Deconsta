@@ -1,4 +1,4 @@
-name: control-de-pagos
+name: deconsta
 
 services:
   postgres:
@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: control_pagos
+      POSTGRES_DB: deconsta
       TZ: America/Lima
     ports:
       - "5432:5432"
@@ -14,7 +14,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d control_pagos"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d deconsta"]
       interval: 5s
       timeout: 3s
       retries: 10

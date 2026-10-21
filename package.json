@@ -1,5 +1,5 @@
 {
-  "name": "control-de-pagos",
+  "name": "deconsta",
   "private": true,
   "scripts": {
     "prepare": "husky",

@@ -33,7 +33,7 @@ def crear_app(config: Settings = settings, contenedor: Contenedor | None = None)
 
     produccion = config.entorno == "produccion"
     app = FastAPI(
-        title="Control de Pagos",
+        title="Deconsta",
         lifespan=ciclo_de_vida,
         docs_url=None if produccion else "/docs",
         redoc_url=None,
