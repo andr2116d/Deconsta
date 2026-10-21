@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = None
     ia_modelo: str = "claude-sonnet-5-5"
     ia_esfuerzo: Literal["low", "medium", "high", "xhigh", "max"] = "high"
+    # Hilos de CPU de cada proceso del worker para PaddleOCR. Con varios procesos, conviene repartir
+    # los núcleos entre ellos (núcleos / OCR_CONCURRENCIA); vacío, lo decide Paddle.
+    ocr_hilos: int | None = Field(default=None, ge=1, le=64)
 
     sesion_duracion_minutos: int = Field(default=480, ge=5, le=1440)
     cookie_sesion_nombre: str = "deconsta_sesion"

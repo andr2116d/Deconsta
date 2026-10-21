@@ -71,7 +71,7 @@ class Componentes:
                 estilo_ruta=config.s3_estilo_ruta,
             ),
             inspector=InspectorArchivosLocal(),
-            lector=LectorPaddle(),
+            lector=LectorPaddle(hilos=config.ocr_hilos),
             revisor=revisor,
             revisor_comprobantes=RevisorComprobantesIa(revisor),
             publicador=PublicadorRedis(redis),
