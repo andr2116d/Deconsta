@@ -6,6 +6,7 @@ import DialogoCategoria from '@/features/categorias/components/DialogoCategoria.
 import InsigniaCategoria from '@/features/categorias/components/InsigniaCategoria.vue'
 import { useCategoriasStore } from '@/features/categorias/stores/categorias'
 import type { Categoria, DatosCategoria, IconoCategoria } from '@/features/categorias/types'
+import { diasEntre, hoyLocal } from '@/features/calendario/fechas'
 import CampoDocumentoTitular from '@/features/reglas/components/CampoDocumentoTitular.vue'
 import { avisoImporte, filtrarImporte, normalizarImporte } from '@/features/reglas/importes'
 import type { TipoDocumentoTitular } from '@/features/reglas/types'
@@ -16,7 +17,7 @@ import BaseCampo from '@/shared/components/BaseCampo.vue'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
 import { registrarDeuda } from '../api/deudas'
-import { LUGARES_PAGO, TIPOS_DOCUMENTO } from '../catalogo'
+import { LUGARES_PAGO, textoVencida, TIPOS_DOCUMENTO } from '../catalogo'
 import { cuotasPropuestas } from '../cuotas'
 import type { CuotaNueva, Documento, LugarPago, RegistroDeuda } from '../types'
 import TablaCuotas from './TablaCuotas.vue'
@@ -48,7 +49,7 @@ const iniciales = cuotasPropuestas(propuesta)
 const datos = reactive({
   concepto: propuesta?.concepto ?? '',
   categoria_id: '',
-  lugar_pago: (propuesta?.lugar_pago ?? null) as LugarPago | null,
+  lugares_pago: (propuesta?.lugar_pago ? [propuesta.lugar_pago] : []) as LugarPago[],
   en_cuotas: propuesta?.tipo === 'cronograma' || iniciales.length > 1,
   importe: iniciales[0]?.importe ?? '',
   vence_el: iniciales[0]?.vence_el ?? '',
@@ -98,6 +99,12 @@ const origen = computed(() => {
   const tipo = TIPOS_DOCUMENTO[propuesta.tipo].toLowerCase()
   const emisor = propuesta.emisor?.replace(/\.+$/, '')
   return emisor ? `tu ${tipo} de ${emisor}` : `tu ${tipo}`
+})
+// Solo orienta: el backend cuenta los días en la zona del espacio.
+const vencidaHace = computed(() => {
+  const vence = datos.en_cuotas ? datos.cuotas[0]?.vence_el : datos.vence_el
+  const dias = vence ? diasEntre(vence, hoyLocal()) : 0
+  return dias > 0 ? dias : null
 })
 const categoriaElegida = computed(() => categorias.activas.find((c) => c.id === datos.categoria_id))
 
@@ -171,7 +178,7 @@ async function enviar() {
       documento_id: props.documento.id,
       concepto: datos.concepto,
       categoria_id: datos.categoria_id || null,
-      lugar_pago: datos.lugar_pago,
+      lugares_pago: datos.lugares_pago,
       cuotas,
       titular_nombre: datos.titular_nombre || null,
       titular_tipo_documento: datos.titular_tipo,
@@ -263,6 +270,10 @@ async function enviar() {
           </div>
         </Transition>
       </div>
+      <BaseAviso v-if="vencidaHace" tono="aviso" :titulo="textoVencida(vencidaHace)">
+        Puedes registrarla y pagarla igual. Antes de pagar, confirma con la empresa si cobra mora
+        por los días de retraso.
+      </BaseAviso>
     </section>
 
     <section class="border-b border-borde py-5">
@@ -343,31 +354,34 @@ async function enviar() {
       </Transition>
 
       <fieldset>
-        <legend :id="idLugar" class="mb-2 text-[12px] font-bold">¿Dónde se pagará?</legend>
-        <div class="grid gap-2 sm:grid-cols-2" :data-error="errores.lugar_pago ? '' : undefined">
+        <legend :id="idLugar" class="text-[12px] font-bold">¿Dónde se puede pagar?</legend>
+        <p class="mt-0.5 mb-2 text-[12px] text-secundario">
+          Marca todos los que acepta la empresa: el voucher del pago deberá ser de uno de ellos.
+        </p>
+        <div class="grid gap-2 sm:grid-cols-2" :data-error="errores.lugares_pago ? '' : undefined">
           <label
             v-for="lugar in LUGARES_PAGO"
             :key="lugar.valor"
             class="flex cursor-pointer items-center gap-3 rounded-[10px] border p-3 transition-colors duration-200 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-acento"
             :class="
-              datos.lugar_pago === lugar.valor
+              datos.lugares_pago.includes(lugar.valor)
                 ? 'border-acento bg-acento-suave'
-                : errores.lugar_pago
+                : errores.lugares_pago
                   ? 'border-error bg-white'
                   : 'border-borde bg-white hover:border-control'
             "
           >
             <input
-              v-model="datos.lugar_pago"
-              type="radio"
-              name="lugar_pago"
+              v-model="datos.lugares_pago"
+              type="checkbox"
+              name="lugares_pago"
               :value="lugar.valor"
               class="sr-only"
             />
             <span
               aria-hidden="true"
               class="grid size-9 shrink-0 place-items-center rounded-lg text-acento"
-              :class="datos.lugar_pago === lugar.valor ? 'bg-white' : 'bg-fondo'"
+              :class="datos.lugares_pago.includes(lugar.valor) ? 'bg-white' : 'bg-fondo'"
             >
               <BaseIcono :nombre="lugar.icono" class="size-[18px]" />
             </span>
@@ -376,14 +390,14 @@ async function enviar() {
               <small class="block text-[11px] text-secundario">{{ lugar.detalle }}</small>
             </span>
             <BaseIcono
-              v-if="datos.lugar_pago === lugar.valor"
+              v-if="datos.lugares_pago.includes(lugar.valor)"
               nombre="check"
               class="size-4 animate-aparecer text-acento"
             />
           </label>
         </div>
-        <p v-if="errores.lugar_pago" class="mt-1.5 text-[12px] text-error">
-          {{ errores.lugar_pago }}
+        <p v-if="errores.lugares_pago" class="mt-1.5 text-[12px] text-error">
+          {{ errores.lugares_pago }}
         </p>
       </fieldset>
     </section>

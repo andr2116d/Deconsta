@@ -47,6 +47,12 @@ export const LUGARES_PAGO: readonly {
   },
 ]
 
+/** «Agente o agencia, Billetera digital», en el orden de la lista. */
+export const nombresLugares = (lugares: readonly LugarPago[]) =>
+  LUGARES_PAGO.filter((l) => lugares.includes(l.valor))
+    .map((l) => l.etiqueta)
+    .join(', ')
+
 export const TIPOS_DOCUMENTO: Record<TipoDocumento, string> = {
   recibo_servicio: 'Recibo de servicio',
   boleta: 'Boleta',
@@ -89,3 +95,7 @@ const fecha = new Intl.DateTimeFormat('es-PE', {
 
 /** «28 oct 2026». Las fechas de la deuda son días, sin hora: se leen en UTC. */
 export const formatearFecha = (dia: string) => fecha.format(new Date(`${dia}T00:00:00Z`))
+
+/** «Venció ayer», «Venció hace 11 días». */
+export const textoVencida = (dias: number) =>
+  dias === 1 ? 'Venció ayer' : `Venció hace ${dias} días`

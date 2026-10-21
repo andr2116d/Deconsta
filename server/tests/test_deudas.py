@@ -33,7 +33,7 @@ def registrar(cliente: TestClient, documento_id: str, **cambios: Any) -> httpx.R
     cuerpo = {
         "documento_id": documento_id,
         "concepto": "Luz de la casa",
-        "lugar_pago": "agente",
+        "lugares_pago": ["agente"],
         "cuotas": [{"vence_el": VENCE, "importe": "182.40"}],
         "titular_nombre": "Valentina Ramos Díaz",
         "codigo_pago": "54871236",
@@ -57,15 +57,15 @@ def test_el_formulario_con_campos_obligatorios_vacios_dice_cuales_faltan(
     asistente: TestClient,
 ) -> None:
     documento = subir(asistente, imagen(1))
-    respuesta = registrar(asistente, documento["id"], concepto=" ", lugar_pago=None, cuotas=[])
+    respuesta = registrar(asistente, documento["id"], concepto=" ", lugares_pago=[], cuotas=[])
 
     assert respuesta.status_code == 422
     assert respuesta.json()["code"] == "CAMPOS_OBLIGATORIOS"
     assert set(respuesta.json()["fields"]) == {"concepto"}
     # Con el concepto, el dominio marca los demás.
-    respuesta = registrar(asistente, documento["id"], lugar_pago=None, cuotas=[])
+    respuesta = registrar(asistente, documento["id"], lugares_pago=[], cuotas=[])
     assert respuesta.json()["code"] == "DATOS_INVALIDOS"
-    assert set(respuesta.json()["fields"]) == {"lugar_pago", "cuotas"}
+    assert set(respuesta.json()["fields"]) == {"lugares_pago", "cuotas"}
 
 
 def test_lo_que_registra_la_asistente_se_paga_y_se_notifica_al_gerente(
@@ -88,6 +88,35 @@ def test_lo_que_registra_la_asistente_se_paga_y_se_notifica_al_gerente(
     otra_vez = gerente.post(f"{DEUDAS}/{deuda['id']}/revision")
     assert (otra_vez.status_code, otra_vez.json()["code"]) == (409, "ESTADO_NO_PERMITE")
     assert gerente.get(DEUDAS, params={"pendientes": True}).json() == []
+
+
+def test_una_deuda_vencida_se_registra_en_varios_lugares_y_avisa_la_posible_mora(
+    asistente: TestClient, gerente: TestClient
+) -> None:
+    atrasada = date.today() - timedelta(days=30)
+    deuda = nueva(
+        asistente,
+        3,
+        lugares_pago=["billetera", "agente", "banca_digital"],
+        cuotas=[{"vence_el": atrasada.isoformat(), "importe": "182.40"}],
+    )["deuda"]
+    # El servidor cuenta los días en la zona del espacio, no en la del cliente.
+    calendario = asistente.get(
+        f"{DEUDAS}/calendario", params={"desde": atrasada, "hasta": atrasada}
+    ).json()
+    vencida_hace = (date.fromisoformat(calendario["hoy"]) - atrasada).days
+
+    assert deuda["estado"] == "registrada"
+    assert deuda["lugares_pago"] == ["agente", "banca_digital", "billetera"]
+    assert deuda["vencida_hace"] == vencida_hace
+    detalle = asistente.get(f"{DEUDAS}/{deuda['id']}").json()
+    assert (detalle["lugares_pago"], detalle["vencida_hace"]) == (
+        deuda["lugares_pago"],
+        vencida_hace,
+    )
+    assert calendario["vencimientos"][0]["lugares_pago"] == deuda["lugares_pago"]
+    [aviso] = notificaciones(gerente)
+    assert "la empresa podría cobrar mora" in aviso["cuerpo"]
 
 
 def test_sobre_el_limite_espera_al_gerente_y_su_decision_se_notifica(

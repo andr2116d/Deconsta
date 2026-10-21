@@ -80,7 +80,7 @@ def _recortar(texto: str, largo: int) -> str:
 class NuevaDeuda:
     documento_id: UUID
     concepto: str
-    lugar_pago: str | None
+    lugares_pago: list[str]
     cuotas: list[CuotaEnviada]
     categoria_id: UUID | None = None
     titular_nombre: str | None = None
@@ -101,6 +101,8 @@ class DeudaConDetalle:
     deuda: Deuda
     documento: Documento | None
     registrada_por: str
+    # El día de hoy en la zona del espacio: el cliente no decide qué está vencido.
+    hoy: date
 
 
 class _OperacionDeudas:
@@ -171,7 +173,7 @@ class RegistrarDeuda(_OperacionDeudas):
         exigir_cupo(self._limitador, (self._limite, str(usuario.id)))
         datos = DatosDeuda.crear(
             concepto=nueva.concepto,
-            lugar_pago=nueva.lugar_pago,
+            lugares_pago=nueva.lugares_pago,
             cuotas=nueva.cuotas,
             titular_nombre=nueva.titular_nombre,
             titular_tipo_documento=nueva.titular_tipo_documento,
@@ -211,7 +213,7 @@ class RegistrarDeuda(_OperacionDeudas):
                 categoria_id=nueva.categoria_id,
                 tipo_documento=documento.tipo_documento or TipoDocumento.OTRO,
                 cuotas=datos.cuotas,
-                lugar_pago=datos.lugar_pago,
+                lugares_pago=datos.lugares_pago,
                 titular_nombre=datos.titular_nombre,
                 titular_documento=datos.titular_documento,
                 codigo_pago=datos.codigo_pago,
@@ -232,7 +234,7 @@ class RegistrarDeuda(_OperacionDeudas):
                 cuotas=len(deuda.cuotas),
             )
             if asistente:
-                avisos.guardar(uow.notificaciones, self._aviso_al_gerente(deuda))
+                avisos.guardar(uow.notificaciones, self._aviso_al_gerente(deuda, self._hoy()))
         avisos.enviar()
         return DeudaRegistrada(deuda, resultado.avisos)
 
@@ -255,7 +257,7 @@ class RegistrarDeuda(_OperacionDeudas):
         return documento
 
     @staticmethod
-    def _aviso_al_gerente(deuda: Deuda) -> Notificacion:
+    def _aviso_al_gerente(deuda: Deuda, hoy: date) -> Notificacion:
         importe = formatear_soles(deuda.importe)
         if deuda.estado is EstadoDeuda.POR_AUTORIZAR:
             razones = ", ".join(POR_QUE_ESPERA[m] for m in deuda.motivos)
@@ -270,13 +272,18 @@ class RegistrarDeuda(_OperacionDeudas):
                 deuda_id=deuda.id,
                 cuenta_id=deuda.registrada_por,
             )
+        vencimiento = (
+            f"venció el {formatear_fecha(deuda.vence_el)} y la empresa podría cobrar mora"
+            if deuda.vencida_hace(hoy)
+            else f"vence el {formatear_fecha(deuda.vence_el)}"
+        )
         return nueva_notificacion(
             deuda.gerente_id,
             TipoNotificacion.DEUDA_REGISTRADA,
             f"deuda:{deuda.id}:registro",
             "Tu asistente registró una deuda",
-            f"«{deuda.concepto}» por {importe}, vence el {formatear_fecha(deuda.vence_el)}. Ya se "
-            "puede pagar; revísala cuando puedas y anúlala si no corresponde.",
+            f"«{deuda.concepto}» por {importe}, {vencimiento}. Ya se puede pagar; revísala "
+            "cuando puedas y anúlala si no corresponde.",
             deuda.creado_en,
             deuda_id=deuda.id,
             cuenta_id=deuda.registrada_por,
@@ -286,6 +293,7 @@ class RegistrarDeuda(_OperacionDeudas):
 class ListarDeudas(_OperacionDeudas):
     def ejecutar(self, sesion: SesionActiva, *, solo_pendientes: bool) -> list[DeudaConDetalle]:
         """El gerente ve las de su espacio (o solo sus pendientes); una asistente, las suyas."""
+        hoy = self._hoy()
         with self._unidad() as uow:
             if sesion.usuario.rol is Rol.GERENTE:
                 deudas = uow.deudas.del_espacio(sesion.usuario.id, solo_pendientes=solo_pendientes)
@@ -293,7 +301,8 @@ class ListarDeudas(_OperacionDeudas):
                 deudas = uow.deudas.registradas_por(sesion.usuario.id)
             nombres: dict[UUID, str] = {}
             return [
-                DeudaConDetalle(d, None, _nombre(uow, d.registrada_por, nombres)) for d in deudas
+                DeudaConDetalle(d, None, _nombre(uow, d.registrada_por, nombres), hoy)
+                for d in deudas
             ]
 
 
@@ -311,7 +320,9 @@ class ConsultarDeuda(_OperacionDeudas):
         with self._unidad() as uow:
             deuda = self._deuda(uow, sesion, deuda_id)
             documento = uow.documentos.por_id(deuda.documento_id)
-            return DeudaConDetalle(deuda, documento, _nombre(uow, deuda.registrada_por, {}))
+            return DeudaConDetalle(
+                deuda, documento, _nombre(uow, deuda.registrada_por, {}), self._hoy()
+            )
 
 
 DIAS_CALENDARIO = 62

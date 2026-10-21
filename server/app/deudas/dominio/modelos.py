@@ -64,7 +64,8 @@ class Deuda:
     categoria_id: UUID | None
     tipo_documento: TipoDocumento
     cuotas: tuple[Cuota, ...]
-    lugar_pago: LugarPago
+    # Dónde se puede pagar: uno o varios, sin repetir y en el orden de LugarPago.
+    lugares_pago: tuple[LugarPago, ...]
     titular_nombre: str | None
     titular_documento: Documento | None
     codigo_pago: str | None
@@ -84,6 +85,14 @@ class Deuda:
     @property
     def vence_el(self) -> date:
         return min(c.vence_el for c in self.cuotas)
+
+    def vencida_hace(self, hoy: date) -> int | None:
+        """Días desde que venció su primera cuota; None si aún no vence o ya no se paga. Una
+        deuda vencida se registra y se paga igual: la empresa puede cobrar mora."""
+        if self.estado not in (EstadoDeuda.POR_AUTORIZAR, EstadoDeuda.REGISTRADA):
+            return None
+        dias = (hoy - self.vence_el).days
+        return dias if dias > 0 else None
 
     @property
     def pendiente_para_gerente(self) -> bool:

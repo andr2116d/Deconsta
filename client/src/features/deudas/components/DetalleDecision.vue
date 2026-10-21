@@ -12,8 +12,9 @@ import {
   CAMPOS_CORREGIDOS,
   ESTADOS,
   formatearFecha,
-  LUGARES_PAGO,
   MOTIVOS,
+  nombresLugares,
+  textoVencida,
   TIPOS_DOCUMENTO,
 } from '../catalogo'
 import type { DeudaDetalle } from '../types'
@@ -37,7 +38,6 @@ const motivo = ref<'rechazar' | 'anular' | null>(null)
 const errorMotivo = ref<string | undefined>()
 
 const espera = computed(() => props.deuda.estado === 'por_autorizar')
-const lugar = computed(() => LUGARES_PAGO.find((l) => l.valor === props.deuda.lugar_pago))
 const pregunta = computed(() => {
   if (!espera.value) return 'Ya se puede pagar. Dale tu visto bueno o anúlala si no corresponde.'
   if (props.deuda.motivos.includes('TITULAR_DISTINTO'))
@@ -139,7 +139,10 @@ function confirmarMotivo(texto: string) {
         >
           {{ espera ? 'Solo tú puedes autorizarla' : 'Revisión pendiente' }}
         </span>
-        <span>Vence el {{ formatearFecha(deuda.vence_el) }}</span>
+        <span v-if="deuda.vencida_hace" class="font-bold text-error">
+          {{ textoVencida(deuda.vencida_hace) }} · {{ formatearFecha(deuda.vence_el) }}
+        </span>
+        <span v-else>Vence el {{ formatearFecha(deuda.vence_el) }}</span>
       </div>
       <h2
         :id="`deuda-${deuda.id}`"
@@ -189,8 +192,8 @@ function confirmarMotivo(texto: string) {
           <dd class="font-bold">{{ deuda.codigo_pago ?? 'No figura' }}</dd>
         </div>
         <div>
-          <dt class="text-[11px] text-secundario">Se pagará en</dt>
-          <dd class="font-bold">{{ lugar?.etiqueta }}</dd>
+          <dt class="text-[11px] text-secundario">Se puede pagar en</dt>
+          <dd class="font-bold">{{ nombresLugares(deuda.lugares_pago) }}</dd>
         </div>
       </dl>
 

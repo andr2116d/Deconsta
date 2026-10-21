@@ -42,7 +42,7 @@ LEIDO = DatosLeidos(
 def datos(**cambios: object) -> DatosDeuda:
     base: dict[str, object] = {
         "concepto": "Luz de la casa",
-        "lugar_pago": "agente",
+        "lugares_pago": ["agente"],
         "cuotas": [CuotaEnviada(date(2026, 10, 28), "1820.40")],
         "titular_nombre": "Valentina Ramos Díaz",
         "titular_tipo_documento": None,
@@ -74,8 +74,17 @@ def evaluar(
 
 def test_los_campos_obligatorios_vacios_se_marcan_uno_por_uno() -> None:
     with pytest.raises(DeudaInvalida) as error:
-        datos(concepto="  ", lugar_pago=None, cuotas=[])
-    assert set(error.value.campos) == {"concepto", "lugar_pago", "cuotas"}
+        datos(concepto="  ", lugares_pago=[], cuotas=[])
+    assert set(error.value.campos) == {"concepto", "lugares_pago", "cuotas"}
+
+
+def test_una_deuda_se_paga_en_uno_o_varios_lugares_de_la_lista() -> None:
+    elegidos = datos(lugares_pago=["billetera", "agente", "billetera"]).lugares_pago
+    # Sin repetir y siempre en el mismo orden, elija como los elija.
+    assert elegidos == (LugarPago.AGENTE, LugarPago.BILLETERA)
+    with pytest.raises(DeudaInvalida) as error:
+        datos(lugares_pago=["agente", "criptomonedas"])
+    assert error.value.campos == {"lugares_pago": "Elige lugares de pago de la lista."}
 
 
 def test_el_concepto_admite_los_signos_de_un_nombre_de_deuda() -> None:
@@ -176,7 +185,7 @@ def test_los_campos_corregidos_se_comparan_con_lo_leido() -> None:
     assert campos_corregidos(datos(), None) == ()
 
 
-def deuda(estado: EstadoDeuda, revision: bool = False) -> Deuda:
+def deuda(estado: EstadoDeuda, revision: bool = False, vence_el: date = HOY) -> Deuda:
     return Deuda(
         id=uuid4(),
         gerente_id=uuid4(),
@@ -185,8 +194,8 @@ def deuda(estado: EstadoDeuda, revision: bool = False) -> Deuda:
         concepto="Luz",
         categoria_id=None,
         tipo_documento=TipoDocumento.RECIBO_SERVICIO,
-        cuotas=(Cuota(1, HOY, Decimal("10.00")),),
-        lugar_pago=LugarPago.AGENTE,
+        cuotas=(Cuota(1, vence_el, Decimal("10.00")),),
+        lugares_pago=(LugarPago.AGENTE,),
         titular_nombre=None,
         titular_documento=None,
         codigo_pago=None,
@@ -212,3 +221,14 @@ def test_las_decisiones_del_gerente_siguen_sus_transiciones() -> None:
     assert en_revision.estado is EstadoDeuda.ANULADA
     with pytest.raises(TransicionInvalida, match="ya fue anulada"):
         en_revision.anular(uuid4(), AHORA, "Otra vez")
+
+
+def test_una_deuda_vencida_cuenta_sus_dias_mientras_se_pueda_pagar() -> None:
+    atrasada = date(2026, 10, 10)
+    assert deuda(EstadoDeuda.REGISTRADA, vence_el=atrasada).vencida_hace(HOY) == 11
+    assert deuda(EstadoDeuda.POR_AUTORIZAR, vence_el=atrasada).vencida_hace(HOY) == 11
+    # Hoy todavía no está vencida.
+    assert deuda(EstadoDeuda.REGISTRADA).vencida_hace(HOY) is None
+    # Una anulada o rechazada ya no se paga: no está vencida.
+    assert deuda(EstadoDeuda.ANULADA, vence_el=atrasada).vencida_hace(HOY) is None
+    assert deuda(EstadoDeuda.RECHAZADA, vence_el=atrasada).vencida_hace(HOY) is None

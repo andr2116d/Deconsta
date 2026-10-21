@@ -49,7 +49,7 @@ class CuotaEnviada:
 @dataclass(frozen=True)
 class DatosDeuda:
     concepto: str
-    lugar_pago: LugarPago
+    lugares_pago: tuple[LugarPago, ...]
     cuotas: tuple[Cuota, ...]
     titular_nombre: str | None
     titular_documento: Documento | None
@@ -64,7 +64,7 @@ class DatosDeuda:
         cls,
         *,
         concepto: str,
-        lugar_pago: str | None,
+        lugares_pago: list[str],
         cuotas: list[CuotaEnviada],
         titular_nombre: str | None,
         titular_tipo_documento: str | None,
@@ -81,13 +81,7 @@ class DatosDeuda:
             errores["concepto"] = (
                 f"Usa de {minimo} a {maximo} letras, números, espacios y signos comunes."
             )
-        lugar = None
-        if not lugar_pago:
-            errores["lugar_pago"] = "Elige dónde se pagará esta deuda."
-        elif lugar_pago not in LUGARES:
-            errores["lugar_pago"] = "Elige uno de los lugares de pago de la lista."
-        else:
-            lugar = LugarPago(lugar_pago)
+        lugares = _lugares(lugares_pago, errores)
         validadas = _cuotas(cuotas, hoy, errores)
         nombre = limpiar(titular_nombre or "") or None
         if nombre and not LARGO_TITULAR[0] <= len(nombre) <= LARGO_TITULAR[1]:
@@ -107,9 +101,20 @@ class DatosDeuda:
                 f"Usa hasta {LARGO_CODIGO} letras, números, espacios o guiones, como en el "
                 "documento."
             )
-        if errores or lugar is None:
+        if errores:
             raise DeudaInvalida(campos=errores)
-        return cls(concepto, lugar, validadas, nombre, documento, codigo)
+        return cls(concepto, lugares, validadas, nombre, documento, codigo)
+
+
+def _lugares(enviados: list[str], errores: dict[str, str]) -> tuple[LugarPago, ...]:
+    """Uno o varios lugares de la lista. Los repetidos cuentan una vez."""
+    if not enviados:
+        errores["lugares_pago"] = "Elige dónde se puede pagar esta deuda: uno o varios lugares."
+        return ()
+    if not set(enviados) <= LUGARES:
+        errores["lugares_pago"] = "Elige lugares de pago de la lista."
+        return ()
+    return tuple(lugar for lugar in LugarPago if lugar.value in enviados)
 
 
 def _cuotas(cuotas: list[CuotaEnviada], hoy: date, errores: dict[str, str]) -> tuple[Cuota, ...]:

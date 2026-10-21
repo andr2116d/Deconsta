@@ -97,7 +97,8 @@ export interface Deuda {
   importe: string
   vence_el: string
   cuotas: Cuota[]
-  lugar_pago: LugarPago
+  /** Uno o varios, sin repetir y en el orden de LUGARES_PAGO. */
+  lugares_pago: LugarPago[]
   titular_nombre: string | null
   titular_tipo_documento: TipoDocumentoTitular | null
   /** Enmascarado por el backend: «•••• 8912». */
@@ -111,6 +112,8 @@ export interface Deuda {
   creado_en: string
   decidida_en: string | null
   motivo_decision: string | null
+  /** Días desde que venció su primera cuota, contados por el backend; null si no está vencida. */
+  vencida_hace: number | null
 }
 
 export interface DeudaDetalle extends Deuda {
@@ -133,7 +136,7 @@ export interface NuevaDeuda {
   documento_id: string
   concepto: string
   categoria_id: string | null
-  lugar_pago: LugarPago | null
+  lugares_pago: LugarPago[]
   cuotas: CuotaNueva[]
   titular_nombre: string | null
   titular_tipo_documento: TipoDocumentoTitular | null
