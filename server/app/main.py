@@ -11,6 +11,7 @@ from app.api.v1 import router as api_v1
 from app.categorias.infraestructura.http.errores import registrar_manejadores_categorias
 from app.contenedor import Contenedor
 from app.core.config import Settings, settings
+from app.core.cuerpo import limitar_cuerpo
 from app.core.errores import registrar_manejadores
 from app.core.migraciones import aplicar_pendientes
 from app.core.registro import configurar_registro, crear_middleware_seguridad
@@ -45,6 +46,8 @@ def crear_app(config: Settings = settings, contenedor: Contenedor | None = None)
     registrar_manejadores_acceso(app)
     registrar_manejadores_categorias(app)
     registrar_manejadores_reglas(app)
+    # Antes que el de seguridad: así un 413 también lleva sus cabeceras.
+    limitar_cuerpo(app)
     app.middleware("http")(crear_middleware_seguridad(hsts=produccion))
     app.add_middleware(
         CORSMiddleware,
