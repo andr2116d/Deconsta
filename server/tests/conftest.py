@@ -91,6 +91,7 @@ LIMITES_AMPLIOS = {
     "limite_ingreso_por_usuario": 1000,
     "limite_cambio_contrasena": 1000,
     "limite_desbloqueo": 1000,
+    "limite_actualizacion_cuenta": 1000,
 }
 
 FabricaCliente = Callable[..., TestClient]

@@ -33,12 +33,8 @@ const router = createRouter({
       component: () => import('@/features/incorporacion/views/IncorporacionView.vue'),
       meta: { titulo: 'Bienvenida', requiereSesion: true, incorporacion: true },
     },
-    {
-      path: '/cambiar-contrasena',
-      name: 'cambio-contrasena',
-      component: () => import('@/features/acceso/views/CambioContrasenaView.vue'),
-      meta: { titulo: 'Cambia tu contraseña', requiereSesion: true },
-    },
+    // El cambio de contraseña vive ahora en «Mi cuenta»; los enlaces anteriores siguen sirviendo.
+    { path: '/cambiar-contrasena', redirect: { name: 'acceso-cuenta' } },
     {
       path: '/',
       component: () => import('@/features/espacio/layouts/EspacioLayout.vue'),

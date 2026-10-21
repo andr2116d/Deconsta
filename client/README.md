@@ -21,6 +21,10 @@ src/
       layouts/         EspacioLayout, ruta padre de todas las secciones
       secciones.ts     secciones de cada rol; de aquí salen rutas, pestañas y menú
       views/           EnDesarrolloView, lugar de cada sección mientras se construye
+    cuenta/          Mi cuenta: datos personales, usuario y contraseña, rol y permisos, privacidad
+      layouts/         CuentaLayout: encabezado, pestañas y tarjeta lateral que se quedan al
+                       cambiar de pestaña
+      datos.ts         normalización igual a la del backend para detectar cambios reales
   shared/
     api/             cliente HTTP y estructura común de errores
     components/      componentes base (BaseBoton, BaseCampo, BaseAviso, BaseDialogo, BaseIcono,
@@ -40,10 +44,27 @@ Cada rol tiene sus pestañas: gerencia (Resumen, Por autorizar, Por verificar, C
 Historial, Mi equipo) y asistencia (Mi jornada, Pagos por completar, Mis registros, Calendario).
 Registrar deuda es una acción de la cabecera, y los datos de la cuenta viven en la tarjeta que se
 abre desde el avatar. Para agregar o mover una sección se edita `features/espacio/secciones.ts`;
-al construirla, su ruta deja de usar `EnDesarrolloView`. Ocultar una sección a un rol solo ordena
+al construirla, se le asigna su `vista` y deja de usar `EnDesarrolloView`. Ocultar una sección a un rol solo ordena
 la interfaz: el backend autoriza cada operación.
 El acento de color sigue al rol (`data-rol` en `<html>`): ciruela para gerencia y eucalipto para
 asistencia; la marca siempre es ciruela.
+
+## Mi cuenta
+
+Se abre desde la tarjeta del avatar. Sus cuatro pestañas (`/cuenta`, `/cuenta/acceso`,
+`/cuenta/permisos` y `/cuenta/privacidad`) son rutas hijas de `CuentaLayout`, así que cambiar de
+pestaña no recarga los datos. Los datos viven en el store `cuenta`; al guardar, la tarjeta lateral,
+la cabecera y el menú se actualizan sin recargar.
+
+- «Guardar» solo se activa con un cambio real: se compara con la misma normalización del backend.
+- El número de documento no se cambia. Pasar de DNI a carné de extranjería pide dos advertencias
+  al elegirlo y una confirmación final al guardar.
+- Cambiar el correo, el documento o el usuario pide la contraseña actual. El usuario se cambia
+  hasta 3 veces por mes y el cupo restante está a la vista.
+- La nueva contraseña igual a la actual se advierte mientras se escribe.
+- Si un guardado falla, una ventana explica qué pasó y qué campos revisar; reintentar solo se
+  ofrece cuando el fallo no depende de los datos.
+- `/cambiar-contrasena` redirige a la pestaña de usuario y contraseña.
 
 Las pantallas siguen los prototipos de `DECONSTA/`. El frontend mejora la experiencia (validación
 de campos, indicador de seguridad, espera tras un 429), pero la autoridad es siempre el backend.

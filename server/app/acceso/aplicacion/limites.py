@@ -10,6 +10,7 @@ class LimitesAcceso:
     ingreso_por_usuario: Limite
     cambio_contrasena: Limite
     desbloqueo: Limite
+    actualizacion_cuenta: Limite
 
 
 def exigir_cupo(limitador: LimitadorSolicitudes, *consumos: tuple[Limite, str]) -> None:

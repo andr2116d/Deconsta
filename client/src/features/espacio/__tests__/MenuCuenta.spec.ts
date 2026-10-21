@@ -17,10 +17,7 @@ const GERENTE: Usuario = {
 async function montar(contrasenaTemporal = false) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: '/', component: { template: '<RouterView/>' }, children: rutasDelEspacio() },
-      { path: '/cambiar-contrasena', name: 'cambio-contrasena', component: { template: '<p/>' } },
-    ],
+    routes: [{ path: '/', component: { template: '<RouterView/>' }, children: rutasDelEspacio() }],
   })
   await router.push('/inicio')
   return mount(MenuCuenta, {
@@ -72,5 +69,21 @@ describe('MenuCuenta', () => {
 
     expect(menu.emitted('cambiar-contrasena')).toHaveLength(1)
     expect(menu.get('button[aria-expanded]').attributes('aria-expanded')).toBe('false')
+  })
+
+  it('lleva a las pestañas de Mi cuenta y señala la contraseña temporal', async () => {
+    const menu = await montar(true)
+    await menu.get('button[aria-expanded]').trigger('click')
+
+    const enlaces = menu.findAll('a')
+    expect(enlaces.map((a) => a.get('.flex-1').text())).toEqual([
+      'Mis datos personales',
+      'Usuario y contraseña',
+      'Mi rol y permisos',
+      'Privacidad y autorizaciones',
+      'Límites y categorías',
+    ])
+    expect(enlaces[1]!.attributes('href')).toBe('/cuenta/acceso')
+    expect(enlaces[1]!.text()).toContain('Temporal')
   })
 })

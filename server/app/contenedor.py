@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from redis import Redis
 from sqlalchemy import Engine
@@ -9,6 +10,11 @@ from sqlalchemy import Engine
 from app.acceso.aplicacion.autenticar import Autenticar, CerrarSesion
 from app.acceso.aplicacion.cambiar_contrasena import CambiarContrasena
 from app.acceso.aplicacion.crear_cuenta import CrearCuenta
+from app.acceso.aplicacion.cuenta import (
+    ActualizarDatosPersonales,
+    CambiarNombreUsuario,
+    ConsultarCuenta,
+)
 from app.acceso.aplicacion.desbloquear_asistente import DesbloquearAsistente
 from app.acceso.aplicacion.incorporacion import AceptarDocumentos, ConsultarDocumentos
 from app.acceso.aplicacion.iniciar_sesion import IniciarSesion
@@ -46,6 +52,11 @@ def limites_de(config: Settings) -> LimitesAcceso:
         desbloqueo=Limite(
             "desbloqueo", config.limite_desbloqueo, config.ventana_desbloqueo_segundos
         ),
+        actualizacion_cuenta=Limite(
+            "actualizacion_cuenta",
+            config.limite_actualizacion_cuenta,
+            config.ventana_actualizacion_cuenta_segundos,
+        ),
     )
 
 
@@ -62,6 +73,9 @@ class Contenedor:
     crear_cuenta: CrearCuenta
     consultar_documentos: ConsultarDocumentos
     aceptar_documentos: AceptarDocumentos
+    consultar_cuenta: ConsultarCuenta
+    actualizar_datos_personales: ActualizarDatosPersonales
+    cambiar_nombre_usuario: CambiarNombreUsuario
 
     @classmethod
     def crear(cls, config: Settings) -> "Contenedor":
@@ -72,6 +86,8 @@ class Contenedor:
         contrasenas = ProtectorArgon2()
         limites = limites_de(config)
         reloj = ahora_utc
+        # Zona del negocio: define, por ejemplo, cuándo empieza el mes para los límites mensuales.
+        zona = ZoneInfo(config.timezone)
 
         def unidad() -> UnidadDeTrabajoSql:
             return UnidadDeTrabajoSql(motor, cifrador)
@@ -95,6 +111,13 @@ class Contenedor:
             crear_cuenta=CrearCuenta(unidad, contrasenas, reloj),
             consultar_documentos=ConsultarDocumentos(unidad, reloj),
             aceptar_documentos=AceptarDocumentos(unidad, reloj),
+            consultar_cuenta=ConsultarCuenta(unidad, contrasenas, limitador, limites, reloj, zona),
+            actualizar_datos_personales=ActualizarDatosPersonales(
+                unidad, contrasenas, limitador, limites, reloj, zona
+            ),
+            cambiar_nombre_usuario=CambiarNombreUsuario(
+                unidad, contrasenas, limitador, limites, reloj, zona
+            ),
         )
 
     def cerrar(self) -> None:

@@ -2,9 +2,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.acceso.dominio.errores import (
+    CambioDocumentoSinConfirmar,
     ContrasenaActualIncorrecta,
     ContrasenaInsegura,
     ContrasenaRepetida,
+    ContrasenaRequerida,
     CredencialesIncorrectas,
     CuentaBloqueada,
     CuentaNoBloqueada,
@@ -12,11 +14,14 @@ from app.acceso.dominio.errores import (
     DatosDuplicados,
     DatosInvalidos,
     DemasiadasSolicitudes,
+    DocumentoNoModificable,
     DocumentosDesactualizados,
     ErrorAcceso,
     IncorporacionPendiente,
+    LimiteCambiosNombreUsuario,
     NoAutenticado,
     ServicioNoDisponible,
+    SinCambios,
     SinPermiso,
 )
 from app.core.errores import respuesta_error
@@ -31,9 +36,14 @@ ESTADOS_HTTP: dict[type[ErrorAcceso], int] = {
     CuentaNoBloqueada: 409,
     DatosDuplicados: 409,
     DocumentosDesactualizados: 409,
+    LimiteCambiosNombreUsuario: 409,
     ContrasenaInsegura: 422,
     ContrasenaRepetida: 422,
     DatosInvalidos: 422,
+    SinCambios: 422,
+    ContrasenaRequerida: 422,
+    DocumentoNoModificable: 422,
+    CambioDocumentoSinConfirmar: 422,
     CuentaBloqueada: 423,
     DemasiadasSolicitudes: 429,
     ServicioNoDisponible: 503,
@@ -51,6 +61,8 @@ async def manejar_error_acceso(request: Request, exc: Exception) -> JSONResponse
         extra["requirements"] = list(exc.requisitos)
     if isinstance(exc, IncorporacionPendiente):
         extra["pending_steps"] = exc.pasos
+    if isinstance(exc, LimiteCambiosNombreUsuario):
+        extra["renews_at"] = exc.renueva_en.isoformat()
     respuesta = respuesta_error(
         ESTADOS_HTTP.get(type(exc), 400),
         exc.codigo,

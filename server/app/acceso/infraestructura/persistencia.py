@@ -9,7 +9,8 @@ from uuid import UUID
 from sqlalchemy import Connection, Engine, Row, text
 from sqlalchemy.exc import IntegrityError
 
-from app.acceso.dominio.datos_personales import DatosPersonales
+from app.acceso.dominio.cuenta import FichaPersonal
+from app.acceso.dominio.datos_personales import DatosPersonales, TipoDocumento
 from app.acceso.dominio.errores import DatosDuplicados
 from app.acceso.dominio.incorporacion import DocumentoLegal, Seccion, TipoDocumentoLegal
 from app.acceso.dominio.modelos import EventoAuditoria, Rol, Sesion, Usuario
@@ -33,6 +34,16 @@ CAMPOS_DUPLICADOS = {
 
 def contexto(campo: str, usuario_id: UUID) -> str:
     return f"usuario.{campo}:{usuario_id}"
+
+
+def duplicados(error: IntegrityError) -> DatosDuplicados | None:
+    """Traduce la violación de una restricción de unicidad conocida al error del campo."""
+    restriccion = getattr(error.orig, "diag", None)
+    nombre = getattr(restriccion, "constraint_name", None)
+    if nombre not in CAMPOS_DUPLICADOS:
+        return None
+    campo, mensaje = CAMPOS_DUPLICADOS[nombre]
+    return DatosDuplicados(campos={campo: mensaje})
 
 
 class RepositorioUsuariosSql:
@@ -101,11 +112,29 @@ class RepositorioUsuariosSql:
             },
         )
 
-    def agregar(self, usuario: Usuario, datos: DatosPersonales) -> None:
-        def cifrar(campo: str, valor: str) -> bytes:
-            return self._cifrador.cifrar(valor, contexto(campo, usuario.id))
+    def _cifrar(self, campo: str, valor: str | None, usuario_id: UUID) -> bytes | None:
+        return self._cifrador.cifrar(valor, contexto(campo, usuario_id)) if valor else None
 
+    def _columnas_datos(self, usuario_id: UUID, datos: DatosPersonales) -> dict[str, Any]:
+        """Valores cifrados de los datos personales y sus huellas de unicidad."""
         documento = f"{datos.tipo_documento.value}:{datos.numero_documento}"
+        return {
+            "nombres": self._cifrar("nombres", datos.nombres, usuario_id),
+            "apellidos": self._cifrar("apellidos", datos.apellidos, usuario_id),
+            "correo": self._cifrar("correo", datos.correo, usuario_id),
+            "correo_huella": self._cifrador.huella(datos.correo),
+            "telefono": self._cifrar("telefono", datos.telefono, usuario_id),
+            "tipo_documento": datos.tipo_documento.value,
+            "numero_documento": self._cifrar(
+                "numero_documento", datos.numero_documento, usuario_id
+            ),
+            "numero_documento_huella": self._cifrador.huella(documento),
+            "nombre_recibos": self._cifrar("nombre_recibos", datos.nombre_recibos, usuario_id),
+        }
+
+    def agregar(
+        self, usuario: Usuario, datos: DatosPersonales, *, cargo: str | None = None
+    ) -> None:
         try:
             self._conexion.execute(
                 text(
@@ -114,14 +143,14 @@ class RepositorioUsuariosSql:
                         id, rol, gerente_id, nombre_usuario, contrasena_hash,
                         nombres_cifrado, apellidos_cifrado, correo_cifrado, correo_huella,
                         telefono_cifrado, tipo_documento, numero_documento_cifrado,
-                        numero_documento_huella, debe_cambiar_contrasena,
-                        contrasena_actualizada_en
+                        numero_documento_huella, nombre_recibos_cifrado, cargo,
+                        debe_cambiar_contrasena, contrasena_actualizada_en
                     ) VALUES (
                         :id, :rol, :gerente_id, :nombre_usuario, :contrasena_hash,
                         :nombres, :apellidos, :correo, :correo_huella,
                         :telefono, :tipo_documento, :numero_documento,
-                        :numero_documento_huella, :debe_cambiar_contrasena,
-                        :contrasena_actualizada_en
+                        :numero_documento_huella, :nombre_recibos, :cargo,
+                        :debe_cambiar_contrasena, :contrasena_actualizada_en
                     )
                     """
                 ),
@@ -131,25 +160,107 @@ class RepositorioUsuariosSql:
                     "gerente_id": usuario.gerente_id,
                     "nombre_usuario": usuario.nombre_usuario,
                     "contrasena_hash": usuario.contrasena_hash,
-                    "nombres": cifrar("nombres", datos.nombres),
-                    "apellidos": cifrar("apellidos", datos.apellidos),
-                    "correo": cifrar("correo", datos.correo),
-                    "correo_huella": self._cifrador.huella(datos.correo),
-                    "telefono": cifrar("telefono", datos.telefono) if datos.telefono else None,
-                    "tipo_documento": datos.tipo_documento.value,
-                    "numero_documento": cifrar("numero_documento", datos.numero_documento),
-                    "numero_documento_huella": self._cifrador.huella(documento),
+                    "cargo": cargo,
                     "debe_cambiar_contrasena": usuario.debe_cambiar_contrasena,
                     "contrasena_actualizada_en": usuario.contrasena_actualizada_en,
+                    **self._columnas_datos(usuario.id, datos),
                 },
             )
         except IntegrityError as error:
-            restriccion = getattr(error.orig, "diag", None)
-            nombre = getattr(restriccion, "constraint_name", None)
-            if nombre in CAMPOS_DUPLICADOS:
-                campo, mensaje = CAMPOS_DUPLICADOS[nombre]
-                raise DatosDuplicados(campos={campo: mensaje}) from error
-            raise
+            duplicado = duplicados(error)
+            if duplicado is None:
+                raise
+            raise duplicado from error
+
+    def ficha(self, usuario_id: UUID) -> FichaPersonal | None:
+        fila = self._conexion.execute(
+            text(
+                """
+                SELECT nombres_cifrado, apellidos_cifrado, correo_cifrado, telefono_cifrado,
+                    tipo_documento, numero_documento_cifrado, nombre_recibos_cifrado, cargo
+                FROM usuario WHERE id = :id
+                """
+            ),
+            {"id": usuario_id},
+        ).one_or_none()
+        if fila is None:
+            return None
+
+        def descifrar(campo: str, valor: bytes | None) -> str | None:
+            return self._cifrador.descifrar(valor, contexto(campo, usuario_id)) if valor else None
+
+        # Los obligatorios nunca son nulos (NOT NULL); el «or ""» solo informa a mypy.
+        datos = DatosPersonales(
+            nombres=descifrar("nombres", fila.nombres_cifrado) or "",
+            apellidos=descifrar("apellidos", fila.apellidos_cifrado) or "",
+            correo=descifrar("correo", fila.correo_cifrado) or "",
+            tipo_documento=TipoDocumento(fila.tipo_documento),
+            numero_documento=descifrar("numero_documento", fila.numero_documento_cifrado) or "",
+            telefono=descifrar("telefono", fila.telefono_cifrado),
+            nombre_recibos=descifrar("nombre_recibos", fila.nombre_recibos_cifrado),
+        )
+        return FichaPersonal(datos, fila.cargo)
+
+    def actualizar_datos(self, usuario_id: UUID, datos: DatosPersonales) -> None:
+        try:
+            # Un savepoint: si choca con otra cuenta, la transacción sigue utilizable.
+            with self._conexion.begin_nested():
+                self._conexion.execute(
+                    text(
+                        """
+                        UPDATE usuario SET
+                            nombres_cifrado = :nombres,
+                            apellidos_cifrado = :apellidos,
+                            correo_cifrado = :correo,
+                            correo_huella = :correo_huella,
+                            telefono_cifrado = :telefono,
+                            tipo_documento = :tipo_documento,
+                            numero_documento_cifrado = :numero_documento,
+                            numero_documento_huella = :numero_documento_huella,
+                            nombre_recibos_cifrado = :nombre_recibos
+                        WHERE id = :id
+                        """
+                    ),
+                    {"id": usuario_id, **self._columnas_datos(usuario_id, datos)},
+                )
+        except IntegrityError as error:
+            duplicado = duplicados(error)
+            if duplicado is None:
+                raise
+            raise duplicado from error
+
+    def cambiar_nombre_usuario(
+        self, usuario_id: UUID, anterior: str, nuevo: str, ahora: datetime
+    ) -> None:
+        try:
+            with self._conexion.begin_nested():
+                self._conexion.execute(
+                    text("UPDATE usuario SET nombre_usuario = :nuevo WHERE id = :id"),
+                    {"id": usuario_id, "nuevo": nuevo},
+                )
+        except IntegrityError as error:
+            duplicado = duplicados(error)
+            if duplicado is None:
+                raise
+            raise duplicado from error
+        self._conexion.execute(
+            text(
+                "INSERT INTO cambio_nombre_usuario (usuario_id, anterior, nuevo, cambiado_en)"
+                " VALUES (:usuario_id, :anterior, :nuevo, :ahora)"
+            ),
+            {"usuario_id": usuario_id, "anterior": anterior, "nuevo": nuevo, "ahora": ahora},
+        )
+
+    def cambios_nombre_usuario_desde(self, usuario_id: UUID, desde: datetime) -> int:
+        return int(
+            self._conexion.execute(
+                text(
+                    "SELECT count(*) FROM cambio_nombre_usuario"
+                    " WHERE usuario_id = :usuario_id AND cambiado_en >= :desde"
+                ),
+                {"usuario_id": usuario_id, "desde": desde},
+            ).scalar_one()
+        )
 
 
 class RepositorioSesionesSql:

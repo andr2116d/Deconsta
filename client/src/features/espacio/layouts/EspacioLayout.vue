@@ -9,7 +9,6 @@ import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 
 import CabeceraEspacio from '../components/CabeceraEspacio.vue'
-import ContextoRol from '../components/ContextoRol.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -31,15 +30,13 @@ function posponerContrasena() {
 }
 
 // Se deduce del cambio de estado y no de un evento de la ventana: al guardar, la sesión se
-// actualiza y la ventana se desmonta antes de poder avisar.
-watch(
-  () => sesion.debeCambiarContrasena,
-  (debe, antes) => {
-    if (!antes || debe || !sesion.autenticada) return
-    contrasenaPedida.value = false
-    aviso.value = 'Contraseña actualizada. Ya puedes usarla en tus próximos ingresos.'
-  },
-)
+// actualiza y la ventana se desmonta antes de poder avisar. Si el cambio se hizo desde
+// «Mi cuenta», esa pantalla ya lo confirma.
+watch(mostrarContrasena, (mostrar, mostraba) => {
+  if (!mostraba || mostrar || sesion.debeCambiarContrasena || !sesion.autenticada) return
+  contrasenaPedida.value = false
+  aviso.value = 'Contraseña actualizada. Ya puedes usarla en tus próximos ingresos.'
+})
 
 function irAlIngreso() {
   router.replace({ name: 'inicio-sesion' })
@@ -71,7 +68,9 @@ watch(
 )
 
 function enfocarTitulo() {
-  if (navegado) document.getElementById('titulo-seccion')?.focus({ preventScroll: true })
+  // Si durante la transición la persona abrió el menú de la cuenta, el foco se queda con ella.
+  if (!navegado || document.activeElement?.closest('[data-menu-abierto]')) return
+  document.getElementById('titulo-seccion')?.focus({ preventScroll: true })
 }
 
 // La guarda decide con la sesión del navegador; el backend confirma que la cuenta puede entrar.
@@ -113,11 +112,11 @@ onMounted(async () => {
       tabindex="-1"
       class="mx-auto w-full max-w-[1440px] flex-1 min-[1920px]:max-w-[1680px] px-4 pt-6 pb-16 focus:outline-none sm:px-6 lg:px-10 lg:pt-8"
     >
-      <ContextoRol :rol="sesion.usuario.rol" />
       <BaseAviso v-if="aviso" tono="exito" class="mb-6">{{ aviso }}</BaseAviso>
       <RouterView v-slot="{ Component, route: actual }">
         <Transition name="vista" mode="out-in" @after-enter="enfocarTitulo">
-          <component :is="Component" :key="actual.name" />
+          <!-- Las pestañas de «Mi cuenta» comparten marco: la clave es la ruta de primer nivel. -->
+          <component :is="Component" :key="actual.matched[1]?.path ?? actual.name" />
         </Transition>
       </RouterView>
     </main>

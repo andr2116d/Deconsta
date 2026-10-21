@@ -20,7 +20,7 @@ def test_crea_un_gerente_y_su_asistente(
 ) -> None:
     monkeypatch.setattr(cli, "settings", Settings(database_url=base))
 
-    assert cli.main(["crear-gerente", *PERSONA]) == 0
+    assert cli.main(["crear-gerente", *PERSONA, "--cargo", " Gerente  general "]) == 0
     salida = capsys.readouterr().out
     assert "Usuario: valentina.ramos" in salida
     assert re.search(r"^Id: [0-9a-f-]{36}$", salida, re.MULTILINE)
@@ -35,9 +35,11 @@ def test_crea_un_gerente_y_su_asistente(
         "--numero-documento", "001234567",
     ]  # fmt: skip
     assert cli.main(["crear-asistente", *asistente]) == 0
-    assert consultar(base, "SELECT rol, debe_cambiar_contrasena FROM usuario ORDER BY rol") == [
-        ("asistente", True),
-        ("gerente", True),
+    assert consultar(
+        base, "SELECT rol, debe_cambiar_contrasena, cargo FROM usuario ORDER BY rol"
+    ) == [
+        ("asistente", True, None),
+        ("gerente", True, "Gerente general"),
     ]
 
 

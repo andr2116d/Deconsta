@@ -1,3 +1,4 @@
+import type { Component } from 'vue'
 import type { RouteRecordRaw } from 'vue-router'
 
 import type { Rol } from '@/features/acceso/types'
@@ -18,7 +19,13 @@ export interface Seccion {
   icono: NombreIcono
   ubicacion: Ubicacion
   roles: readonly Rol[]
+  /** Pantalla ya construida. Sin ella, la sección muestra que está en desarrollo. */
+  vista?: () => Promise<Component>
+  /** Pestaña dentro de «Mi cuenta», con su nombre corto. */
+  pestanaCuenta?: string
 }
+
+const RUTA_CUENTA = 'cuenta'
 
 const AMBOS: readonly Rol[] = ['gerente', 'asistente']
 
@@ -126,30 +133,47 @@ export const SECCIONES: readonly Seccion[] = [
   },
   {
     nombre: 'mis-datos',
-    ruta: 'cuenta',
+    ruta: RUTA_CUENTA,
     etiqueta: 'Mis datos personales',
-    descripcion: 'Tu nombre, correo y teléfono, para mantenerlos al día.',
+    descripcion: 'Tus nombres, tu correo, tu teléfono y tu documento, para mantenerlos al día.',
     icono: 'persona',
     ubicacion: 'cuenta',
     roles: AMBOS,
+    vista: () => import('@/features/cuenta/views/DatosPersonalesView.vue'),
+    pestanaCuenta: 'Mis datos',
+  },
+  {
+    nombre: 'acceso-cuenta',
+    ruta: `${RUTA_CUENTA}/acceso`,
+    etiqueta: 'Usuario y contraseña',
+    descripcion: 'Tu usuario de acceso y tu contraseña.',
+    icono: 'candado',
+    ubicacion: 'cuenta',
+    roles: AMBOS,
+    vista: () => import('@/features/cuenta/views/AccesoCuentaView.vue'),
+    pestanaCuenta: 'Usuario y contraseña',
   },
   {
     nombre: 'permisos',
-    ruta: 'cuenta/permisos',
+    ruta: `${RUTA_CUENTA}/permisos`,
     etiqueta: 'Mi rol y permisos',
     descripcion: 'Qué puede hacer tu rol y qué le corresponde al otro.',
     icono: 'escudo',
     ubicacion: 'cuenta',
     roles: AMBOS,
+    vista: () => import('@/features/cuenta/views/PermisosView.vue'),
+    pestanaCuenta: 'Mi rol y permisos',
   },
   {
     nombre: 'privacidad',
-    ruta: 'cuenta/privacidad',
+    ruta: `${RUTA_CUENTA}/privacidad`,
     etiqueta: 'Privacidad y autorizaciones',
     descripcion: 'Los términos y la política que aceptaste, con su versión y su fecha.',
     icono: 'documento',
     ubicacion: 'cuenta',
     roles: AMBOS,
+    vista: () => import('@/features/cuenta/views/PrivacidadView.vue'),
+    pestanaCuenta: 'Privacidad',
   },
   {
     nombre: 'configuracion',
@@ -177,16 +201,36 @@ export function seccion(nombre: string): Seccion {
   return encontrada
 }
 
-/** Rutas hijas del espacio. Cada una muestra su sección mientras se construye. */
-export function rutasDelEspacio(): RouteRecordRaw[] {
-  return SECCIONES.map((s) => ({
-    path: s.ruta,
+export const pestanasCuenta = () => SECCIONES.filter((s) => s.pestanaCuenta)
+
+function rutaDe(s: Seccion, ruta = s.ruta): RouteRecordRaw {
+  return {
+    path: ruta,
     name: s.nombre,
-    component: () => import('./views/EnDesarrolloView.vue'),
+    component: s.vista ?? (() => import('./views/EnDesarrolloView.vue')),
     meta: {
       titulo: textoPorRol(s.etiqueta, 'gerente'),
       seccion: s,
       roles: s.roles,
     },
-  }))
+  }
+}
+
+/**
+ * Rutas hijas del espacio. Las pestañas de «Mi cuenta» cuelgan de una ruta padre con su propio
+ * marco, así cambiar de pestaña no rehace la página. Las secciones sin pantalla dicen que están
+ * en desarrollo.
+ */
+export function rutasDelEspacio(): RouteRecordRaw[] {
+  const prefijo = `${RUTA_CUENTA}/`
+  return [
+    ...SECCIONES.filter((s) => !s.pestanaCuenta).map((s) => rutaDe(s)),
+    {
+      path: RUTA_CUENTA,
+      component: () => import('@/features/cuenta/layouts/CuentaLayout.vue'),
+      children: pestanasCuenta().map((s) =>
+        rutaDe(s, s.ruta.startsWith(prefijo) ? s.ruta.slice(prefijo.length) : ''),
+      ),
+    },
+  ]
 }

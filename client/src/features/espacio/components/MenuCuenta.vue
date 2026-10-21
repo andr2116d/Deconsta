@@ -31,23 +31,16 @@ interface Opcion {
   temporal?: boolean
 }
 
-// «Usuario y contraseña» ya funciona: lleva a la pantalla de cambio de contraseña.
-const opciones = computed<Opcion[]>(() => {
-  const [datos, ...resto] = seccionesDe(props.usuario.rol, 'cuenta').map((s) => ({
+// Mientras la contraseña siga siendo temporal, «Usuario y contraseña» lo señala.
+const opciones = computed<Opcion[]>(() =>
+  seccionesDe(props.usuario.rol, 'cuenta').map((s) => ({
     clave: s.nombre,
     etiqueta: textoPorRol(s.etiqueta, props.usuario.rol),
     icono: s.icono,
     destino: { name: s.nombre },
-  }))
-  const contrasena: Opcion = {
-    clave: 'contrasena',
-    etiqueta: 'Usuario y contraseña',
-    icono: 'candado',
-    destino: { name: 'cambio-contrasena' },
-    temporal: props.contrasenaTemporal,
-  }
-  return datos ? [datos, contrasena, ...resto] : [contrasena, ...resto]
-})
+    temporal: s.nombre === 'acceso-cuenta' && props.contrasenaTemporal,
+  })),
+)
 
 function alternar() {
   abierto.value = !abierto.value
@@ -85,7 +78,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', alPresionarFue
 </script>
 
 <template>
-  <div ref="raiz" class="relative" @keydown.esc="cerrar(true)" @focusout="alSacarFoco">
+  <div
+    ref="raiz"
+    class="relative"
+    :data-menu-abierto="abierto || undefined"
+    @keydown.esc="cerrar(true)"
+    @focusout="alSacarFoco"
+  >
     <button
       ref="disparador"
       type="button"

@@ -7,6 +7,7 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from app.acceso.dominio.cuenta import FichaPersonal
 from app.acceso.dominio.datos_personales import DatosPersonales
 from app.acceso.dominio.incorporacion import DocumentoLegal
 from app.acceso.dominio.modelos import EventoAuditoria, Sesion, Usuario
@@ -25,7 +26,26 @@ class RepositorioUsuarios(Protocol):
         """Persiste el estado de acceso: contraseña, indicadores, contador y bloqueo."""
         ...
 
-    def agregar(self, usuario: Usuario, datos: DatosPersonales) -> None: ...
+    def agregar(
+        self, usuario: Usuario, datos: DatosPersonales, *, cargo: str | None = None
+    ) -> None: ...
+
+    def ficha(self, usuario_id: UUID) -> FichaPersonal | None:
+        """Datos personales descifrados y el cargo de la cuenta."""
+        ...
+
+    def actualizar_datos(self, usuario_id: UUID, datos: DatosPersonales) -> None:
+        """Reemplaza los datos personales. Lanza DatosDuplicados si el correo o el documento ya
+        pertenecen a otra cuenta."""
+        ...
+
+    def cambiar_nombre_usuario(
+        self, usuario_id: UUID, anterior: str, nuevo: str, ahora: datetime
+    ) -> None:
+        """Cambia el usuario y deja constancia del cambio. Lanza DatosDuplicados si está en uso."""
+        ...
+
+    def cambios_nombre_usuario_desde(self, usuario_id: UUID, desde: datetime) -> int: ...
 
 
 class RepositorioSesiones(Protocol):

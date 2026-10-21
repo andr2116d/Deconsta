@@ -3,7 +3,8 @@ cuenta deberá cambiarla al ingresar.
 
     uv run python -m app.acceso.infraestructura.cli crear-gerente --nombres "Valentina" \\
         --apellidos "Ramos Díaz" --correo valentina@ejemplo.pe --tipo-documento dni \\
-        --numero-documento 45678912 [--telefono 987654321] [--usuario valentina.ramos]
+        --numero-documento 45678912 [--telefono 987654321] [--usuario valentina.ramos] \\
+        [--cargo "Gerente general"]
 
     uv run python -m app.acceso.infraestructura.cli crear-asistente --gerente valentina.ramos ...
 """
@@ -33,6 +34,7 @@ def analizador() -> argparse.ArgumentParser:
         sub.add_argument("--numero-documento", required=True)
         sub.add_argument("--telefono")
         sub.add_argument("--usuario", help="Si se omite, se genera a partir del nombre")
+        sub.add_argument("--cargo", help="Cargo o función; la persona no puede editarlo")
     return principal
 
 
@@ -56,6 +58,7 @@ def main(argumentos: list[str]) -> int:
                 datos=datos,
                 gerente_nombre_usuario=getattr(args, "gerente", None),
                 nombre_usuario=args.usuario,
+                cargo=args.cargo,
             )
         finally:
             contenedor.cerrar()

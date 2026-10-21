@@ -3,6 +3,7 @@ persona usuaria: qué ocurrió y qué hacer. Ninguno incluye contraseñas, hashe
 """
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 
 
 class ErrorAcceso(Exception):
@@ -96,6 +97,52 @@ class DatosDuplicados(ErrorAcceso):
     mensaje = "Ya existe una cuenta con alguno de estos datos."
 
 
+class SinCambios(ErrorAcceso):
+    codigo = "SIN_CAMBIOS"
+    mensaje = "No hay cambios por guardar: los datos son iguales a los registrados."
+
+
+class ContrasenaRequerida(ErrorAcceso):
+    codigo = "CONTRASENA_REQUERIDA"
+    mensaje = "Confirma este cambio con tu contraseña actual."
+
+    def __init__(self) -> None:
+        super().__init__(campos={"contrasena_actual": self.mensaje})
+
+
+class DocumentoNoModificable(ErrorAcceso):
+    """El documento identifica a la persona titular: cambiarlo sería cambiar de persona."""
+
+    codigo = "DOCUMENTO_NO_MODIFICABLE"
+    mensaje = (
+        "Tu documento identifica a la persona titular de la cuenta y no se puede cambiar. "
+        "Solo se admite pasar de DNI a carné de extranjería."
+    )
+
+    def __init__(self) -> None:
+        super().__init__(campos={"numero_documento": self.mensaje})
+
+
+class CambioDocumentoSinConfirmar(ErrorAcceso):
+    codigo = "CAMBIO_DOCUMENTO_SIN_CONFIRMAR"
+    mensaje = (
+        "Pasar de DNI a carné de extranjería es un caso excepcional. Confirma expresamente el "
+        "cambio para continuar."
+    )
+
+
+class LimiteCambiosNombreUsuario(ErrorAcceso):
+    codigo = "LIMITE_CAMBIOS_USUARIO"
+
+    def __init__(self, maximo: int, renueva_en: datetime) -> None:
+        self.renueva_en = renueva_en
+        super().__init__(
+            f"Ya cambiaste tu usuario {maximo} veces este mes. Podrás volver a cambiarlo desde "
+            f"el {_fecha(renueva_en)}.",
+            campos={"nombre_usuario": f"Alcanzaste los {maximo} cambios de este mes."},
+        )
+
+
 class IncorporacionPendiente(ErrorAcceso):
     """La sesión es válida, pero la cuenta aún no completa los pasos de su primer ingreso."""
 
@@ -119,6 +166,16 @@ class DocumentosDesactualizados(ErrorAcceso):
 class ServicioNoDisponible(ErrorAcceso):
     codigo = "SERVICIO_NO_DISPONIBLE"
     mensaje = "El servicio no está disponible en este momento. Inténtalo de nuevo en unos minutos."
+
+
+MESES = (
+    "enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre"
+).split()
+
+
+def _fecha(momento: datetime) -> str:
+    """Fecha en la zona del momento (la del negocio): «1 de noviembre»."""
+    return f"{momento.day} de {MESES[momento.month - 1]}"
 
 
 def _duracion(segundos: int) -> str:

@@ -31,6 +31,19 @@ describe('FormularioCambioContrasena', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('advierte antes de enviar si la nueva contraseña es igual a la actual', async () => {
+    const fetch = simularFetch()
+    const { formulario, actual, nueva, confirmacion } = await montar()
+    await actual.setValue('Ciruela-2026')
+    await nueva.setValue('Ciruela-2026')
+    await confirmacion.setValue('Ciruela-2026')
+
+    expect(formulario.text()).toContain('La nueva contraseña debe ser distinta de la actual.')
+    expect(formulario.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    await formulario.find('form').trigger('submit')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('muestra junto al campo lo que la política del backend rechaza', async () => {
     simularFetch(
       respuesta(422, {
