@@ -52,11 +52,13 @@ Una migración aplicada no se edita: los cambios van en un archivo nuevo.
 ```sh
 uv run python -m app.acceso.infraestructura.cli crear-gerente --nombres "Valentina" \
   --apellidos "Ramos Díaz" --correo valentina@ejemplo.pe --tipo-documento dni \
-  --numero-documento 45678912 [--telefono 987654321] [--usuario valentina.ramos]
+  --numero-documento 45678912 [--telefono 987654321] [--usuario valentina.ramos] \
+  [--cargo "Gerente general"]
 uv run python -m app.acceso.infraestructura.cli crear-asistente --gerente valentina.ramos ...
 ```
 
-Imprime el id, el usuario y una contraseña temporal. `--tipo-documento` acepta `dni` o `ce`.
+Imprime el id, el usuario y una contraseña temporal. `--tipo-documento` acepta `dni` o `ce`. El
+cargo lo fija quien crea la cuenta; la persona no puede editarlo.
 
 ## Primer ingreso
 
@@ -84,6 +86,9 @@ que rige, todas las cuentas deben volver a aceptarla. Las aceptaciones quedan en
 | `POST /api/v1/documentos-legales/aceptacion` | Acepta las versiones vigentes (`{tipo, version}`) |
 | `GET /api/v1/espacio` | Entrada al espacio; exige la incorporación completa |
 | `POST /api/v1/asistentes/{id}/desbloqueo` | El gerente desbloquea a su asistente |
+| `GET /api/v1/cuenta` | Datos de la propia cuenta, descifrados, y el cupo de cambios de usuario |
+| `POST /api/v1/cuenta/datos` | Actualiza los datos personales (envía los datos completos) |
+| `POST /api/v1/cuenta/nombre-usuario` | Cambia el usuario (pide la contraseña actual) |
 
 Los errores siguen siempre `{"code", "detail", "fields"?}`. La asistente se bloquea al quinto
 intento fallido hasta que su gerente la desbloquee; el gerente no se bloquea. Aparte, el rate
@@ -93,6 +98,23 @@ limiting por IP y por usuario (en Redis, compartido entre instancias) responde 4
 Detrás de un proxy, arranca uvicorn con `--proxy-headers --forwarded-allow-ips=<ip del proxy>`
 para que el límite por IP use la IP real del cliente. En producción: `ENTORNO=produccion`,
 `COOKIE_SEGURA=true` y HTTPS en el borde.
+
+## Mi cuenta
+
+Cada cuenta consulta y actualiza solo sus propios datos; las rutas exigen la incorporación
+completa. Las reglas viven en `acceso/dominio/cuenta.py`:
+
+- Solo cuenta como cambio lo que difiere tras normalizar; si nada cambia, 422 `SIN_CAMBIOS`.
+- El número de documento no se cambia (`DOCUMENTO_NO_MODIFICABLE`). La única excepción es pasar
+  de DNI a carné de extranjería, con `confirmar_cambio_documento: true`; queda en la auditoría como
+  `DOCUMENTO_CAMBIADO`.
+- Cambiar el correo, el documento o el usuario pide `contrasena_actual`. Un intento con una
+  contraseña incorrecta queda como `CONFIRMACION_CONTRASENA_FALLIDA`.
+- El nombre como figura en los recibos (cifrado) es solo del gerente.
+- El usuario se cambia como máximo 3 veces por mes calendario en la zona de `TIMEZONE`; el cuarto
+  intento responde 409 `LIMITE_CAMBIOS_USUARIO` con `renews_at`. Los cambios quedan en
+  `cambio_nombre_usuario`, que solo admite inserciones.
+- La auditoría guarda qué campos cambiaron, nunca sus valores.
 
 ## Dependencias
 
