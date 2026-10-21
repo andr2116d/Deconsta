@@ -12,6 +12,12 @@ from app.documentos.dominio.errores import ArchivoDemasiadoGrande, ArchivoInvali
 from app.documentos.dominio.modelos import TAMANO_MAXIMO, TipoArchivo
 
 LARGO_NOMBRE = 120
+# Marcas de una foto HEIC/HEIF (el formato de las cámaras del iPhone), que no se acepta.
+MARCAS_HEIC = {b"heic", b"heix", b"hevc", b"heim", b"heis", b"mif1", b"msf1"}
+HEIC = (
+    "Las fotos HEIC del iPhone aún no se aceptan. Compártela como JPG (o toma una captura) y "
+    "vuelve a subirla."
+)
 INVISIBLES = re.compile(r"[\x00-\x1f\x7f-\x9f​-‏‪-‮⁠-⁩﻿]")
 
 
@@ -34,6 +40,8 @@ def validar_archivo(contenido: bytes) -> TipoArchivo:
         raise ArchivoDemasiadoGrande()
     tipo = detectar_tipo(contenido)
     if tipo is None:
+        if contenido[4:8] == b"ftyp" and contenido[8:12] in MARCAS_HEIC:
+            raise ArchivoInvalido(HEIC)
         raise ArchivoInvalido()
     return tipo
 

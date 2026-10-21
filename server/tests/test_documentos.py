@@ -71,6 +71,27 @@ def test_rechaza_los_archivos_que_no_son_un_documento(
     assert respuesta.json()["code"] == codigo
 
 
+def test_un_archivo_de_mas_de_10_mb_se_corta_sin_leerlo_y_lo_dice_del_archivo(
+    asistente: TestClient,
+) -> None:
+    respuesta = asistente.post(
+        DOCUMENTOS, files={"archivo": ("foto.jpg", b"\xff\xd8\xff" + b"0" * (11 * 1024 * 1024))}
+    )
+    assert respuesta.status_code == 413
+    assert respuesta.json()["code"] == "ARCHIVO_DEMASIADO_GRANDE"
+    assert set(respuesta.json()["fields"]) == {"archivo"}
+    # El resto de la API mantiene su tope de 64 KiB con su propio código.
+    otra = asistente.post("/api/v1/categorias", json={"nombre": "x" * 70_000})
+    assert (otra.status_code, otra.json()["code"]) == (413, "CUERPO_DEMASIADO_GRANDE")
+
+
+def test_una_foto_heic_del_iphone_explica_como_subirla(asistente: TestClient) -> None:
+    heic = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + b"\x00" * 100
+    respuesta = asistente.post(DOCUMENTOS, files={"archivo": ("IMG_0001.HEIC", heic)})
+    assert respuesta.status_code == 422
+    assert "HEIC" in respuesta.json()["fields"]["archivo"]
+
+
 def test_analiza_el_documento_y_lo_guarda_cifrado(
     cliente: TestClient, asistente: TestClient
 ) -> None:
