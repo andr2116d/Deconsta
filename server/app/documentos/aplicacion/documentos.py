@@ -4,8 +4,8 @@ Subir: el gerente y sus asistentes suben el documento al espacio del gerente (sa
 nunca del cliente). Se valida el archivo por su contenido, se rechaza el que ya respalda otra deuda
 y se guarda cifrado; el análisis corre después en el worker.
 
-Un documento solo lo ve quien lo subió y el gerente del espacio; cualquier otro responde igual que
-uno inexistente.
+Un documento lo ve quien lo subió y el gerente del espacio; si ya respalda una deuda, también las
+demás asistentes, que ven esa deuda. Cualquier otro responde igual que uno inexistente.
 """
 
 import hashlib
@@ -151,7 +151,11 @@ class _OperacionDocumentos:
         if (
             documento is None
             or documento.gerente_id != espacio_de(sesion)
-            or (usuario.rol is not Rol.GERENTE and documento.subido_por != usuario.id)
+            or (
+                usuario.rol is not Rol.GERENTE
+                and documento.subido_por != usuario.id
+                and documento.deuda_id is None
+            )
         ):
             raise DocumentoNoEncontrado()
         return documento

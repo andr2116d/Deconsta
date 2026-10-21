@@ -1,7 +1,8 @@
 """Rutas de los documentos de las deudas y del bloqueo del registro.
 
 Subir y consultar: gerente y asistentes con la incorporación completa. Cada documento lo ve quien
-lo subió y el gerente del espacio; cualquier otro responde 404 DOCUMENTO_NO_ENCONTRADO.
+lo subió y el gerente del espacio; el que ya respalda una deuda, también las demás asistentes.
+Cualquier otro responde 404 DOCUMENTO_NO_ENCONTRADO.
 
 `POST /documentos` recibe el archivo (multipart, campo `archivo`, hasta 10 MB) y responde 202 con
 el documento «analizando»: el análisis corre en el worker y se consulta con `GET /documentos/{id}`.

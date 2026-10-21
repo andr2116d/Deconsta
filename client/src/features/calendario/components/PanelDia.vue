@@ -90,9 +90,7 @@ const decidible = (v: Vencimiento) =>
               {{ TIPOS_DOCUMENTO[v.tipo_documento] }}
               <template v-if="v.cuotas > 1"> · cuota {{ v.cuota }} de {{ v.cuotas }}</template>
             </p>
-            <p v-if="rol === 'gerente'" class="text-[11px] text-secundario">
-              Registró {{ v.registrada_por }}
-            </p>
+            <p class="text-[11px] text-secundario">Registró {{ v.registrada_por }}</p>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <span
                 class="rounded-full px-2 py-0.5 text-[10px] font-bold"

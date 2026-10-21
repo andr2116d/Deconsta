@@ -181,6 +181,8 @@ class Equipo:
     gerente: Cuenta
     asistente: Cuenta
     otro_gerente: Cuenta
+    # Segunda asistente del mismo gerente.
+    otra_asistente: Cuenta
 
 
 def datos(nombres: str, apellidos: str, documento: str) -> DatosPersonales:
@@ -205,7 +207,8 @@ def equipo(cliente: TestClient) -> Equipo:
     gerente = cuenta(Rol.GERENTE, datos("Valentina", "Ramos", "45678912"))
     asistente = cuenta(Rol.ASISTENTE, datos("Lucía", "Vega", "41234567"), gerente.usuario)
     otro = cuenta(Rol.GERENTE, datos("Martín", "Salas", "40000001"))
-    return Equipo(gerente, asistente, otro)
+    otra_asistente = cuenta(Rol.ASISTENTE, datos("Rosa", "Quispe", "42345678"), gerente.usuario)
+    return Equipo(gerente, asistente, otro, otra_asistente)
 
 
 def consultar(url: str, sql: str, *parametros: object) -> list[tuple[Any, ...]]:
