@@ -10,7 +10,7 @@ export function respuesta(estado: number, cuerpo?: unknown): Response {
 export const SESION = {
   usuario: { id: '1', nombre_usuario: 'lucia.vega', nombres: 'Lucía', rol: 'asistente' },
   debe_cambiar_contrasena: true,
-  pasos_pendientes: ['cambiar_contrasena'],
+  pasos_pendientes: ['aceptar_documentos'],
 }
 
 /** Cuenta que ya completó el primer ingreso. */

@@ -7,11 +7,12 @@ export interface Usuario {
   rol: Rol
 }
 
-/** Pasos del primer ingreso, en el orden en que deben completarse. */
-export type PasoPendiente = 'cambiar_contrasena' | 'aceptar_documentos'
+/** Pasos obligatorios del primer ingreso. La contraseña temporal no es uno: solo se recuerda. */
+export type PasoPendiente = 'aceptar_documentos'
 
 export interface Sesion {
   usuario: Usuario
+  /** La cuenta sigue con la contraseña temporal: se recuerda en cada ingreso hasta cambiarla. */
   debe_cambiar_contrasena: boolean
   pasos_pendientes: PasoPendiente[]
 }

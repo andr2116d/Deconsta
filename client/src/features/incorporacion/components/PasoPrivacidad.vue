@@ -10,7 +10,7 @@ import { aceptarDocumentos, obtenerDocumentos } from '../api/incorporacion'
 import type { DocumentoLegal, TipoDocumentoLegal } from '../types'
 import LectorDocumento from './LectorDocumento.vue'
 
-const props = defineProps<{ usuario: Usuario; contrasenaCambiada: boolean; saliendo: boolean }>()
+defineProps<{ usuario: Usuario; saliendo: boolean }>()
 const emit = defineEmits<{
   aceptada: [sesion: Sesion]
   salir: []
@@ -148,10 +148,6 @@ onMounted(cargar)
     class="animate-aparecer rounded-[14px] border border-borde bg-white p-6 sm:p-9"
     aria-labelledby="titulo-privacidad"
   >
-    <BaseAviso v-if="props.contrasenaCambiada" tono="exito" class="mb-6">
-      Contraseña actualizada. Último paso: revisa cómo usamos tu información.
-    </BaseAviso>
-
     <span
       aria-hidden="true"
       class="mb-5 grid size-12 place-items-center rounded-[13px] bg-acento-suave text-acento"

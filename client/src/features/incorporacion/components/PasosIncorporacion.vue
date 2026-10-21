@@ -8,14 +8,10 @@ const props = defineProps<{ usuario: Usuario; pasoActual: PasoPendiente | null }
 const iniciales = computed(() => props.usuario.nombres.slice(0, 1).toUpperCase())
 const rol = computed(() => (props.usuario.rol === 'gerente' ? 'Gerente' : 'Asistente'))
 
-// El acceso ya se completó al validar las credenciales.
+// El acceso ya se completó al validar las credenciales. La contraseña temporal no es un paso: se
+// recuerda dentro del espacio.
 const pasos = computed(() => [
   { nombre: 'Acceso', completo: true, actual: false },
-  {
-    nombre: 'Contraseña',
-    completo: props.pasoActual !== 'cambiar_contrasena',
-    actual: props.pasoActual === 'cambiar_contrasena',
-  },
   {
     nombre: 'Privacidad',
     completo: false,
