@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { SECCIONES, seccionesDe, textoPorRol } from '../secciones'
+import { rutasDelEspacio, SECCIONES, seccionesDe, textoPorRol } from '../secciones'
 
 const etiquetas = (rol: 'gerente' | 'asistente', ubicacion: Parameters<typeof seccionesDe>[1]) =>
   seccionesDe(rol, ubicacion).map((s) => textoPorRol(s.etiqueta, rol))
@@ -26,6 +26,16 @@ describe('secciones del espacio', () => {
       'Calendario',
     ])
     expect(etiquetas('asistente', 'cuenta')).not.toContain('Límites y categorías')
+  })
+
+  it('agrupa las pestañas de Mi cuenta bajo una sola ruta', () => {
+    const cuenta = rutasDelEspacio().find((r) => r.path === 'cuenta')
+    expect(cuenta?.children?.map((r) => [r.path, r.name])).toEqual([
+      ['', 'mis-datos'],
+      ['acceso', 'acceso-cuenta'],
+      ['permisos', 'permisos'],
+      ['privacidad', 'privacidad'],
+    ])
   })
 
   it('no repite nombres ni rutas', () => {
