@@ -15,6 +15,7 @@ from app.pagos.aplicacion.pagos import (
     MoraConPrueba,
     PagoConComprobantes,
     PagoConDetalle,
+    PedidoConDetalle,
     PorPagar,
 )
 from app.pagos.dominio.modelos import (
@@ -115,6 +116,14 @@ class MoraResumen(BaseModel):
         )
 
 
+class PedidoResumen(BaseModel):
+    id: UUID
+    asistente_id: UUID
+    asistente: str
+    nota: str | None
+    pedido_en: datetime
+
+
 class CuotaPorPagarSalida(BaseModel):
     deuda_id: UUID
     concepto: str
@@ -133,6 +142,8 @@ class CuotaPorPagarSalida(BaseModel):
     devuelto_por: str | None
     # La mora vigente de la cuota o, si no hay, la última rechazada.
     mora: MoraResumen | None
+    # El pedido pendiente del gerente para pagarla.
+    pedido: PedidoResumen | None
 
     @classmethod
     def desde(cls, item: CuotaPorPagar) -> "CuotaPorPagarSalida":
@@ -152,6 +163,15 @@ class CuotaPorPagarSalida(BaseModel):
             registrada_por=item.registrada_por,
             devuelto_por=item.devuelto_por,
             mora=MoraResumen.desde(item.mora) if item.mora else None,
+            pedido=PedidoResumen(
+                id=item.pedido[0].id,
+                asistente_id=item.pedido[0].asistente_id,
+                asistente=item.pedido[1],
+                nota=item.pedido[0].nota,
+                pedido_en=item.pedido[0].pedido_en,
+            )
+            if item.pedido
+            else None,
         )
 
 
@@ -333,4 +353,45 @@ class MoraDetalleSalida(MoraSalida):
             prueba=ComprobanteSalida.desde(ComprobanteConsultado(prueba, registro_bloqueado=False))
             if prueba
             else None,
+        )
+
+
+class PedidoEntrada(Entrada):
+    deuda_id: UUID
+    cuota: int = Field(ge=1, le=360)
+    asistente_id: UUID
+    nota: str | None = Field(None, max_length=1000)
+
+
+class PedidoSalida(BaseModel):
+    id: UUID
+    deuda_id: UUID
+    concepto: str
+    cuota: int
+    cuotas: int
+    # En soles: el importe de la cuota.
+    importe: str
+    vence_el: date
+    vencida_hace: int | None
+    asistente_id: UUID
+    asistente: str
+    nota: str | None
+    pedido_en: datetime
+
+    @classmethod
+    def desde(cls, detalle: PedidoConDetalle) -> "PedidoSalida":
+        pedido, cuota = detalle.pedido, detalle.cuota
+        return cls(
+            id=pedido.id,
+            deuda_id=pedido.deuda_id,
+            concepto=detalle.concepto,
+            cuota=cuota.numero,
+            cuotas=detalle.cuotas,
+            importe=str(cuota.importe),
+            vence_el=cuota.vence_el,
+            vencida_hace=detalle.vencida_hace,
+            asistente_id=pedido.asistente_id,
+            asistente=detalle.asistente,
+            nota=pedido.nota,
+            pedido_en=pedido.pedido_en,
         )

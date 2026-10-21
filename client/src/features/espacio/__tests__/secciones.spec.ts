@@ -11,6 +11,7 @@ describe('secciones del espacio', () => {
       'Resumen',
       'Por autorizar',
       'Por verificar',
+      'Por pagar',
       'Calendario',
       'Historial',
       'Mi equipo',

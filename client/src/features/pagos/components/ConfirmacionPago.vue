@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import type { Rol } from '@/features/acceso/types'
 import { formatearFecha } from '@/features/deudas/catalogo'
 import { formatearSoles } from '@/features/reglas/importes'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
@@ -13,7 +12,7 @@ import type { Pago } from '../types'
  * Cierre del registro del pago. A la asistente se le dice que su gerente lo verificará; al
  * gerente, que quedó confirmado y qué no se pudo comprobar.
  */
-const props = defineProps<{ pago: Pago; rol: Rol }>()
+const props = defineProps<{ pago: Pago }>()
 
 const confirmado = computed(() => props.pago.estado === 'confirmado')
 const avisos = computed(
@@ -84,10 +83,10 @@ const avisos = computed(
 
     <div class="flex flex-col justify-center gap-2 sm:flex-row">
       <RouterLink
-        :to="{ name: rol === 'asistente' ? 'pagos-por-completar' : 'calendario' }"
+        :to="{ name: 'pagos-por-completar' }"
         class="inline-flex min-h-11 items-center justify-center gap-2 rounded-[9px] bg-acento px-4 text-[13px] font-bold text-white transition-colors duration-200 hover:bg-acento-hover"
       >
-        {{ rol === 'asistente' ? 'Ver lo que falta pagar' : 'Volver al calendario' }}
+        Ver lo que falta pagar
       </RouterLink>
     </div>
   </section>

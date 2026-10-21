@@ -6,6 +6,8 @@ import { useSesionStore } from '@/features/acceso/stores/sesion'
 import { useCategoriasStore } from '@/features/categorias/stores/categorias'
 import type { ColorCategoria } from '@/features/categorias/types'
 import { useNotificacionesStore } from '@/features/notificaciones/stores/notificaciones'
+import { listarPedidos } from '@/features/pagos/api/pagos'
+import type { Pedido } from '@/features/pagos/types'
 import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
@@ -77,6 +79,20 @@ const porDia = computed(() => {
 const delDia = computed(() => porDia.value.get(seleccionado.value) ?? [])
 const rol = computed(() => sesion.usuario?.rol ?? 'asistente')
 
+// Los pedidos de pago pendientes: el gerente los ve y los retira desde el día.
+const pedidos = ref<Pedido[]>([])
+const pedidoDe = (deudaId: string, cuota: number) =>
+  pedidos.value.find((p) => p.deuda_id === deudaId && p.cuota === cuota) ?? null
+
+async function cargarPedidos() {
+  if (rol.value !== 'gerente') return
+  try {
+    pedidos.value = await listarPedidos()
+  } catch {
+    // Sin la lista, el día solo ofrece pedir el pago; el backend avisa si ya se pidió.
+  }
+}
+
 const categoriaDe = (id: string | null) => categorias.categorias?.find((c) => c.id === id) ?? null
 const colorDe = (id: string | null): ColorCategoria => categoriaDe(id)?.color ?? 'grafito'
 
@@ -122,6 +138,7 @@ function recargar() {
   meses.value = new Map()
   void cargarMes(mes.value)
   void cargarProximos()
+  void cargarPedidos()
 }
 
 function seleccionar(dia: Dia) {
@@ -159,6 +176,7 @@ watch(() => notificaciones.avisos, recargar)
 onMounted(() => {
   void cargarMes(mes.value)
   void cargarProximos()
+  void cargarPedidos()
   if (!categorias.categorias) categorias.cargar().catch(() => undefined)
 })
 </script>
@@ -296,6 +314,8 @@ onMounted(() => {
         :vencimientos="delDia"
         :rol="rol"
         :categoria-de="categoriaDe"
+        :pedido-de="pedidoDe"
+        @cambio="cargarPedidos"
       />
     </div>
   </section>

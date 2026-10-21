@@ -27,8 +27,13 @@ function sincronizar() {
     if (typeof elemento.showModal === 'function') elemento.showModal()
     else elemento.setAttribute('open', '')
   } else if (!props.abierto && elemento.open) {
-    elemento.close()
+    cerrar(elemento)
   }
+}
+
+function cerrar(elemento: HTMLDialogElement) {
+  if (typeof elemento.close === 'function') elemento.close()
+  else elemento.removeAttribute('open')
 }
 
 function alCancelar(evento: Event) {
@@ -44,7 +49,7 @@ function alCerrar() {
 
 onMounted(sincronizar)
 watch(() => props.abierto, sincronizar, { flush: 'post' })
-onBeforeUnmount(() => dialogo.value?.open && dialogo.value.close())
+onBeforeUnmount(() => dialogo.value?.open && cerrar(dialogo.value))
 </script>
 
 <template>

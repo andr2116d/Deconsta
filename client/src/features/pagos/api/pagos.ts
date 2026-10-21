@@ -9,8 +9,10 @@ import type {
   MoraDetalle,
   NuevaMora,
   NuevoPago,
+  NuevoPedido,
   Pago,
   PagoDetalle,
+  Pedido,
   PorPagar,
   Proposito,
 } from '../types'
@@ -76,3 +78,11 @@ export const aprobarMora = (id: string) => enviarJson<MoraDetalle>(mora(id, 'apr
 
 export const rechazarMora = (id: string, motivo: string) =>
   enviarJson<MoraDetalle>(mora(id, 'rechazo'), { motivo })
+
+export const pedirPago = (datos: NuevoPedido) => enviarJson<Pedido>('/pagos/pedidos', datos)
+
+/** Los pendientes: a una asistente, los suyos; al gerente, los de su espacio. */
+export const listarPedidos = () => solicitar<Pedido[]>('/pagos/pedidos')
+
+export const retirarPedido = (id: string) =>
+  enviarJson<void>(`/pagos/pedidos/${encodeURIComponent(id)}/retiro`)

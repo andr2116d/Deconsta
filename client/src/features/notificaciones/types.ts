@@ -14,6 +14,8 @@ export type TipoNotificacion =
   | 'PAGO_DEVUELTO'
   | 'MORA_APROBADA'
   | 'MORA_RECHAZADA'
+  | 'PAGO_PEDIDO'
+  | 'PEDIDO_RETIRADO'
 
 export interface Notificacion {
   id: string

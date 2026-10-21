@@ -41,6 +41,8 @@ const ICONOS: Record<Notificacion['tipo'], NombreIcono> = {
   MORA_POR_APROBAR: 'alerta',
   MORA_APROBADA: 'check',
   MORA_RECHAZADA: 'cerrar',
+  PAGO_PEDIDO: 'reloj',
+  PEDIDO_RETIRADO: 'cerrar',
 }
 
 /** El siguiente paso de cada aviso, según el rol. */
@@ -63,6 +65,15 @@ function destino(n: Notificacion): { etiqueta: string; ruta: RouteLocationRaw } 
   }
   if (n.tipo === 'REGISTRO_DESBLOQUEADO') {
     return { etiqueta: 'Registrar una deuda', ruta: { name: 'registrar-deuda' } }
+  }
+  if (n.tipo === 'PAGO_PEDIDO' && n.deuda_id) {
+    return {
+      etiqueta: 'Registrar el pago',
+      ruta: { name: 'registrar-pago', query: { deuda: n.deuda_id } },
+    }
+  }
+  if (n.tipo === 'PEDIDO_RETIRADO') {
+    return { etiqueta: 'Ver lo que falta pagar', ruta: { name: 'pagos-por-completar' } }
   }
   if ((n.tipo === 'MORA_APROBADA' || n.tipo === 'MORA_RECHAZADA') && n.deuda_id) {
     return {
