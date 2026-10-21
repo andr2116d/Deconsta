@@ -109,10 +109,11 @@ export const SECCIONES: readonly Seccion[] = [
     nombre: 'mis-registros',
     ruta: 'mis-registros',
     etiqueta: 'Mis registros',
-    descripcion: 'Las deudas que registraste, su estado y las correcciones que te pidan.',
+    descripcion: 'Las deudas que registraste y los pagos que hiciste, con su estado.',
     icono: 'documento',
     ubicacion: 'pestana',
     roles: ['asistente'],
+    vista: () => import('@/features/historial/views/HistorialView.vue'),
   },
   {
     nombre: 'calendario',
@@ -132,6 +133,7 @@ export const SECCIONES: readonly Seccion[] = [
     icono: 'reloj',
     ubicacion: 'pestana',
     roles: ['gerente'],
+    vista: () => import('@/features/historial/views/HistorialView.vue'),
   },
   {
     nombre: 'equipo',

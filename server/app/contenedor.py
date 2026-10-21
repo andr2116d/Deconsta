@@ -67,6 +67,8 @@ from app.documentos.aplicacion.documentos import (
 from app.documentos.dominio.puertos import ColaAnalisis
 from app.documentos.infraestructura.cola_celery import ColaCelery
 from app.documentos.infraestructura.componentes import Componentes
+from app.historial.aplicacion.historial import ConsultarHistorial, ExportarHistorial
+from app.historial.infraestructura.persistencia import UnidadHistorialSql
 from app.notificaciones.aplicacion.notificaciones import (
     ListarNotificaciones,
     MarcarLeida,
@@ -216,6 +218,8 @@ class Contenedor:
     pedir_pago: PedirPago
     retirar_pedido: RetirarPedido
     listar_pedidos: ListarPedidos
+    consultar_historial: ConsultarHistorial
+    exportar_historial: ExportarHistorial
 
     @classmethod
     def crear(
@@ -295,6 +299,7 @@ class Contenedor:
             ),
             zona,
         )
+        historial = (lambda: UnidadHistorialSql(motor, cifrador), reloj, zona)
 
         return cls(
             config=config,
@@ -395,6 +400,8 @@ class Contenedor:
             pedir_pago=PedirPago(*pagos),
             retirar_pedido=RetirarPedido(*pagos),
             listar_pedidos=ListarPedidos(*pagos),
+            consultar_historial=ConsultarHistorial(*historial),
+            exportar_historial=ExportarHistorial(*historial),
         )
 
     def cerrar(self) -> None:
