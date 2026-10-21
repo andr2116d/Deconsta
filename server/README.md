@@ -36,6 +36,7 @@ app/
     dominio/         entidades, reglas y puertos (sin dependencias de infraestructura)
     aplicacion/      casos de uso
     infraestructura/ adaptadores: Postgres, Redis, Argon2id, cifrado, HTTP y CLI
+  categorias/      categorías del espacio (misma división en dominio, aplicacion e infraestructura)
   contenedor.py    conecta los casos de uso con sus adaptadores
 migraciones/       NNNN_descripcion.sql
 ```
@@ -98,6 +99,11 @@ que rige, todas las cuentas deben volver a aceptarla. Las aceptaciones quedan en
 | `POST /api/v1/cuenta/confirmacion-datos` | La asistente confirma sus datos en su primer ingreso |
 | `POST /api/v1/cuenta/datos` | Actualiza los datos personales (envía los datos completos) |
 | `POST /api/v1/cuenta/nombre-usuario` | Cambia el usuario (pide la contraseña actual) |
+| `GET /api/v1/categorias` | Categorías activas del espacio; `?archivadas=true` suma las archivadas (gerente) |
+| `POST /api/v1/categorias` | El gerente crea una categoría |
+| `POST /api/v1/categorias/{id}/edicion` | Cambia nombre y descripción; sin color o ícono conserva los actuales |
+| `POST /api/v1/categorias/{id}/archivado` | La retira de las deudas nuevas, con motivo opcional |
+| `POST /api/v1/categorias/{id}/reactivacion` | Vuelve a ofrecerla |
 
 Los errores siguen siempre `{"code", "detail", "fields"?}`. La asistente se bloquea al quinto
 intento fallido hasta que su gerente la desbloquee; el gerente no se bloquea. Aparte, el rate
@@ -128,6 +134,25 @@ El gerente administra a sus asistentes; cualquier otra cuenta responde 404. Las 
 - Bloquear (causa `gerente`) cierra sus sesiones; el bloqueo por 5 intentos fallidos tiene la causa
   `intentos_fallidos`. El mensaje de ingreso dice cuál fue.
 - El trabajo será del equipo, no de una asistente: eliminar a una no deja nada sin responsable.
+
+## Categorías
+
+Ordenan las deudas del espacio (agua, luz, tarjetas…) para filtrarlas, resumirlas y exportarlas.
+Son del espacio del gerente y las comparte su equipo. Las reglas viven en `categorias/dominio`:
+
+- Solo el gerente las crea, edita, archiva y reactiva; sus asistentes consultan las activas. El
+  espacio sale de la sesión: la categoría de otro espacio responde 404 `CATEGORIA_NO_ENCONTRADA`.
+- Nombre de 2 a 40 caracteres (letras, números, espacios y `. , & / ( ) ' + -`), único en el
+  espacio sin distinguir mayúsculas, tildes ni espacios repetidos. Uno repetido responde 409
+  `CATEGORIA_DUPLICADA`; si la otra está archivada, `existing_category` permite reactivarla.
+- Descripción opcional de hasta 200 caracteres: qué documentos van ahí (servirá para la
+  clasificación automática de los recibos). Color e ícono salen de catálogos fijos; sin ellos se
+  asignan el siguiente color de la paleta y una etiqueta.
+- Nunca se borran: archivar las retira de las deudas nuevas. Una archivada no se edita
+  (`CATEGORIA_ARCHIVADA`) hasta reactivarla. Hay un tope de 50 activas (`LIMITE_CATEGORIAS`).
+- Cada escritura toma la fila del gerente con `FOR UPDATE`, cuenta para el límite
+  `LIMITE_GESTION_CATEGORIAS` y queda en la auditoría (`CATEGORIA_CREADA`, `_EDITADA`,
+  `_ARCHIVADA`, `_REACTIVADA`) con quién, cuándo, el motivo y, al editar, el antes y el después.
 
 ## Validaciones de datos personales
 
