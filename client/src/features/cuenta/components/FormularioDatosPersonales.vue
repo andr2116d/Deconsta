@@ -10,7 +10,7 @@ import { camposCambiados, datosDe, requiereContrasena } from '../datos'
 import { useCuentaStore } from '../stores/cuenta'
 import type { Cuenta, DatosEditables, TipoDocumento } from '../types'
 import DialogoCambioDocumento from './DialogoCambioDocumento.vue'
-import DialogoFalloGuardado from './DialogoFalloGuardado.vue'
+import DialogoFalloGuardado from '@/shared/components/DialogoFalloGuardado.vue'
 
 const props = defineProps<{ cuenta: Cuenta }>()
 const emit = defineEmits<{ 'sesion-terminada': [] }>()
