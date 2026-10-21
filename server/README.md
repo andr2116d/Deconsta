@@ -37,6 +37,7 @@ app/
     aplicacion/      casos de uso
     infraestructura/ adaptadores: Postgres, Redis, Argon2id, cifrado, HTTP y CLI
   categorias/      categorías del espacio (misma división en dominio, aplicacion e infraestructura)
+  reglas/          reglas de autorización: límite en soles, titulares autorizados y evaluación
   contenedor.py    conecta los casos de uso con sus adaptadores
 migraciones/       NNNN_descripcion.sql
 ```
@@ -104,6 +105,12 @@ que rige, todas las cuentas deben volver a aceptarla. Las aceptaciones quedan en
 | `POST /api/v1/categorias/{id}/edicion` | Cambia nombre y descripción; sin color o ícono conserva los actuales |
 | `POST /api/v1/categorias/{id}/archivado` | La retira de las deudas nuevas, con motivo opcional |
 | `POST /api/v1/categorias/{id}/reactivacion` | Vuelve a ofrecerla |
+| `GET /api/v1/reglas` | Límite y titulares autorizados del gerente (documentos enmascarados) |
+| `POST /api/v1/reglas/limite` | Fija el límite (`"2900.50"`, como texto) o lo quita (`null`) |
+| `POST /api/v1/reglas/titulares` | Agrega un titular autorizado (pide `autorizacion_declarada`) |
+| `POST /api/v1/reglas/titulares/{id}/edicion` | Cambia nombre y relación; el documento no se edita |
+| `POST /api/v1/reglas/titulares/{id}/eliminacion` | Baja lógica, con motivo opcional |
+| `POST /api/v1/reglas/evaluacion` | Prueba las reglas con un documento de ejemplo; no guarda nada |
 
 Los errores siguen siempre `{"code", "detail", "fields"?}`. La asistente se bloquea al quinto
 intento fallido hasta que su gerente la desbloquee; el gerente no se bloquea. Aparte, el rate
@@ -153,6 +160,43 @@ Son del espacio del gerente y las comparte su equipo. Las reglas viven en `categ
 - Cada escritura toma la fila del gerente con `FOR UPDATE`, cuenta para el límite
   `LIMITE_GESTION_CATEGORIAS` y queda en la auditoría (`CATEGORIA_CREADA`, `_EDITADA`,
   `_ARCHIVADA`, `_REACTIVADA`) con quién, cuándo, el motivo y, al editar, el antes y el después.
+
+## Reglas de autorización
+
+Deciden qué de lo que registra una asistente espera la autorización del gerente. Solo el gerente
+las consulta y las cambia. Las reglas viven en `reglas/dominio`:
+
+- **Importe.** Espera autorización lo que supera el límite (estrictamente mayor). Sin límite, el
+  importe no detiene nada. Los importes son soles con dos decimales, como texto y `Decimal`, nunca
+  `float`; hasta S/ 9,999,999.99.
+- **Titular.** Espera autorización el documento cuyo titular no es el gerente (su nombre, su
+  documento y su nombre en recibos de Mi cuenta) ni un titular autorizado. Un documento sin
+  titular legible (una boleta de menos de S/ 700 no identifica al comprador) no se marca.
+- **Comparación de titulares.** Primero por documento: dos documentos distintos son dos personas, y
+  un RUC 10 reconoce el DNI que contiene. Si falta alguno, por nombre: sin importar orden, tildes,
+  mayúsculas, partículas («de», «los») ni iniciales («PEREZ GOMEZ JUAN C»), con al menos dos
+  palabras completas.
+- **Lo que registra el gerente** no espera a nadie; un titular distinto solo se le avisa.
+- **Titulares autorizados.** Nombre (persona o razón social) y documento opcional: DNI, carné o RUC
+  con su dígito verificador. Son datos personales de terceros (Ley 29733): exigen
+  `autorizacion_declarada` (se guarda su fecha), se cifran con AES-256-GCM, se buscan por huellas
+  HMAC, solo salen enmascarados y nunca van a la auditoría. No se repiten por nombre ni por
+  documento, el gerente no puede agregarse a sí mismo (`TITULAR_ES_GERENTE`) y hay un tope de 20.
+- Cada cambio toma la fila del gerente con `FOR UPDATE`, cuenta para `LIMITE_GESTION_REGLAS` y queda
+  en la auditoría: `LIMITE_AUTORIZACION_CAMBIADO` (antes y después), `TITULAR_AUTORIZADO_AGREGADO`,
+  `_EDITADO` (qué campos) y `_QUITADO` (con su motivo).
+
+`reglas.dominio.evaluacion.evaluar` es la regla que aplicará el registro de deudas, y
+`POST /reglas/evaluacion` la expone para que el gerente la pruebe.
+
+Pendiente para ese módulo:
+
+- avisar al gerente en tiempo real con una notificación persistente;
+- no aceptar documentos repetidos. Cada documento se identificará por la huella SHA-256 del archivo
+  y por una clave normalizada:
+  - comprobante SUNAT: RUC del emisor, serie y número;
+  - recibo de servicio: empresa, suministro y periodo;
+  - voucher: entidad y número de operación.
 
 ## Validaciones de datos personales
 
