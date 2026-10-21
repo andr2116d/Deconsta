@@ -27,6 +27,7 @@ from app.documentos.dominio.modelos import (
     DeudaDelDocumento,
     Documento,
     EstadoDocumento,
+    Naturaleza,
     Riesgo,
     Senal,
     TipoArchivo,
@@ -75,6 +76,7 @@ def analisis_a_json(analisis: Analisis) -> str:
                     )  # fmt: skip
                 },
                 "tipo": datos.tipo.value,
+                "naturaleza": datos.naturaleza.value,
                 "importe": str(datos.importe) if datos.importe is not None else None,
                 "vence_el": datos.vence_el.isoformat() if datos.vence_el else None,
                 "cuotas": [
@@ -105,9 +107,11 @@ def analisis_de_json(texto: str) -> Analisis:
             **{
                 clave: valor
                 for clave, valor in datos.items()
-                if clave not in ("tipo", "importe", "vence_el", "cuotas")
+                if clave not in ("tipo", "naturaleza", "importe", "vence_el", "cuotas")
             },
             tipo=TipoDocumento(datos["tipo"]),
+            # Los análisis anteriores a la naturaleza eran todos de deudas por pagar.
+            naturaleza=Naturaleza(datos.get("naturaleza", Naturaleza.POR_PAGAR.value)),
             importe=Decimal(datos["importe"]) if datos["importe"] else None,
             vence_el=date.fromisoformat(datos["vence_el"]) if datos["vence_el"] else None,
             cuotas=tuple(

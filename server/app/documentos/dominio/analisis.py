@@ -2,16 +2,24 @@
 
 1. Lectura (OCR): si el texto no se lee, el documento es ilegible y no se registra: no hay forma
    de comprobar a qué gasto corresponde. De su texto salen además los números largos que
-   identifican el documento aunque no se haya podido armar su clave de negocio.
+   identifican el documento aunque no se haya podido armar su clave de negocio, y las frases
+   inequívocas de un pago ya hecho («Yapeaste», «Constancia de transferencia») o de un documento
+   de identidad: esos no son una deuda y ni siquiera llegan a la IA.
 2. Revisión con IA: propone los datos y da un veredicto. Sus datos se contrastan con el texto
    leído: un importe o un código que no aparece en el documento no se da por bueno.
 3. Metadatos: el programa con que se guardó el archivo y si se modificó después de generarse.
 
 Cada hallazgo es una señal con su riesgo. Con riesgo alto, lo que sube una asistente se rechaza;
 con riesgo medio, la deuda espera la autorización del gerente. Al gerente solo se le advierte.
+
+Un documento que no es una deuda por pagar (el comprobante de un Yape: prueba un pago, no cobra
+nada) tampoco se registra si lo sube una asistente: así no se justifica un gasto propio con un
+pago cualquiera. Uno que cobra algo ya pagado (sello CANCELADO, boleta al contado) se deja
+registrar, pero espera la autorización del gerente.
 """
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -24,6 +32,7 @@ from app.documentos.dominio.modelos import (
     DatosLeidos,
     EstadoDocumento,
     Lectura,
+    Naturaleza,
     Riesgo,
     Senal,
     TipoDocumento,
@@ -39,6 +48,18 @@ MINIMO_NUMEROS_COMUNES = 4
 
 PATRON_IMPORTE = re.compile(r"(?<![\d.,])(\d{1,3}(?:[,.\s]\d{3})+|\d+)[.,](\d{2})(?!\d)")
 PATRON_NUMERO_LARGO = re.compile(r"\d{6,}")
+# Frases de la constancia de un pago ya hecho, sin tildes ni mayúsculas. Solo las inequívocas: un
+# recibo por pagar también dice «número de operación» o «paga en agentes».
+PATRON_PAGO_HECHO = re.compile(
+    r"\byapeaste\b|\bte yapearon\b|\bplineaste\b|\bte plinearon\b"
+    r"|constancia de (?:la |tu )?(?:transferencia|pago|operacion|deposito)"
+    r"|(?:transferencia|operacion|pago|deposito|yapeo) (?:realizad[oa] con exito|exitos[oa])"
+)
+PATRON_IDENTIDAD = re.compile(
+    r"documento nacional de identidad|registro nacional de identificacion"
+)
+# Lo que no se registra si lo sube una asistente.
+NO_ES_DEUDA = frozenset({"COMPROBANTE_DE_PAGO", "NO_ES_DEUDA"})
 
 # Programas con los que se cambia el contenido de una imagen o se arma un documento desde cero.
 EDITORES_IMAGEN = (
@@ -87,6 +108,64 @@ def senal_legibilidad(lectura: Lectura) -> Senal | None:
     if caracteres >= MINIMO_CARACTERES and lectura.confianza >= CONFIANZA_MINIMA:
         return None
     return senal_ilegible()
+
+
+def _plano(texto: str) -> str:
+    sin_tildes = "".join(
+        c for c in unicodedata.normalize("NFKD", texto.casefold()) if not unicodedata.combining(c)
+    )
+    return " ".join(sin_tildes.split())
+
+
+def senal_naturaleza_lectura(lectura: Lectura) -> Senal | None:
+    """Lo que el texto leído ya deja claro que no es una deuda, sin preguntarle a la IA."""
+    texto = _plano(lectura.texto)
+    if PATRON_PAGO_HECHO.search(texto):
+        return _senal(
+            Capa.LECTURA,
+            "COMPROBANTE_DE_PAGO",
+            "Es la constancia de un pago ya hecho (Yape, Plin o transferencia), no una deuda por "
+            "pagar. Sube el recibo, la boleta o el documento que cobra lo que se debe.",
+            Riesgo.ALTO,
+        )
+    if PATRON_IDENTIDAD.search(texto):
+        return _senal(
+            Capa.LECTURA,
+            "NO_ES_DEUDA",
+            "Parece un documento de identidad, no un documento de cobro. Sube el que cobra la "
+            "deuda.",
+            Riesgo.ALTO,
+        )
+    return None
+
+
+def senal_naturaleza(datos: DatosLeidos, motivos: Iterable[str] = ()) -> Senal | None:
+    """Lo que la IA dice que es el documento respecto de una deuda."""
+    detalle = " ".join(m.strip().rstrip(".") + "." for m in motivos if m.strip())
+    if datos.naturaleza is Naturaleza.PAGO_REALIZADO:
+        return _senal(
+            Capa.IA,
+            "COMPROBANTE_DE_PAGO",
+            "Es el comprobante de un pago ya hecho, no una deuda por pagar. Sube el recibo, la "
+            "boleta o el documento que cobra lo que se debe.",
+            Riesgo.ALTO,
+        )
+    if datos.naturaleza is Naturaleza.NO_ES_DEUDA:
+        return _senal(
+            Capa.IA,
+            "NO_ES_DEUDA",
+            detalle or "No es un documento que cobre una deuda (por ejemplo, una cotización).",
+            Riesgo.ALTO,
+        )
+    if datos.naturaleza is Naturaleza.YA_PAGADA:
+        return _senal(
+            Capa.IA,
+            "YA_PAGADA",
+            "El documento figura como pagado (cancelado, sin importe pendiente o al contado). "
+            "Revisa que de verdad falte pagarlo.",
+            Riesgo.MEDIO,
+        )
+    return None
 
 
 def importes_en_texto(texto: str) -> set[Decimal]:
@@ -242,7 +321,7 @@ def clave_negocio(datos: DatosLeidos) -> str | None:
     codigo = normalizar_numero(datos.codigo_pago)
     if datos.tipo in (TipoDocumento.BOLETA, TipoDocumento.FACTURA):
         partes = [numero]
-    elif datos.tipo is TipoDocumento.RECIBO_SERVICIO:
+    elif datos.tipo in (TipoDocumento.RECIBO_SERVICIO, TipoDocumento.ESTADO_CUENTA):
         partes = [codigo, normalizar_numero(datos.periodo) or numero]
     elif datos.tipo is TipoDocumento.CRONOGRAMA:
         partes = [codigo or numero]
@@ -267,6 +346,10 @@ def mismos_numeros(propios: set[bytes], ajenos: set[bytes]) -> bool:
 
 def estado_tras_analisis(analisis: Analisis, rol: Rol) -> EstadoDocumento:
     """Con riesgo alto, lo de una asistente no se registra; al gerente solo se le advierte."""
-    if rol is Rol.ASISTENTE and analisis.riesgo is Riesgo.ALTO:
+    if rol is Rol.GERENTE:
+        return EstadoDocumento.LISTO
+    if any(s.codigo in NO_ES_DEUDA for s in analisis.senales):
+        return EstadoDocumento.NO_ES_DEUDA
+    if analisis.riesgo is Riesgo.ALTO:
         return EstadoDocumento.RECHAZADO
     return EstadoDocumento.LISTO

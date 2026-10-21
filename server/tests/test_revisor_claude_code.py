@@ -19,6 +19,7 @@ from tests.dobles import TEXTO_RECIBO, imagen
 RESPUESTA = {
     "legible": True,
     "tipo_documento": "recibo_servicio",
+    "naturaleza": "por_pagar",
     "emisor": "Hidrandina S.A.",
     "emisor_ruc": "20132023540",
     "titular_nombre": "VALENTINA RAMOS DIAZ",

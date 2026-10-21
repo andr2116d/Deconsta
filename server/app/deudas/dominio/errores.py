@@ -50,6 +50,10 @@ class DocumentoNoRegistrable(ErrorDeudas):
             "El documento muestra señales de alteración y no puede respaldar una deuda. Sube el "
             "documento original que entregó el emisor."
         ),
+        "DOCUMENTO_NO_ES_DEUDA": (
+            "Este documento no cobra una deuda (por ejemplo, es el comprobante de un pago ya "
+            "hecho). Sube el recibo, la boleta o el documento que cobra lo que se debe."
+        ),
         "DOCUMENTO_FALLIDO": (
             "No pudimos terminar de revisar el documento. Súbelo otra vez en unos minutos."
         ),
