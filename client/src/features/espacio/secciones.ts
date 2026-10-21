@@ -58,6 +58,7 @@ export const SECCIONES: readonly Seccion[] = [
     icono: 'inicio',
     ubicacion: 'pestana',
     roles: AMBOS,
+    vista: () => import('@/features/panel/views/PanelView.vue'),
   },
   {
     nombre: 'por-autorizar',
