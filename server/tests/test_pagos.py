@@ -453,3 +453,114 @@ def test_la_mora_que_declara_el_gerente_queda_aprobada(gerente: TestClient) -> N
     mora = declarar(gerente, deuda["id"], prueba["id"]).json()
 
     assert (mora["estado"], mora["confianza"] is not None) == ("aprobada", True)
+
+
+PEDIDOS = f"{PAGOS}/pedidos"
+
+
+def test_el_gerente_pide_el_pago_y_el_pedido_dura_hasta_que_se_paga(
+    asistente: TestClient, gerente: TestClient, equipo: Equipo
+) -> None:
+    deuda = vencida(gerente, 19)
+
+    pedido = gerente.post(
+        PEDIDOS,
+        json={
+            "deuda_id": deuda["id"],
+            "cuota": 1,
+            "asistente_id": str(equipo.asistente.id),
+            "nota": "Hoy sin falta.",
+        },
+    )
+
+    assert pedido.status_code == 201, pedido.json()
+    assert (pedido.json()["asistente"], pedido.json()["vencida_hace"]) == ("Lucía Vega", 11)
+    [aviso] = [n for n in notificaciones(asistente) if n["tipo"] == "PAGO_PEDIDO"]
+    assert "Hoy sin falta." in aviso["cuerpo"]
+    [pendiente] = asistente.get(PEDIDOS).json()
+    assert pendiente["deuda_id"] == deuda["id"]
+    [cuota] = gerente.get(f"{PAGOS}/por-pagar").json()["cuotas"]
+    assert cuota["pedido"]["asistente"] == "Lucía Vega"
+    otra_vez = gerente.post(
+        PEDIDOS,
+        json={"deuda_id": deuda["id"], "cuota": 1, "asistente_id": str(equipo.asistente.id)},
+    )
+    assert (otra_vez.status_code, otra_vez.json()["code"]) == (409, "PEDIDO_YA_HECHO")
+    # Pagada la cuota, el pedido deja de molestar.
+    voucher(asistente)
+    leido = comprobante(asistente, deuda["id"], 400)
+    assert pagar(asistente, deuda["id"], leido["id"]).status_code == 201
+    assert asistente.get(PEDIDOS).json() == []
+
+
+def test_el_pedido_va_a_una_asistente_activa_y_solo_el_gerente_lo_hace_o_lo_retira(
+    cliente: TestClient, asistente: TestClient, gerente: TestClient, equipo: Equipo
+) -> None:
+    deuda = deuda_de(gerente, 20)
+    ajena = gerente.post(
+        PEDIDOS,
+        json={"deuda_id": deuda["id"], "cuota": 1, "asistente_id": str(equipo.otro_gerente.id)},
+    )
+    assert (ajena.status_code, ajena.json()["code"]) == (404, "CUENTA_NO_ENCONTRADA")
+    propia = asistente.post(
+        PEDIDOS,
+        json={"deuda_id": deuda["id"], "cuota": 1, "asistente_id": str(equipo.asistente.id)},
+    )
+    assert (propia.status_code, propia.json()["code"]) == (403, "SIN_PERMISO")
+    pedido = gerente.post(
+        PEDIDOS,
+        json={"deuda_id": deuda["id"], "cuota": 1, "asistente_id": str(equipo.otra_asistente.id)},
+    ).json()
+    # Lucía no ve el pedido de Rosa.
+    assert asistente.get(PEDIDOS).json() == []
+
+    assert gerente.post(f"{PEDIDOS}/{pedido['id']}/retiro").status_code == 204
+
+    rosa = sesion(cliente, equipo.otra_asistente)
+    assert rosa.get(PEDIDOS).json() == []
+    assert "PEDIDO_RETIRADO" in [n["tipo"] for n in notificaciones(rosa)]
+
+
+def pedir(gerente: TestClient, deuda_id: str, asistente_id: Any, **extra: Any) -> httpx.Response:
+    return gerente.post(
+        PEDIDOS,
+        json={"deuda_id": deuda_id, "cuota": 1, "asistente_id": str(asistente_id), **extra},
+    )
+
+
+def test_el_pedido_vuelve_si_el_gerente_devuelve_el_pago(
+    asistente: TestClient, gerente: TestClient, equipo: Equipo
+) -> None:
+    deuda = deuda_de(gerente, 21)
+    assert pedir(gerente, deuda["id"], equipo.asistente.id).status_code == 201
+    voucher(asistente, numero_operacion="07000021")
+    pago = pagar(asistente, deuda["id"], comprobante(asistente, deuda["id"], 221)["id"]).json()
+    assert asistente.get(PEDIDOS).json() == []
+    pagada = pedir(gerente, deuda["id"], equipo.asistente.id)
+    assert (pagada.status_code, pagada.json()["code"]) == (409, "CUOTA_YA_PAGADA")
+
+    gerente.post(f"{PAGOS}/{pago['id']}/devolucion", json={"motivo": "Es de otro mes."})
+
+    [pendiente] = asistente.get(PEDIDOS).json()
+    assert pendiente["deuda_id"] == deuda["id"]
+
+
+def test_no_se_pide_el_pago_de_lo_que_aun_no_se_puede_pagar(
+    asistente: TestClient, gerente: TestClient, equipo: Equipo
+) -> None:
+    gerente.post("/api/v1/reglas/limite", json={"limite_importe": "100.00"})
+    por_autorizar = deuda_de(asistente, 22)
+    sin_autorizar = pedir(gerente, por_autorizar["id"], equipo.asistente.id)
+    assert (sin_autorizar.status_code, sin_autorizar.json()["code"]) == (
+        409,
+        "DEUDA_POR_AUTORIZAR",
+    )
+    dobles(gerente).revisor.datos = replace(LEIDO, periodo="2026-08")
+    deuda = vencida(gerente, 23)
+    prueba = prueba_mora(asistente, deuda["id"], 309).json()
+    declarar(asistente, deuda["id"], prueba["id"])
+    con_mora = pedir(gerente, deuda["id"], equipo.asistente.id)
+    assert (con_mora.status_code, con_mora.json()["code"]) == (409, "MORA_POR_APROBAR")
+    dobles(gerente).revisor.datos = replace(LEIDO, periodo="2026-07")
+    larga = pedir(gerente, vencida(gerente, 24)["id"], equipo.asistente.id, nota="a" * 501)
+    assert (larga.status_code, set(larga.json()["fields"])) == (422, {"nota"})

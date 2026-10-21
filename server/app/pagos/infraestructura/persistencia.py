@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from app.acceso.infraestructura.cifrado import CifradorDatos
 from app.acceso.infraestructura.persistencia import RegistroAuditoriaSql
 from app.deudas.dominio.modelos import EstadoPago, LugarPago
-from app.deudas.infraestructura.persistencia import RepositorioDeudasSql
+from app.deudas.infraestructura.persistencia import PAGO_VIGENTE, RepositorioDeudasSql
 from app.documentos.dominio.bloqueos import Bloqueo
 from app.documentos.dominio.modelos import Capa, Riesgo, Senal, TipoArchivo
 from app.documentos.infraestructura.persistencia import (
@@ -29,7 +29,7 @@ from app.documentos.infraestructura.persistencia import (
     RepositorioDocumentosSql,
 )
 from app.notificaciones.infraestructura.persistencia import RepositorioNotificacionesSql
-from app.pagos.dominio.errores import ComprobanteNoUsable, CuotaNoPagable
+from app.pagos.dominio.errores import ComprobanteNoUsable, CuotaNoPagable, PedidoYaHecho
 from app.pagos.dominio.modelos import (
     AnalisisComprobante,
     Comprobacion,
@@ -40,6 +40,7 @@ from app.pagos.dominio.modelos import (
     Moneda,
     Mora,
     Pago,
+    Pedido,
     Proposito,
     ResultadoComprobacion,
 )
@@ -508,6 +509,98 @@ class RepositorioMorasSql:
         return resultado
 
 
+class RepositorioPedidosSql:
+    COLUMNAS = (
+        "id, gerente_id, deuda_id, cuota, asistente_id, nota, pedido_en, retirado_en, retirado_por"
+    )
+
+    def __init__(self, conexion: Connection) -> None:
+        self._conexion = conexion
+
+    @staticmethod
+    def _pedido(fila: Row[Any]) -> Pedido:
+        return Pedido(
+            id=fila.id,
+            gerente_id=fila.gerente_id,
+            deuda_id=fila.deuda_id,
+            cuota=fila.cuota,
+            asistente_id=fila.asistente_id,
+            nota=fila.nota,
+            pedido_en=fila.pedido_en,
+            retirado_en=fila.retirado_en,
+            retirado_por=fila.retirado_por,
+        )
+
+    def agregar(self, pedido: Pedido) -> None:
+        try:
+            with self._conexion.begin_nested():
+                self._conexion.execute(
+                    text(
+                        f"INSERT INTO pedido_pago ({self.COLUMNAS}) VALUES (:id, :gerente_id,"
+                        " :deuda_id, :cuota, :asistente_id, :nota, :pedido_en, NULL, NULL)"
+                    ),
+                    {
+                        "id": pedido.id,
+                        "gerente_id": pedido.gerente_id,
+                        "deuda_id": pedido.deuda_id,
+                        "cuota": pedido.cuota,
+                        "asistente_id": pedido.asistente_id,
+                        "nota": pedido.nota,
+                        "pedido_en": pedido.pedido_en,
+                    },
+                )
+        except IntegrityError as error:
+            if _restriccion(error) == "uq_pedido_pago_vigente":
+                raise PedidoYaHecho() from error
+            raise
+
+    def por_id(self, pedido_id: UUID, *, bloquear: bool = False) -> Pedido | None:
+        cerrojo = " FOR UPDATE" if bloquear else ""
+        fila = self._conexion.execute(
+            text(f"SELECT {self.COLUMNAS} FROM pedido_pago WHERE id = :id{cerrojo}"),
+            {"id": pedido_id},
+        ).first()
+        return self._pedido(fila) if fila else None
+
+    def guardar(self, pedido: Pedido) -> None:
+        self._conexion.execute(
+            text(
+                "UPDATE pedido_pago SET retirado_en = :retirado_en, retirado_por = :retirado_por"
+                " WHERE id = :id"
+            ),
+            {
+                "id": pedido.id,
+                "retirado_en": pedido.retirado_en,
+                "retirado_por": pedido.retirado_por,
+            },
+        )
+
+    def pendientes(self, gerente_id: UUID, asistente_id: UUID | None = None) -> list[Pedido]:
+        filtro = " AND p.asistente_id = :asistente_id" if asistente_id else ""
+        columnas = ", ".join(f"p.{c.strip()}" for c in self.COLUMNAS.split(","))
+        filas = self._conexion.execute(
+            text(
+                f"SELECT {columnas} FROM pedido_pago p JOIN deuda d ON d.id = p.deuda_id"
+                f" WHERE p.gerente_id = :gerente_id AND p.retirado_en IS NULL{filtro}"
+                " AND d.estado = 'registrada' AND NOT EXISTS (SELECT 1 FROM pago"
+                " WHERE pago.deuda_id = p.deuda_id AND pago.cuota = p.cuota"
+                f" AND {PAGO_VIGENTE}) ORDER BY p.pedido_en"
+            ),
+            {"gerente_id": gerente_id, "asistente_id": asistente_id},
+        ).all()
+        return [self._pedido(fila) for fila in filas]
+
+    def asistente_activa(self, gerente_id: UUID, asistente_id: UUID) -> bool:
+        fila = self._conexion.execute(
+            text(
+                "SELECT 1 FROM usuario WHERE id = :id AND rol = 'asistente'"
+                " AND gerente_id = :gerente_id AND eliminada_en IS NULL AND bloqueada_en IS NULL"
+            ),
+            {"id": asistente_id, "gerente_id": gerente_id},
+        ).first()
+        return fila is not None
+
+
 class RepositorioBloqueosPagosSql:
     def __init__(self, conexion: Connection) -> None:
         self._conexion = conexion
@@ -603,6 +696,7 @@ class UnidadPagosSql:
         self.comprobantes = RepositorioComprobantesSql(self._conexion, self._cifrador)
         self.pagos = RepositorioPagosSql(self._conexion)
         self.moras = RepositorioMorasSql(self._conexion)
+        self.pedidos = RepositorioPedidosSql(self._conexion)
         self.deudas = RepositorioDeudasSql(self._conexion, self._cifrador)
         self.documentos = RepositorioDocumentosSql(self._conexion, self._cifrador)
         self.bloqueos = RepositorioBloqueosPagosSql(self._conexion)

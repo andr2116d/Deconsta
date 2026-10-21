@@ -28,6 +28,7 @@ from app.acceso.dominio.errores import ServicioNoDisponible, SinPermiso
 from app.acceso.dominio.modelos import Accion, EventoAuditoria, Rol
 from app.acceso.dominio.puertos import LimitadorSolicitudes, Limite, Reloj
 from app.categorias.aplicacion.categorias import espacio_de
+from app.deudas.aplicacion.deudas import formatear_fecha
 from app.deudas.dominio.errores import DeudaNoEncontrada
 from app.deudas.dominio.modelos import Cuota, Deuda, EstadoDeuda, EstadoPago, LugarPago
 from app.documentos.aplicacion.documentos import huella_archivo
@@ -60,6 +61,7 @@ from app.pagos.dominio.errores import (
     MoraNoEncontrada,
     PagoInvalido,
     PagoNoEncontrado,
+    PedidoNoEncontrado,
     RegistroPagosBloqueado,
 )
 from app.pagos.dominio.modelos import (
@@ -70,6 +72,7 @@ from app.pagos.dominio.modelos import (
     EstadoMora,
     Mora,
     Pago,
+    Pedido,
     Proposito,
 )
 from app.pagos.dominio.puertos import (
@@ -552,6 +555,8 @@ class CuotaPorPagar:
     devuelto_por: str | None = None
     # La mora vigente de la cuota o, si no hay, la última rechazada.
     mora: Mora | None = None
+    # El pedido pendiente del gerente para pagarla y a quién se lo hizo.
+    pedido: tuple[Pedido, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -582,19 +587,25 @@ class ListarPorPagar(_OperacionPagos):
             deudas = uow.deudas.por_pagar(gerente_id)
             devueltas = uow.pagos.devoluciones(gerente_id)
             moras = uow.moras.del_espacio_por_cuota(gerente_id)
+            pedidos = {(p.deuda_id, p.cuota): p for p in uow.pedidos.pendientes(gerente_id)}
             nombres: dict[UUID, str] = {}
-            cuotas = [
-                CuotaPorPagar(
-                    d,
-                    d.por_pagar[0],
-                    d.vencida_hace(hoy),
-                    _nombre(uow, d.registrada_por, nombres),
-                    devueltas.get((d.id, d.por_pagar[0].numero)),
-                    moras.get((d.id, d.por_pagar[0].numero)),
+            cuotas = []
+            for d in deudas:
+                if not d.por_pagar:
+                    continue
+                clave = (d.id, d.por_pagar[0].numero)
+                pedido = pedidos.get(clave)
+                cuotas.append(
+                    CuotaPorPagar(
+                        d,
+                        d.por_pagar[0],
+                        d.vencida_hace(hoy),
+                        _nombre(uow, d.registrada_por, nombres),
+                        devueltas.get(clave),
+                        moras.get(clave),
+                        (pedido, _nombre(uow, pedido.asistente_id, nombres)) if pedido else None,
+                    )
                 )
-                for d in deudas
-                if d.por_pagar
-            ]
             bloqueado = uow.bloqueos.vigente(sesion.usuario.id) is not None
         cuotas.sort(key=lambda c: (c.cuota.vence_el, c.deuda.concepto.casefold()))
         return PorPagar(hoy, cuotas, bloqueado)
@@ -1184,3 +1195,149 @@ class ConsultarMora(_OperacionPagos):
             return MoraConPrueba(
                 _con_detalle(uow, mora, {}), uow.comprobantes.por_id(mora.prueba_id)
             )
+
+
+LARGO_NOTA_PEDIDO = 500
+
+
+@dataclass(frozen=True)
+class PedidoConDetalle:
+    pedido: Pedido
+    concepto: str
+    cuota: Cuota
+    cuotas: int
+    vencida_hace: int | None
+    asistente: str
+
+
+class PedirPago(_OperacionPagos):
+    """El gerente pide a una asistente activa de su espacio que pague una cuota registrada que
+    falta pagar. Le llega un aviso que reaparece mientras la cuota siga por pagar."""
+
+    def ejecutar(
+        self,
+        sesion: SesionActiva,
+        deuda_id: UUID,
+        numero: int,
+        asistente_id: UUID,
+        nota: str | None = None,
+    ) -> PedidoConDetalle:
+        if sesion.usuario.rol is not Rol.GERENTE:
+            raise SinPermiso()
+        limpia = " ".join((nota or "").split()) or None
+        if limpia and len(limpia) > LARGO_NOTA_PEDIDO:
+            mensaje = f"Usa como máximo {LARGO_NOTA_PEDIDO} caracteres."
+            raise PagoInvalido(mensaje, campos={"nota": mensaje})
+        self._cupo(sesion)
+        hoy = self._hoy()
+        avisos = Avisos(self._publicador)
+        with self._unidad() as uow:
+            deuda, cuota = self._cuota_por_pagar(uow, sesion, deuda_id, numero, bloquear=True)
+            if not uow.pedidos.asistente_activa(sesion.usuario.id, asistente_id):
+                raise AsistenteNoEncontrada()
+            ahora = self._reloj()
+            pedido = Pedido(
+                uuid4(), deuda.gerente_id, deuda.id, numero, asistente_id, limpia, ahora
+            )
+            uow.pedidos.agregar(pedido)
+            uow.auditoria.registrar(
+                EventoAuditoria(
+                    Accion.PAGO_PEDIDO,
+                    actor_id=sesion.usuario.id,
+                    cuenta_id=asistente_id,
+                    detalle={"pedido_id": str(pedido.id), "deuda_id": str(deuda.id)},
+                )
+            )
+            importe = formatear_soles(cuota.importe)
+            avisos.guardar(
+                uow.notificaciones,
+                nueva_notificacion(
+                    asistente_id,
+                    TipoNotificacion.PAGO_PEDIDO,
+                    f"pedido:{pedido.id}",
+                    "Tu gerente te pidió pagar una deuda",
+                    f"«{deuda.concepto}» por {importe}, vence el "
+                    f"{formatear_fecha(cuota.vence_el)}."
+                    + (f" Nota: {limpia}" if limpia else "")
+                    + " Te lo recordaremos hasta que registres el pago.",
+                    ahora,
+                    deuda_id=deuda.id,
+                ),
+            )
+            detalle = PedidoConDetalle(
+                pedido,
+                deuda.concepto,
+                cuota,
+                len(deuda.cuotas),
+                deuda.vencida_hace(hoy),
+                _nombre(uow, asistente_id, {}),
+            )
+        avisos.enviar()
+        return detalle
+
+
+class RetirarPedido(_OperacionPagos):
+    def ejecutar(self, sesion: SesionActiva, pedido_id: UUID) -> None:
+        if sesion.usuario.rol is not Rol.GERENTE:
+            raise SinPermiso()
+        self._cupo(sesion)
+        avisos = Avisos(self._publicador)
+        with self._unidad() as uow:
+            pedido = uow.pedidos.por_id(pedido_id, bloquear=True)
+            if pedido is None or pedido.gerente_id != sesion.usuario.id:
+                raise PedidoNoEncontrado()
+            ahora = self._reloj()
+            pedido.retirar(sesion.usuario.id, ahora)
+            uow.pedidos.guardar(pedido)
+            uow.auditoria.registrar(
+                EventoAuditoria(
+                    Accion.PEDIDO_RETIRADO,
+                    actor_id=sesion.usuario.id,
+                    cuenta_id=pedido.asistente_id,
+                    detalle={"pedido_id": str(pedido.id), "deuda_id": str(pedido.deuda_id)},
+                )
+            )
+            deuda = uow.deudas.por_id(pedido.deuda_id)
+            avisos.guardar(
+                uow.notificaciones,
+                nueva_notificacion(
+                    pedido.asistente_id,
+                    TipoNotificacion.PEDIDO_RETIRADO,
+                    f"pedido:{pedido.id}:retirado",
+                    "Tu gerente retiró un pedido de pago",
+                    f"Ya no te pide pagar «{deuda.concepto if deuda else ''}». Sigue en lo que "
+                    "falta pagar, sin prioridad.",
+                    ahora,
+                    deuda_id=pedido.deuda_id,
+                ),
+            )
+        avisos.enviar()
+
+
+class ListarPedidos(_OperacionPagos):
+    def ejecutar(self, sesion: SesionActiva) -> list[PedidoConDetalle]:
+        """Los pendientes: a una asistente, los suyos; al gerente, los de su espacio."""
+        hoy = self._hoy()
+        usuario = sesion.usuario
+        with self._unidad() as uow:
+            pedidos = uow.pedidos.pendientes(
+                espacio_de(sesion), None if usuario.rol is Rol.GERENTE else usuario.id
+            )
+            nombres: dict[UUID, str] = {}
+            resultado = []
+            for pedido in pedidos:
+                deuda = uow.deudas.por_id(pedido.deuda_id)
+                cuota = deuda.cuota(pedido.cuota) if deuda else None
+                if deuda is None or cuota is None:
+                    continue
+                resultado.append(
+                    PedidoConDetalle(
+                        pedido,
+                        deuda.concepto,
+                        cuota,
+                        len(deuda.cuotas),
+                        deuda.vencida_hace(hoy),
+                        _nombre(uow, pedido.asistente_id, nombres),
+                    )
+                )
+            return resultado

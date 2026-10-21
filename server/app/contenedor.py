@@ -88,9 +88,12 @@ from app.pagos.aplicacion.pagos import (
     ListarBloqueosPagos,
     ListarMoras,
     ListarPagos,
+    ListarPedidos,
     ListarPorPagar,
+    PedirPago,
     RechazarMora,
     RegistrarPago,
+    RetirarPedido,
     SubirComprobante,
 )
 from app.pagos.dominio.puertos import ColaComprobantes
@@ -210,6 +213,9 @@ class Contenedor:
     consultar_mora: ConsultarMora
     aprobar_mora: AprobarMora
     rechazar_mora: RechazarMora
+    pedir_pago: PedirPago
+    retirar_pedido: RetirarPedido
+    listar_pedidos: ListarPedidos
 
     @classmethod
     def crear(
@@ -386,6 +392,9 @@ class Contenedor:
             consultar_mora=ConsultarMora(*pagos),
             aprobar_mora=AprobarMora(*pagos),
             rechazar_mora=RechazarMora(*pagos),
+            pedir_pago=PedirPago(*pagos),
+            retirar_pedido=RetirarPedido(*pagos),
+            listar_pedidos=ListarPedidos(*pagos),
         )
 
     def cerrar(self) -> None:
