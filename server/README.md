@@ -56,7 +56,7 @@ uv run python -m app.acceso.infraestructura.cli crear-gerente --nombres "Valenti
 uv run python -m app.acceso.infraestructura.cli crear-asistente --gerente valentina.ramos ...
 ```
 
-Imprime el usuario y una contraseña temporal; al ingresar se pide cambiarla (se puede omitir y
+Imprime el id, el usuario y una contraseña temporal; al ingresar se pide cambiarla (se puede omitir y
 se vuelve a pedir en cada ingreso). `--tipo-documento` acepta `dni` o `ce`.
 
 ## Acceso
@@ -84,4 +84,5 @@ para que el límite por IP use la IP real del cliente. En producción: `ENTORNO=
 uv add <paquete>           # dependencia de producción
 uv add --dev <paquete>     # dependencia de desarrollo
 uv remove <paquete>
+uv lock --upgrade          # actualizar versiones
 ```

@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from app.acceso.infraestructura import cli
@@ -21,6 +23,7 @@ def test_crea_un_gerente_y_su_asistente(
     assert cli.main(["crear-gerente", *PERSONA]) == 0
     salida = capsys.readouterr().out
     assert "Usuario: valentina.ramos" in salida
+    assert re.search(r"^Id: [0-9a-f-]{36}$", salida, re.MULTILINE)
     assert "Contraseña temporal: " in salida
 
     asistente = [

@@ -68,6 +68,7 @@ def main(argumentos: list[str]) -> int:
         return 1
     salida.write(
         f"Cuenta de {creada.usuario.rol.value} creada.\n"
+        f"Id: {creada.usuario.id}\n"
         f"Usuario: {creada.usuario.nombre_usuario}\n"
         f"Contraseña temporal: {creada.contrasena_temporal}\n"
         "Compártela por un canal seguro; se pedirá cambiarla al ingresar.\n"
