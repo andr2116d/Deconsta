@@ -6,6 +6,7 @@ import type { Rol } from '@/features/acceso/types'
 import InsigniaCategoria from '@/features/categorias/components/InsigniaCategoria.vue'
 import type { Categoria } from '@/features/categorias/types'
 import { ESTADOS, TIPOS_DOCUMENTO } from '@/features/deudas/catalogo'
+import type { EstadoPago } from '@/features/deudas/types'
 import { formatearSoles } from '@/features/reglas/importes'
 import BaseIcono from '@/shared/components/BaseIcono.vue'
 
@@ -47,9 +48,11 @@ const decidible = (v: Vencimiento) =>
   props.rol === 'gerente' && (v.estado === 'por_autorizar' || v.revision_pendiente)
 // Lo registrado se paga, lo pague quien lo pague del espacio; lo que espera autorización, no.
 const pagable = (v: Vencimiento) => v.estado === 'registrada' && !v.pago
-const PAGOS = {
+// Un pago devuelto no llega aquí: la cuota vuelve a estar por pagar.
+const PAGOS: Record<EstadoPago, { texto: string; clase: string }> = {
   confirmado: { texto: 'Pagada', clase: 'bg-exito-fondo text-exito' },
   por_verificar: { texto: 'Pago por verificar', clase: 'bg-rosa text-ciruela' },
+  devuelto: { texto: 'Pago devuelto', clase: 'bg-error-fondo text-error' },
 }
 </script>
 

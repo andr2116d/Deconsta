@@ -49,6 +49,8 @@ export interface CuotaPorPagar {
   importe: string
   vencida_hace: number | null
   registrada_por: string
+  /** Por qué el gerente devolvió el último pago de esta cuota, si lo devolvió. */
+  devuelto_por: string | null
 }
 
 export interface PorPagar {
@@ -77,12 +79,19 @@ export interface Pago {
   lugar_pago: LugarPago | null
   pagado_el: string
   estado: EstadoPago
-  /** De 0 a 95: cuánto respaldan los comprobantes que el pago es verdadero. */
-  confianza: number
-  comprobaciones: Comprobacion[]
+  /** Solo para el gerente: de 0 a 95, cuánto respaldan los comprobantes que el pago es verdadero. */
+  confianza: number | null
+  comprobaciones: Comprobacion[] | null
   comprobantes: string[]
   registrado_por: string
   registrado_en: string
+  decidido_en: string | null
+  motivo_decision: string | null
+}
+
+export interface PagoDetalle extends Pago {
+  cuotas: number
+  detalle_comprobantes: Comprobante[]
 }
 
 export interface NuevoPago {
