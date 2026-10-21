@@ -1,0 +1,21 @@
+import { vi } from 'vitest'
+
+export function respuesta(estado: number, cuerpo?: unknown): Response {
+  return new Response(cuerpo === undefined ? null : JSON.stringify(cuerpo), {
+    status: estado,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+export const SESION = {
+  usuario: { id: '1', nombre_usuario: 'lucia.vega', nombres: 'Lucía', rol: 'asistente' },
+  debe_cambiar_contrasena: true,
+}
+
+/** Simula fetch con respuestas en orden y devuelve el mock para revisar las llamadas. */
+export function simularFetch(...respuestas: Array<Response | Promise<Response>>) {
+  const mock = vi.fn<typeof fetch>()
+  for (const r of respuestas) mock.mockImplementationOnce(() => Promise.resolve(r))
+  vi.stubGlobal('fetch', mock)
+  return mock
+}
