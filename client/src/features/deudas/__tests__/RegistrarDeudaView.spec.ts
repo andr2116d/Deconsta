@@ -79,6 +79,35 @@ describe('RegistrarDeudaView', () => {
     expect(vista.find('form').exists()).toBe(false)
   })
 
+  it('lo que no es una deuda no deja llenar los datos y pide el documento de cobro', async () => {
+    simularFetch(
+      respuesta(200, []),
+      respuesta(202, SUBIDO),
+      respuesta(200, {
+        ...SUBIDO,
+        estado: 'no_es_deuda',
+        riesgo: 'alto',
+        senales: [
+          {
+            capa: 'lectura',
+            codigo: 'COMPROBANTE_DE_PAGO',
+            detalle: 'Es la constancia de un pago ya hecho.',
+            riesgo: 'alto',
+          },
+        ],
+      }),
+    )
+    const vista = montar()
+    await flushPromises()
+
+    await elegir(vista)
+    await vi.advanceTimersByTimeAsync(1300)
+    await flushPromises()
+
+    expect(vista.text()).toContain('Este documento no cobra una deuda')
+    expect(vista.find('form').exists()).toBe(false)
+  })
+
   it('un documento ya usado dice en qué deuda y si se pausó el registro', async () => {
     simularFetch(
       respuesta(200, []),

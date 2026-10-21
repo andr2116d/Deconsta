@@ -146,4 +146,12 @@ describe('FormularioDeuda', () => {
       .trigger('click')
     expect(formulario.text()).not.toContain('Crea la categoría «Papeletas»')
   })
+
+  it('nombra los tipos nuevos del análisis, como un comprobante de pago', () => {
+    const formulario = montar(
+      documento({ ...PROPUESTA, tipo: 'comprobante_pago', emisor: 'BCP' }),
+      'gerente',
+    )
+    expect(formulario.text()).toContain('Los llenamos desde tu comprobante de pago de BCP.')
+  })
 })
