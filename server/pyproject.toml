@@ -6,20 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.0",
-    "bcrypt>=5.0.0",
-    "boto3>=1.43.114",
     "celery[redis]>=5.6.3",
     "email-validator>=2.3.0",
-    "fastapi>=0.146.0",
+    "fastapi>=0.156.4",
     "httpx>=0.28.1",
-    "icalendar>=7.3.0",
-    "openpyxl>=3.1.5",
-    "pillow>=13.0.0",
     "psycopg[binary]>=3.3.6",
-    "pydantic-settings>=2.16.0",
-    "pyjwt>=2.15.1",
+    "pydantic-settings>=2.16.1",
     "python-multipart>=0.0.32",
-    "rapidfuzz>=3.14.6",
     "redis>=6.4.0",
     "sqlalchemy>=2.1.5",
     "uvicorn[standard]>=0.54.0",
@@ -35,14 +28,6 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.1",
 ]
-ocr = [
-    "paddleocr>=3.7.0",
-    "paddlepaddle>=3.3.1",
-    "pdf2image>=1.17.0",
-]
-robots = [
-    "playwright>=1.64.0",
-]
 
 [tool.ruff]
 line-length = 100
@@ -51,15 +36,15 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "T20"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
-[tool.deptry]
-known_first_party = ["app"]
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]
 
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
 
-[tool.ruff.lint.isort]
-known-third-party = ["alembic"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.deptry]
+known_first_party = ["app"]
