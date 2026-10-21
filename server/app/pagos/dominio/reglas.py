@@ -352,8 +352,11 @@ def senal_repetido() -> Senal:
 
 
 def estado_tras_analisis(analisis: AnalisisComprobante) -> EstadoComprobante:
-    codigos = {s.codigo for s in analisis.senales}
-    if codigos & ILEGIBLES:
+    """Lo que no corresponde pesa más que lo ilegible: tapar el importe de una captura alterada
+    no la convierte en una foto borrosa."""
+    if cuenta_para_bloqueo(analisis.senales):
+        return EstadoComprobante.RECHAZADO
+    if {s.codigo for s in analisis.senales} & ILEGIBLES:
         return EstadoComprobante.ILEGIBLE
     if analisis.riesgo is Riesgo.ALTO:
         return EstadoComprobante.RECHAZADO
@@ -361,5 +364,6 @@ def estado_tras_analisis(analisis: AnalisisComprobante) -> EstadoComprobante:
 
 
 def cuenta_para_bloqueo(senales: Iterable[Senal]) -> bool:
-    """Un comprobante rechazado porque no corresponde. La posible mora no cuenta."""
-    return any(s.riesgo is Riesgo.ALTO and s.codigo not in NO_CUENTAN for s in senales)
+    """Un comprobante rechazado porque no corresponde. Ni lo ilegible ni la posible mora
+    cuentan."""
+    return any(s.riesgo is Riesgo.ALTO and s.codigo not in NO_CUENTAN | ILEGIBLES for s in senales)

@@ -5,16 +5,20 @@ import json
 import os
 import stat
 import sys
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.deudas.dominio.modelos import LugarPago
 from app.documentos.dominio.modelos import Lectura, TipoArchivo, TipoDocumento
 from app.documentos.dominio.puertos import CategoriaConocida, ErrorRevision
 from app.documentos.infraestructura.revisor_claude_code import RevisorClaudeCode
-from tests.dobles import TEXTO_RECIBO, imagen
+from app.pagos.infraestructura.revisor_ia import INSTRUCCIONES_COMPROBANTE, RevisorComprobantesIa
+from tests.dobles import TEXTO_RECIBO, TEXTO_YAPE, captura_yape, imagen
 
 RESPUESTA = {
     "legible": True,
@@ -123,3 +127,55 @@ def test_claude_code_real_revisa_un_recibo() -> None:
         imagen(2), TipoArchivo.PNG, Lectura(TEXTO_RECIBO, 0.97, 1), []
     )
     assert revision.veredicto in {"autentico", "dudoso", "alterado"}
+
+
+RESPUESTA_COMPROBANTE = {
+    "legible": True,
+    "es_comprobante": True,
+    "lugar": "billetera",
+    "medio": "Yape",
+    "empresa": "HIDRANDINA - LUZ",
+    "codigo_pago": "54871236",
+    "titular": None,
+    "numero_operacion": "03458821",
+    "pagado_el": "2026-10-21",
+    "moneda": "PEN",
+    "importe_servicio": "182.40",
+    "comision": None,
+    "importe_total": "182.40",
+    "veredicto": "autentico",
+    "motivos": ["Coherente con una constancia de Yape"],
+}
+
+
+def test_un_voucher_se_revisa_con_sus_propias_instrucciones_y_esquema(tmp_path: Path) -> None:
+    script = comando(
+        tmp_path,
+        {"type": "result", "subtype": "success", "structured_output": RESPUESTA_COMPROBANTE},
+    )
+    revisor = RevisorComprobantesIa(RevisorClaudeCode(str(script), "claude-sonnet-5-5", "high"))
+
+    revision = revisor.revisar_comprobante(
+        imagen(3), TipoArchivo.PNG, Lectura("Yapeaste! S/182.40", 0.97, 1)
+    )
+
+    assert (revision.datos.lugar, revision.datos.importe) == (
+        LugarPago.BILLETERA,
+        Decimal("182.40"),
+    )
+    assert revision.datos.pagado_el == date(2026, 10, 21)
+    args = json.loads((tmp_path / "llamada.json").read_text())["args"]
+    assert args[args.index("--system-prompt") + 1] == INSTRUCCIONES_COMPROBANTE
+    assert "importe_servicio" in args[args.index("--json-schema") + 1]
+
+
+@pytest.mark.skipif(
+    os.environ.get("PRUEBAS_CLAUDE_CODE") != "1", reason="Activa con PRUEBAS_CLAUDE_CODE=1"
+)
+def test_claude_code_real_lee_un_voucher_de_yape() -> None:
+    revision = RevisorComprobantesIa(
+        RevisorClaudeCode("claude", "claude-sonnet-5-5", "medium")
+    ).revisar_comprobante(captura_yape(), TipoArchivo.PNG, Lectura(TEXTO_YAPE, 0.97, 1))
+    assert revision.datos.es_comprobante is True
+    assert revision.datos.importe == Decimal("182.40")
+    assert revision.datos.numero_operacion == "03458821"

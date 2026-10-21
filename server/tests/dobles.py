@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfWriter
 
 from app.deudas.dominio.modelos import LugarPago
@@ -174,4 +174,31 @@ def pdf(productor: str | None = None, *, paginas: int = 1) -> bytes:
         escritor.add_metadata({"/Producer": productor})
     salida = io.BytesIO()
     escritor.write(salida)
+    return salida.getvalue()
+
+
+TEXTO_YAPE = """Yapeaste!
+S/182.40
+Pago de servicio
+HIDRANDINA - LUZ
+Código de suministro
+54871236
+Fecha
+21 oct. 2026 - 10:42 a. m.
+Nro. de operación
+03458821"""
+
+
+def captura_yape() -> bytes:
+    """Una captura tipo Yape del pago de la luz, con datos inventados, para la IA real."""
+    lienzo = Image.new("RGB", (720, 1400), "#742284")
+    dibujo = ImageDraw.Draw(lienzo)
+    dibujo.rounded_rectangle((40, 160, 680, 1250), 30, fill="white")
+    fuente = ImageFont.load_default(size=40)
+    y = 220
+    for linea in TEXTO_YAPE.splitlines():
+        dibujo.text((90, y), linea, font=fuente, fill="#222222")
+        y += 70
+    salida = io.BytesIO()
+    lienzo.save(salida, format="PNG")
     return salida.getvalue()
