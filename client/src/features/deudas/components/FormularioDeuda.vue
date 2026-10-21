@@ -33,6 +33,7 @@ const ICONOS_TIPO: Partial<Record<string, IconoCategoria>> = {
   papeleta: 'transporte',
   tributo: 'impuestos',
   cronograma: 'banco',
+  estado_cuenta: 'tarjeta',
   factura: 'impuestos',
 }
 

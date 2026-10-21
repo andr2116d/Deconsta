@@ -200,6 +200,14 @@ onMounted(() => {
               <BaseBoton class="mt-4" @click="otroDocumento">Subir otro documento</BaseBoton>
             </div>
 
+            <div v-else-if="estado === 'no_es_deuda'" class="mt-6">
+              <BaseAviso tono="error" titulo="Este documento no cobra una deuda">
+                Parece el comprobante de un pago ya hecho u otro documento que no cobra nada. Sube
+                el recibo, la boleta o el documento que cobra lo que se debe.
+              </BaseAviso>
+              <BaseBoton class="mt-4" @click="otroDocumento">Subir otro documento</BaseBoton>
+            </div>
+
             <div v-else-if="estado === 'repetido'" class="mt-6">
               <BaseAviso tono="error" titulo="Este documento ya respalda otra deuda">
                 Cada documento se usa una sola vez. Sube el de la deuda que quieres registrar.
