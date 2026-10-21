@@ -22,6 +22,7 @@ from app.documentos.infraestructura.http.errores import (
     respuesta_archivo_grande,
 )
 from app.notificaciones.infraestructura.http.errores import registrar_manejadores_notificaciones
+from app.pagos.infraestructura.http.errores import registrar_manejadores_pagos
 from app.reglas.infraestructura.http.errores import registrar_manejadores_reglas
 
 logger = logging.getLogger(__name__)
@@ -55,11 +56,14 @@ def crear_app(config: Settings = settings, contenedor: Contenedor | None = None)
     registrar_manejadores_reglas(app)
     registrar_manejadores_documentos(app)
     registrar_manejadores_deudas(app)
+    registrar_manejadores_pagos(app)
     registrar_manejadores_notificaciones(app)
     # Antes que el de seguridad: así un 413 también lleva sus cabeceras. Solo la subida de
-    # documentos admite un archivo; el margen cubre las cabeceras del multipart.
+    # documentos y de comprobantes admite un archivo; el margen cubre las cabeceras del multipart.
     subida = Tope(TAMANO_MAXIMO + 64 * 1024, respuesta_archivo_grande)
-    limitar_cuerpo(app, excepciones={"/api/v1/documentos": subida})
+    limitar_cuerpo(
+        app, excepciones={"/api/v1/documentos": subida, "/api/v1/pagos/comprobantes": subida}
+    )
     app.middleware("http")(crear_middleware_seguridad(hsts=produccion))
     app.add_middleware(
         CORSMiddleware,

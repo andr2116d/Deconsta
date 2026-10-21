@@ -1,7 +1,8 @@
 """Adaptadores de los documentos, compartidos por la API y el worker.
 
 El lector de texto se crea siempre, pero solo carga PaddleOCR la primera vez que lee: la API no lo
-usa y no necesita el grupo de dependencias ocr.
+usa y no necesita el grupo de dependencias ocr. La IA que revisa los documentos revisa también los
+comprobantes de pago, con sus propias instrucciones.
 """
 
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ from app.documentos.infraestructura.revisor_claude import RevisorClaude
 from app.documentos.infraestructura.revisor_claude_code import RevisorClaudeCode
 from app.notificaciones.dominio.puertos import PublicadorAvisos
 from app.notificaciones.infraestructura.avisos_redis import PublicadorRedis
+from app.pagos.dominio.puertos import RevisorComprobantes
+from app.pagos.infraestructura.revisor_ia import RevisorComprobantesIa
 
 
 @dataclass
@@ -35,8 +38,10 @@ class Componentes:
     inspector: InspectorArchivos
     lector: LectorTexto
     revisor: RevisorIa
+    revisor_comprobantes: RevisorComprobantes
     publicador: PublicadorAvisos
     unidad: FabricaUnidadDocumentos
+    motor: Engine
 
     @classmethod
     def crear(cls, config: Settings, motor: Engine, redis: Redis | None = None) -> "Componentes":
@@ -45,6 +50,15 @@ class Componentes:
             config.redis_url, socket_timeout=2, socket_connect_timeout=2
         )
         clave_api = config.anthropic_api_key
+        revisor = (
+            RevisorClaudeCode(config.ia_comando_claude_code, config.ia_modelo, config.ia_esfuerzo)
+            if config.ia_proveedor == "claude_code"
+            else RevisorClaude(
+                clave_api.get_secret_value() if clave_api else None,
+                config.ia_modelo,
+                config.ia_esfuerzo,
+            )
+        )
         return cls(
             cifrador=cifrador,
             almacen=AlmacenS3(
@@ -58,15 +72,9 @@ class Componentes:
             ),
             inspector=InspectorArchivosLocal(),
             lector=LectorPaddle(),
-            revisor=RevisorClaudeCode(
-                config.ia_comando_claude_code, config.ia_modelo, config.ia_esfuerzo
-            )
-            if config.ia_proveedor == "claude_code"
-            else RevisorClaude(
-                clave_api.get_secret_value() if clave_api else None,
-                config.ia_modelo,
-                config.ia_esfuerzo,
-            ),
+            revisor=revisor,
+            revisor_comprobantes=RevisorComprobantesIa(revisor),
             publicador=PublicadorRedis(redis),
             unidad=lambda: UnidadDocumentosSql(motor, cifrador),
+            motor=motor,
         )

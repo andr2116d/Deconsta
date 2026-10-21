@@ -6,7 +6,7 @@ celery_app = Celery(
     "deconsta",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.documentos.infraestructura.tareas"],
+    include=["app.documentos.infraestructura.tareas", "app.pagos.infraestructura.tareas"],
 )
 celery_app.conf.update(
     task_default_queue="general",
