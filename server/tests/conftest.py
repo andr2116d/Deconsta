@@ -1,278 +1,161 @@
-import hashlib
-import io
+import base64
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
-from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
+import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
-from botocore.exceptions import ClientError
-from celery.canvas import Signature
-from sqlalchemy.orm import Session
+from fastapi.testclient import TestClient
+from redis import Redis
+from sqlalchemy.engine import make_url
 
-os.environ["DATABASE_URL"] = os.environ.get(
+# Las pruebas no dependen del .env de cada desarrollador: claves nuevas en cada ejecución.
+os.environ["ENTORNO"] = "pruebas"
+os.environ["MIGRAR_AL_INICIAR"] = "false"
+os.environ["COOKIE_SEGURA"] = "false"
+os.environ["CLAVE_CIFRADO_DATOS"] = base64.b64encode(os.urandom(32)).decode()
+os.environ["CLAVE_HUELLA_DATOS"] = base64.b64encode(os.urandom(32)).decode()
+REDIS_PRUEBAS = os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/15")
+os.environ["REDIS_URL"] = REDIS_PRUEBAS
+
+URL_PRUEBAS = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@localhost:5432/control_pagos_test",
+    "postgresql+psycopg://postgres:postgres@localhost:5432/deconsta_test",
 )
-# Las pruebas no dependen de la clave del .env de cada desarrollador.
-os.environ.setdefault("JWT_SECRET", "clave-de-pruebas-clave-de-pruebas")
+os.environ["DATABASE_URL"] = URL_PRUEBAS
 
-from app.core import eventos  # noqa: E402
-from app.core.eventos import Evento  # noqa: E402
-from app.models import (  # noqa: E402
-    Categoria,
-    Comprobante,
-    ComprobanteDeuda,
-    Deuda,
-    OrdenPago,
-    Servicio,
-    Usuario,
-)
-from app.services import archivos  # noqa: E402
-from app.workers import encolar as modulo_encolar  # noqa: E402
+from app.acceso.dominio.datos_personales import DatosPersonales  # noqa: E402
+from app.acceso.dominio.modelos import Rol  # noqa: E402
+from app.contenedor import Contenedor  # noqa: E402
+from app.core.config import Settings  # noqa: E402
+from app.core.migraciones import aplicar_pendientes, conninfo  # noqa: E402
+from app.main import crear_app  # noqa: E402
 
 
-@dataclass
+def _admin() -> psycopg.Connection:
+    return psycopg.connect(conninfo(URL_PRUEBAS), autocommit=True)
+
+
+def crear_base(plantilla: str | None = None) -> str:
+    """Crea una base vacía (o copia de una plantilla) y devuelve su URL de SQLAlchemy."""
+    nombre = f"deconsta_prueba_{uuid.uuid4().hex[:12]}"
+    origen = f" TEMPLATE {plantilla}" if plantilla else ""
+    with _admin() as conexion:
+        conexion.execute(f"CREATE DATABASE {nombre}{origen}".encode())
+    return make_url(URL_PRUEBAS).set(database=nombre).render_as_string(hide_password=False)
+
+
+def eliminar_base(url: str) -> None:
+    nombre = make_url(url).database
+    with _admin() as conexion:
+        conexion.execute(f"DROP DATABASE IF EXISTS {nombre} WITH (FORCE)".encode())
+
+
+@pytest.fixture
+def base_vacia() -> Iterator[str]:
+    url = crear_base()
+    yield url
+    eliminar_base(url)
+
+
+@pytest.fixture(scope="session")
+def plantilla() -> Iterator[str]:
+    """Base con todas las migraciones aplicadas; cada prueba trabaja sobre una copia."""
+    url = crear_base()
+    aplicar_pendientes(url)
+    yield str(make_url(url).database)
+    eliminar_base(url)
+
+
+@pytest.fixture
+def base(plantilla: str) -> Iterator[str]:
+    url = crear_base(plantilla)
+    yield url
+    eliminar_base(url)
+
+
+@pytest.fixture
+def redis_limpio() -> Iterator[Redis]:
+    cliente = Redis.from_url(REDIS_PRUEBAS)
+    cliente.flushdb()
+    yield cliente
+    cliente.flushdb()
+    cliente.close()
+
+
+# Límites amplios por defecto: cada prueba de limitación fija los suyos.
+LIMITES_AMPLIOS = {
+    "limite_ingreso_por_origen": 1000,
+    "limite_ingreso_por_usuario": 1000,
+    "limite_cambio_contrasena": 1000,
+    "limite_desbloqueo": 1000,
+}
+
+FabricaCliente = Callable[..., TestClient]
+
+
+@pytest.fixture
+def crear_cliente(base: str, redis_limpio: Redis) -> Iterator[FabricaCliente]:
+    contenedores: list[Contenedor] = []
+
+    def fabricar(**ajustes: Any) -> TestClient:
+        config = Settings(database_url=base, **{**LIMITES_AMPLIOS, **ajustes})
+        contenedor = Contenedor.crear(config)
+        contenedores.append(contenedor)
+        return TestClient(crear_app(config, contenedor))
+
+    yield fabricar
+    for contenedor in contenedores:
+        contenedor.cerrar()
+
+
+@pytest.fixture
+def cliente(crear_cliente: FabricaCliente) -> TestClient:
+    return crear_cliente()
+
+
+@dataclass(frozen=True)
+class Cuenta:
+    id: uuid.UUID
+    usuario: str
+    contrasena: str
+
+
+@dataclass(frozen=True)
 class Equipo:
-    gerente: Usuario
-    asistente: Usuario
+    gerente: Cuenta
+    asistente: Cuenta
+    otro_gerente: Cuenta
 
 
-@dataclass
-class DosGerentes:
-    uno: Equipo
-    dos: Equipo
-
-
-@pytest.fixture(scope="session", autouse=True)
-def esquema() -> None:
-    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    command.upgrade(config, "head")
+def datos(nombres: str, apellidos: str, documento: str) -> DatosPersonales:
+    return DatosPersonales.crear(
+        nombres=nombres,
+        apellidos=apellidos,
+        correo=f"{nombres.lower()}.{documento}@ejemplo.pe",
+        tipo_documento="dni",
+        numero_documento=documento,
+        telefono="987654321",
+    )
 
 
 @pytest.fixture
-def db() -> Iterator[Session]:
-    from app.core.database import engine
+def equipo(cliente: TestClient) -> Equipo:
+    crear = cliente.app.state.contenedor.crear_cuenta  # type: ignore[attr-defined]
 
-    with engine.connect() as conexion:
-        transaccion = conexion.begin()
-        sesion = Session(bind=conexion, join_transaction_mode="create_savepoint")
-        yield sesion
-        sesion.close()
-        transaccion.rollback()
+    def cuenta(rol: Rol, persona: DatosPersonales, gerente: str | None = None) -> Cuenta:
+        creada = crear.ejecutar(rol=rol, datos=persona, gerente_nombre_usuario=gerente)
+        return Cuenta(creada.usuario.id, creada.usuario.nombre_usuario, creada.contrasena_temporal)
 
-
-def crear_equipo(db: Session, sufijo: str) -> Equipo:
-    gerente = Usuario(rol="gerente", username=f"gerente_{sufijo}", password_hash="x")
-    db.add(gerente)
-    db.flush()
-    asistente = Usuario(
-        rol="asistente", gerente_id=gerente.id, username=f"asistente_{sufijo}", password_hash="x"
-    )
-    db.add(asistente)
-    db.flush()
-    db.refresh(gerente)
-    db.refresh(asistente)
-    return Equipo(gerente=gerente, asistente=asistente)
+    gerente = cuenta(Rol.GERENTE, datos("Valentina", "Ramos", "45678912"))
+    asistente = cuenta(Rol.ASISTENTE, datos("Lucía", "Vega", "41234567"), gerente.usuario)
+    otro = cuenta(Rol.GERENTE, datos("Martín", "Salas", "40000001"))
+    return Equipo(gerente, asistente, otro)
 
 
-@pytest.fixture
-def dos_gerentes(db: Session) -> DosGerentes:
-    """Dos gerentes, cada uno con su asistente activa, para probar el aislamiento."""
-    return DosGerentes(uno=crear_equipo(db, "uno"), dos=crear_equipo(db, "dos"))
-
-
-@pytest.fixture
-def publicados(monkeypatch: pytest.MonkeyPatch) -> list[tuple[uuid.UUID, Evento]]:
-    """Captura los eventos que salen tras el commit en lugar de enviarlos a Redis."""
-    salida: list[tuple[uuid.UUID, Evento]] = []
-
-    def capturar(usuario_id: uuid.UUID, evento: Evento) -> bool:
-        salida.append((usuario_id, evento))
-        return True
-
-    monkeypatch.setattr(eventos, "publicar", capturar)
-    return salida
-
-
-@pytest.fixture
-def enviadas(monkeypatch: pytest.MonkeyPatch) -> list[Signature]:
-    """Captura las tareas que se encolan tras el commit en lugar de enviarlas a Redis, donde las
-    tomaría el worker local."""
-    salida: list[Signature] = []
-
-    def capturar(firma: Signature) -> bool:
-        salida.append(firma)
-        return True
-
-    monkeypatch.setattr(modulo_encolar, "encolar", capturar)
-    return salida
-
-
-def nueva_categoria(db: Session, gerente: Usuario, tipo: str = "servicio_variable") -> Categoria:
-    categoria = Categoria(gerente_id=gerente.id, nombre=f"Cat {uuid.uuid4().hex}", tipo=tipo)
-    db.add(categoria)
-    db.flush()
-    return categoria
-
-
-def nueva_deuda(
-    db: Session,
-    gerente: Usuario,
-    monto: str | None = "100.00",
-    moneda: str = "PEN",
-    estado: str = "pendiente",
-    fecha_vencimiento: date = date(2026, 10, 25),
-    tipo_categoria: str = "servicio_variable",
-    categoria: Categoria | None = None,
-) -> Deuda:
-    """Deuda con su propio servicio y, si no se indica, su propia categoría, para no chocar con
-    las unicidades por gerente."""
-    marca = uuid.uuid4().hex
-    if categoria is None:
-        categoria = nueva_categoria(db, gerente, tipo_categoria)
-    servicio = Servicio(
-        gerente_id=gerente.id,
-        categoria_id=categoria.id,
-        empresa_nombre="Hidrandina",
-        codigo_suministro=marca,
-    )
-    db.add(servicio)
-    db.flush()
-    deuda = Deuda(
-        gerente_id=gerente.id,
-        servicio_id=servicio.id,
-        periodo=fecha_vencimiento.replace(day=1),
-        monto=None if monto is None else Decimal(monto),
-        moneda=moneda,
-        estado=estado,
-        fecha_vencimiento=fecha_vencimiento,
-    )
-    db.add(deuda)
-    db.flush()
-    return deuda
-
-
-def asistente_anterior(db: Session, gerente: Usuario) -> Usuario:
-    """Una asistente que el gerente ya desactivó: su intento o su solicitud siguen vigentes y la
-    asistente actual es «otra persona» frente a ellos."""
-    anterior = Usuario(
-        rol="asistente",
-        gerente_id=gerente.id,
-        username=f"anterior_{uuid.uuid4().hex[:12]}",
-        password_hash="x",
-        estado="inactiva",
-    )
-    db.add(anterior)
-    db.flush()
-    return anterior
-
-
-def en_proceso_por(db: Session, deuda: Deuda, usuario: Usuario) -> Deuda:
-    """Pago en curso de otra persona sin pasar por iniciar_pago: un intento de la asistente
-    anterior o uno que inició el gerente antes de que solo la asistente pagara (TASK-109)."""
-    deuda.estado = "en_proceso"
-    deuda.pago_iniciado_por = usuario.id
-    deuda.pago_iniciado_en = datetime.now(UTC)
-    db.flush()
-    return deuda
-
-
-def nuevo_comprobante(
-    db: Session,
-    deuda: Deuda,
-    subido_por: Usuario,
-    monto_aplicado: str,
-    estado: str = "validado",
-    creado_en: datetime | None = None,
-) -> Comprobante:
-    """Comprobante con su abono a la deuda (comprobante_deuda)."""
-    comprobante = Comprobante(
-        gerente_id=deuda.gerente_id,
-        archivo_url=f"comprobantes/{uuid.uuid4()}.jpg",
-        archivo_tipo="jpg",
-        archivo_bytes=1000,
-        hash_sha256=hashlib.sha256(uuid.uuid4().bytes).hexdigest(),
-        monto=Decimal(monto_aplicado),
-        moneda=deuda.moneda,
-        estado=estado,
-        subido_por=subido_por.id,
-    )
-    if creado_en is not None:
-        comprobante.creado_en = creado_en
-    db.add(comprobante)
-    db.flush()
-    db.add(
-        ComprobanteDeuda(
-            comprobante_id=comprobante.id,
-            deuda_id=deuda.id,
-            monto_aplicado=Decimal(monto_aplicado),
-        )
-    )
-    db.flush()
-    return comprobante
-
-
-def nueva_orden(
-    db: Session,
-    deuda: Deuda,
-    estado: str = "enviada",
-    plazo: datetime | None = None,
-    asistente: Usuario | None = None,
-    monto: str | None = None,
-) -> OrdenPago:
-    """Orden urgente del gerente de la deuda. Sin monto autoriza el monto y la moneda de la
-    deuda, como hace TASK-63 al crearla sin abonos."""
-    orden = OrdenPago(
-        deuda_id=deuda.id,
-        gerente_id=deuda.gerente_id,
-        asistente_id=asistente.id if asistente else None,
-        estado=estado,
-        plazo=plazo,
-        monto=Decimal(monto) if monto is not None else deuda.monto,
-        moneda=deuda.moneda,
-    )
-    db.add(orden)
-    db.flush()
-    return orden
-
-
-class S3EnMemoria:
-    """Cliente S3 mínimo: guarda los objetos en un diccionario y puede fallar a pedido."""
-
-    def __init__(self) -> None:
-        self.objetos: dict[str, tuple[bytes, str]] = {}
-        self.falla = False
-
-    def _quizas_fallar(self, operacion: str) -> None:
-        if self.falla:
-            raise ClientError({"Error": {"Code": "500", "Message": "caído"}}, operacion)
-
-    def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str) -> None:
-        self._quizas_fallar("PutObject")
-        self.objetos[Key] = (Body, ContentType)
-
-    def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:
-        self._quizas_fallar("GetObject")
-        return {"Body": io.BytesIO(self.objetos[Key][0])}
-
-    def delete_object(self, Bucket: str, Key: str) -> None:
-        self._quizas_fallar("DeleteObject")
-        self.objetos.pop(Key, None)
-
-    def generate_presigned_url(self, operacion: str, Params: dict[str, str], ExpiresIn: int) -> str:
-        self._quizas_fallar("GeneratePresignedUrl")
-        return f"https://s3.local/{Params['Key']}?expira={ExpiresIn}"
-
-
-@pytest.fixture
-def s3(monkeypatch: pytest.MonkeyPatch) -> S3EnMemoria:
-    cliente = S3EnMemoria()
-    monkeypatch.setattr(archivos, "cliente_s3", lambda: cliente)
-    return cliente
+def consultar(url: str, sql: str, *parametros: object) -> list[tuple[Any, ...]]:
+    with psycopg.connect(conninfo(url)) as conexion:
+        cursor = conexion.execute(sql.encode(), parametros or None)
+        return cursor.fetchall() if cursor.description else []

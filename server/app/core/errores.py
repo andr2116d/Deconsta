@@ -1,3 +1,11 @@
+"""Respuestas de error con una estructura única para toda la API:
+
+    {"code": "CODIGO_ESTABLE", "detail": "Mensaje para la persona usuaria.", "fields": {...}}
+
+`fields` aparece solo cuando el error apunta a campos concretos. Los errores internos se registran
+con una referencia que también recibe el cliente, sin trazas ni datos de la solicitud.
+"""
+
 import logging
 from collections.abc import Mapping
 from typing import Any
@@ -5,116 +13,102 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException
-
-from app.core.reglas import ErrorReglaContrasena
 
 logger = logging.getLogger(__name__)
 
-CODIGOS_HTTP = {
-    401: "NO_AUTENTICADO",
-    403: "SIN_PERMISO",
-    404: "NO_ENCONTRADO",
-    405: "METODO_NO_PERMITIDO",
-    409: "CONFLICTO",
-}
-
-MENSAJES_HTTP = {
-    401: "Inicia sesión para continuar.",
-    403: "No tienes permiso para realizar esta acción.",
-    404: "No se encontró el recurso solicitado.",
-    405: "Método no permitido.",
-}
-
-MENSAJES_VALIDACION = {
-    "missing": "Este campo es obligatorio.",
-    "json_invalid": "El cuerpo de la solicitud no es un JSON válido.",
-}
-
 UBICACIONES = {"body", "query", "path", "header", "cookie"}
-CLAVES_BASE = frozenset({"detail", "code", "field"})
+OBLIGATORIOS = {"missing", "obligatorio"}
+
+CODIGOS_HTTP = {
+    401: ("NO_AUTENTICADO", "Inicia sesión para continuar."),
+    403: ("SIN_PERMISO", "No tienes permiso para realizar esta acción."),
+    404: ("NO_ENCONTRADO", "No encontramos lo que buscas."),
+    405: ("METODO_NO_PERMITIDO", "Esta operación no está permitida."),
+}
 
 
-class ErrorApi(Exception):
-    """Error de negocio que sale como {detail, code, field} con su status HTTP.
-
-    datos agrega claves opcionales a la respuesta, por ejemplo la referencia al recurso que
-    provoca un DUPLICADO. Sus valores ya deben estar listos para JSON (los montos como texto).
-    Sin datos, la respuesta es exactamente {detail, code, field}.
-    """
-
-    def __init__(
-        self,
-        status_code: int,
-        code: str,
-        detail: str,
-        field: str | None = None,
-        datos: Mapping[str, Any] | None = None,
-    ) -> None:
-        super().__init__(detail)
-        repetidas = CLAVES_BASE.intersection(datos or {})
-        if repetidas:
-            raise ValueError(f"Los datos del error no pueden reemplazar {sorted(repetidas)}.")
-        self.status_code = status_code
-        self.code = code
-        self.detail = detail
-        self.field = field
-        self.datos = dict(datos or {})
-
-
-def respuesta(
-    status_code: int,
-    detail: str,
-    code: str,
-    field: str | None = None,
-    headers: Mapping[str, str] | None = None,
-    datos: Mapping[str, Any] | None = None,
+def respuesta_error(
+    estado: int,
+    codigo: str,
+    mensaje: str,
+    *,
+    campos: Mapping[str, str] | None = None,
+    encabezados: Mapping[str, str] | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content={"detail": detail, "code": code, "field": field, **(datos or {})},
-        headers=headers,
-    )
+    contenido: dict[str, Any] = {"code": codigo, "detail": mensaje}
+    if campos:
+        contenido["fields"] = dict(campos)
+    contenido.update(extra or {})
+    return JSONResponse(status_code=estado, content=contenido, headers=dict(encabezados or {}))
 
 
-async def manejar_error_api(_: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, ErrorApi):
-        raise exc
-    return respuesta(exc.status_code, exc.detail, exc.code, exc.field, datos=exc.datos)
+def _mensaje_validacion(error: Mapping[str, Any]) -> str:
+    tipo = error["type"]
+    contexto = error.get("ctx") or {}
+    if tipo == "obligatorio":
+        return str(error["msg"])
+    if tipo == "missing":
+        return "Este campo es obligatorio."
+    if tipo == "string_too_long":
+        return f"Usa como máximo {contexto.get('max_length')} caracteres."
+    if tipo == "string_type":
+        return "Debe ser un texto."
+    if tipo == "uuid_parsing":
+        return "El identificador no es válido."
+    return "El valor no es válido."
 
 
 async def manejar_validacion(_: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, RequestValidationError):
-        raise exc
-    # El formato admite un solo campo: se informa el primer error.
-    error = exc.errors()[0]
-    tipo = error.get("type", "")
-    mensaje = MENSAJES_VALIDACION.get(tipo, "El valor no es válido.")
-    causa = error.get("ctx", {}).get("error")
-    if isinstance(causa, ErrorReglaContrasena):
-        mensaje = str(causa)
-    if tipo == "json_invalid":
-        # En un JSON mal formado la ubicación es la posición del carácter, no un campo.
-        return respuesta(422, mensaje, "VALIDACION")
-    partes = [str(p) for p in error.get("loc", ()) if p not in UBICACIONES]
-    return respuesta(422, mensaje, "VALIDACION", ".".join(partes) or None)
+    assert isinstance(exc, RequestValidationError)
+    errores = list(exc.errors())
+    if any(error["type"] == "json_invalid" for error in errores):
+        return respuesta_error(
+            422, "DATOS_INVALIDOS", "El cuerpo de la solicitud no es un JSON válido."
+        )
+    campos: dict[str, str] = {}
+    for error in errores:
+        ruta = [str(parte) for parte in error["loc"] if parte not in UBICACIONES]
+        campos.setdefault(".".join(ruta) or "solicitud", _mensaje_validacion(error))
+    if all(error["type"] in OBLIGATORIOS for error in errores):
+        return respuesta_error(
+            422, "CAMPOS_OBLIGATORIOS", "Completa los campos obligatorios.", campos=campos
+        )
+    return respuesta_error(422, "DATOS_INVALIDOS", "Revisa los datos marcados.", campos=campos)
 
 
 async def manejar_http(_: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, HTTPException):
-        raise exc
-    codigo = CODIGOS_HTTP.get(exc.status_code, "ERROR_HTTP")
-    mensaje = MENSAJES_HTTP.get(exc.status_code, str(exc.detail))
-    return respuesta(exc.status_code, mensaje, codigo, headers=exc.headers)
+    assert isinstance(exc, HTTPException)
+    codigo, mensaje = CODIGOS_HTTP.get(
+        exc.status_code, ("ERROR", "No pudimos atender la solicitud.")
+    )
+    return respuesta_error(exc.status_code, codigo, mensaje, encabezados=exc.headers)
 
 
-async def manejar_inesperado(_: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Error inesperado", exc_info=exc)
-    return respuesta(500, "Ocurrió un error inesperado. Intenta de nuevo.", "ERROR_INTERNO")
+async def manejar_base_no_disponible(request: Request, exc: Exception) -> JSONResponse:
+    # Sin la URL ni el mensaje del driver: pueden incluir host y usuario de la base.
+    logger.error("La base de datos no responde (%s)", type(exc).__name__)
+    return respuesta_error(
+        503,
+        "SERVICIO_NO_DISPONIBLE",
+        "El servicio no está disponible en este momento. Inténtalo de nuevo en unos minutos.",
+        extra={"reference": getattr(request.state, "id_solicitud", None)},
+    )
+
+
+def respuesta_error_interno(referencia: str) -> JSONResponse:
+    return respuesta_error(
+        500,
+        "ERROR_INTERNO",
+        "Ocurrió un error inesperado. Inténtalo de nuevo; si continúa, comparte esta referencia "
+        "con soporte.",
+        extra={"reference": referencia},
+    )
 
 
 def registrar_manejadores(app: FastAPI) -> None:
-    app.add_exception_handler(ErrorApi, manejar_error_api)
     app.add_exception_handler(RequestValidationError, manejar_validacion)
     app.add_exception_handler(HTTPException, manejar_http)
-    app.add_exception_handler(Exception, manejar_inesperado)
+    app.add_exception_handler(OperationalError, manejar_base_no_disponible)

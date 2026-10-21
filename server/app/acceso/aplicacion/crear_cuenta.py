@@ -1,0 +1,119 @@
+import secrets
+import unicodedata
+from dataclasses import dataclass
+from uuid import uuid4
+
+from app.acceso.dominio import politica_contrasena
+from app.acceso.dominio.datos_personales import DatosPersonales
+from app.acceso.dominio.errores import DatosInvalidos
+from app.acceso.dominio.modelos import (
+    PATRON_NOMBRE_USUARIO,
+    Accion,
+    EventoAuditoria,
+    Rol,
+    Usuario,
+    normalizar_nombre_usuario,
+)
+from app.acceso.dominio.puertos import FabricaUnidadDeTrabajo, ProtectorContrasenas, Reloj
+
+# Sin caracteres que se confunden al dictarlos o copiarlos (0/O, 1/l/I).
+ALFABETO_TEMPORAL = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+LONGITUD_TEMPORAL = 14
+
+
+@dataclass(frozen=True)
+class CuentaCreada:
+    usuario: Usuario
+    contrasena_temporal: str
+
+
+def generar_contrasena_temporal(nombre_usuario: str) -> str:
+    while True:
+        candidata = "".join(secrets.choice(ALFABETO_TEMPORAL) for _ in range(LONGITUD_TEMPORAL))
+        if not politica_contrasena.evaluar(candidata, nombre_usuario=nombre_usuario):
+            return candidata
+
+
+def sugerir_nombre_usuario(nombres: str, apellidos: str) -> str:
+    """Primer nombre y primer apellido sin tildes: 'Valentina Ramos Díaz' → valentina.ramos."""
+
+    def simple(texto: str) -> str:
+        sin_tildes = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
+        return "".join(c for c in sin_tildes.lower() if c.isalnum())
+
+    return f"{simple(nombres.split()[0])}.{simple(apellidos.split()[0])}"[:36]
+
+
+class CrearCuenta:
+    """Alta de cuentas desde la línea de comandos. La cuenta empieza con una contraseña temporal y
+    el indicador de cambio pendiente."""
+
+    def __init__(
+        self, unidad: FabricaUnidadDeTrabajo, contrasenas: ProtectorContrasenas, reloj: Reloj
+    ) -> None:
+        self._unidad = unidad
+        self._contrasenas = contrasenas
+        self._reloj = reloj
+
+    def ejecutar(
+        self,
+        *,
+        rol: Rol,
+        datos: DatosPersonales,
+        gerente_nombre_usuario: str | None = None,
+        nombre_usuario: str | None = None,
+    ) -> CuentaCreada:
+        with self._unidad() as uow:
+            gerente_id = None
+            if rol is Rol.ASISTENTE:
+                gerente = uow.usuarios.por_nombre_usuario(
+                    normalizar_nombre_usuario(gerente_nombre_usuario or ""), bloquear=False
+                )
+                if gerente is None or gerente.rol is not Rol.GERENTE:
+                    raise DatosInvalidos(
+                        campos={"gerente": "No existe un gerente con ese usuario."}
+                    )
+                gerente_id = gerente.id
+
+            if nombre_usuario:
+                nombre = normalizar_nombre_usuario(nombre_usuario)
+                if not PATRON_NOMBRE_USUARIO.match(nombre):
+                    raise DatosInvalidos(
+                        campos={
+                            "nombre_usuario": "Usa de 3 a 40 letras minúsculas, números, '.', "
+                            "'_' o '-', empezando y terminando en letra o número."
+                        }
+                    )
+                if uow.usuarios.existe_nombre_usuario(nombre):
+                    raise DatosInvalidos(campos={"nombre_usuario": "Ese usuario ya está en uso."})
+            else:
+                base = sugerir_nombre_usuario(datos.nombres, datos.apellidos)
+                nombre, sufijo = base, 1
+                while uow.usuarios.existe_nombre_usuario(nombre):
+                    sufijo += 1
+                    nombre = f"{base}{sufijo}"
+
+            contrasena = generar_contrasena_temporal(nombre)
+            ahora = self._reloj()
+            usuario = Usuario(
+                id=uuid4(),
+                rol=rol,
+                gerente_id=gerente_id,
+                nombre_usuario=nombre,
+                nombres=datos.nombres,
+                contrasena_hash=self._contrasenas.generar_hash(contrasena),
+                debe_cambiar_contrasena=True,
+                contrasena_actualizada_en=ahora,
+                ultimo_ingreso_en=None,
+                intentos_fallidos=0,
+                bloqueada_en=None,
+            )
+            uow.usuarios.agregar(usuario, datos)
+            uow.auditoria.registrar(
+                EventoAuditoria(
+                    Accion.CUENTA_CREADA,
+                    cuenta_id=usuario.id,
+                    detalle={"rol": rol.value, "origen": "linea_de_comandos"},
+                )
+            )
+        return CuentaCreada(usuario, contrasena)
