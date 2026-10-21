@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import { ErrorApi } from '@/shared/api/http'
 
 import * as api from '../api/acceso'
-import type { CambioContrasena, Credenciales, Ingreso, Sesion } from '../types'
+import type { CambioContrasena, Credenciales, Ingreso, Sesion, Usuario } from '../types'
 
 // Quien cierra el recordatorio de la contraseña temporal no lo vuelve a ver al recargar la página,
 // pero sí en su siguiente ingreso. Se guarda por pestaña; si el navegador no deja guardarlo, el
@@ -92,6 +92,12 @@ export const useSesionStore = defineStore('sesion', () => {
     sesion.value = nueva
   }
 
+  /** Refleja al momento, en la cabecera y el menú, los datos que la cuenta acaba de cambiar. */
+  function actualizarUsuario(cambios: Partial<Pick<Usuario, 'nombres' | 'nombre_usuario'>>): void {
+    if (sesion.value)
+      sesion.value = { ...sesion.value, usuario: { ...sesion.value.usuario, ...cambios } }
+  }
+
   async function salir(): Promise<void> {
     try {
       await api.cerrarSesion()
@@ -118,6 +124,7 @@ export const useSesionStore = defineStore('sesion', () => {
     comprobar,
     recargar,
     actualizar,
+    actualizarUsuario,
     ingresar,
     cambiarContrasena,
     salir,

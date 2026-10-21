@@ -30,15 +30,13 @@ function posponerContrasena() {
 }
 
 // Se deduce del cambio de estado y no de un evento de la ventana: al guardar, la sesión se
-// actualiza y la ventana se desmonta antes de poder avisar.
-watch(
-  () => sesion.debeCambiarContrasena,
-  (debe, antes) => {
-    if (!antes || debe || !sesion.autenticada) return
-    contrasenaPedida.value = false
-    aviso.value = 'Contraseña actualizada. Ya puedes usarla en tus próximos ingresos.'
-  },
-)
+// actualiza y la ventana se desmonta antes de poder avisar. Si el cambio se hizo desde
+// «Mi cuenta», esa pantalla ya lo confirma.
+watch(mostrarContrasena, (mostrar, mostraba) => {
+  if (!mostraba || mostrar || sesion.debeCambiarContrasena || !sesion.autenticada) return
+  contrasenaPedida.value = false
+  aviso.value = 'Contraseña actualizada. Ya puedes usarla en tus próximos ingresos.'
+})
 
 function irAlIngreso() {
   router.replace({ name: 'inicio-sesion' })
@@ -115,7 +113,8 @@ onMounted(async () => {
       <BaseAviso v-if="aviso" tono="exito" class="mb-6">{{ aviso }}</BaseAviso>
       <RouterView v-slot="{ Component, route: actual }">
         <Transition name="vista" mode="out-in" @after-enter="enfocarTitulo">
-          <component :is="Component" :key="actual.name" />
+          <!-- Las pestañas de «Mi cuenta» comparten marco: la clave es la ruta de primer nivel. -->
+          <component :is="Component" :key="actual.matched[1]?.path ?? actual.name" />
         </Transition>
       </RouterView>
     </main>

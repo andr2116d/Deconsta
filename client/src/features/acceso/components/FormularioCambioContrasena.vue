@@ -11,9 +11,8 @@ import { useSesionStore } from '../stores/sesion'
 import MedidorSeguridad from './MedidorSeguridad.vue'
 
 defineProps<{ inicial: boolean }>()
-// Con la contraseña temporal (inicial) no hay «Volver»: la ventana que lo contiene decide cómo
-// posponer el cambio.
-const emit = defineEmits<{ cambiada: []; volver: []; 'sesion-terminada': [] }>()
+// Quien lo contiene (la ventana de la contraseña temporal o «Mi cuenta») decide qué hacer después.
+const emit = defineEmits<{ cambiada: []; 'sesion-terminada': [] }>()
 
 type Campo = 'contrasena_actual' | 'contrasena_nueva' | 'confirmacion'
 
@@ -126,15 +125,6 @@ async function enviar() {
     <div class="mt-4 flex flex-col gap-2">
       <BaseBoton tipo="submit" ancho="completo" :cargando="enviando" :deshabilitado="repetida">
         {{ enviando ? 'Guardando…' : 'Guardar contraseña' }}
-      </BaseBoton>
-      <BaseBoton
-        v-if="!inicial"
-        variante="discreto"
-        ancho="completo"
-        :deshabilitado="enviando"
-        @click="emit('volver')"
-      >
-        Volver
       </BaseBoton>
     </div>
   </form>
