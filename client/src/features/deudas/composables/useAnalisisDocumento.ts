@@ -14,7 +14,10 @@ const EXTENSIONES_ACEPTADAS = ['pdf', 'jpg', 'jpeg', 'png', 'webp']
 export const ACEPTAR = [...TIPOS_ACEPTADOS, ...EXTENSIONES_ACEPTADAS.map((e) => `.${e}`)].join(',')
 const extension = (nombre: string) => nombre.split('.').pop()?.toLowerCase() ?? ''
 const INTERVALO_MS = 1200
-const ESPERA_MAXIMA_MS = 120_000
+// La lectura y la revisión con IA tardan de segundos a medio minuto, más si hay otros documentos
+// en cola. Desde DEMORA_MS se avisa que está tardando; a los 3 minutos se deja de esperar.
+const DEMORA_MS = 20_000
+const ESPERA_MAXIMA_MS = 180_000
 
 const espera = (ms: number) => new Promise((resolver) => setTimeout(resolver, ms))
 
@@ -49,6 +52,8 @@ export function useAnalisisDocumento() {
   const archivo = shallowRef<File | null>(null)
   const vistaPrevia = ref<string | null>(null)
   const error = shallowRef<ErrorApi | null>(null)
+  /** El análisis está tardando más de lo habitual. */
+  const demorado = ref(false)
   let turno = 0
 
   function liberarVista() {
@@ -60,6 +65,7 @@ export function useAnalisisDocumento() {
     turno += 1
     liberarVista()
     etapa.value = 'vacio'
+    demorado.value = false
     documento.value = null
     archivo.value = null
     error.value = null
@@ -74,11 +80,20 @@ export function useAnalisisDocumento() {
   }
 
   async function esperarAnalisis(id: string, propio: number) {
-    const limite = Date.now() + ESPERA_MAXIMA_MS
-    while (turno === propio && Date.now() < limite) {
+    const inicio = Date.now()
+    while (turno === propio && Date.now() - inicio < ESPERA_MAXIMA_MS) {
       await espera(INTERVALO_MS)
       if (turno !== propio) return
-      const actual = await consultarDocumento(id)
+      demorado.value = Date.now() - inicio >= DEMORA_MS
+      let actual: Documento
+      try {
+        actual = await consultarDocumento(id)
+      } catch (causa) {
+        // Un corte de red o del servidor no pierde el documento: se vuelve a consultar.
+        const pasajero = causa instanceof ErrorApi && (causa.estado === 0 || causa.estado >= 500)
+        if (pasajero) continue
+        throw causa
+      }
       if (turno !== propio) return
       documento.value = actual
       if (actual.estado !== 'analizando') {
@@ -120,5 +135,5 @@ export function useAnalisisDocumento() {
 
   onBeforeUnmount(reiniciar)
 
-  return { etapa, documento, archivo, vistaPrevia, error, cargar, reiniciar }
+  return { etapa, documento, archivo, vistaPrevia, error, demorado, cargar, reiniciar }
 }

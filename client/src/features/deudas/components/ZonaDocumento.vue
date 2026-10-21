@@ -16,6 +16,8 @@ const props = defineProps<{
   vistaPrevia: string | null
   /** Ya no se puede cambiar (la deuda se registró). */
   bloqueado?: boolean
+  /** El análisis está tardando más de lo habitual. */
+  demorado?: boolean
 }>()
 const emit = defineEmits<{ elegir: [archivo: File]; cambiar: [] }>()
 
@@ -127,7 +129,11 @@ function alElegir(evento: Event) {
               {{ etapa === 'subiendo' ? 'Subiendo el documento…' : 'Revisando el documento…' }}
             </b>
             <p class="max-w-[260px] text-[12px] text-secundario">
-              Leemos el texto, lo contrastamos y revisamos que el archivo no esté editado.
+              {{
+                demorado
+                  ? 'Está tardando un poco más: puede haber otros documentos en revisión. No cierres esta pantalla.'
+                  : 'Leemos el texto, lo contrastamos y revisamos que el archivo no esté editado.'
+              }}
             </p>
           </div>
         </Transition>

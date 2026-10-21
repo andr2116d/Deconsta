@@ -18,7 +18,8 @@ import type { DeudaExistente, RegistroDeuda } from '../types'
 const router = useRouter()
 const sesion = useSesionStore()
 const categorias = useCategoriasStore()
-const { etapa, documento, archivo, vistaPrevia, error, cargar, reiniciar } = useAnalisisDocumento()
+const { etapa, documento, archivo, vistaPrevia, error, demorado, cargar, reiniciar } =
+  useAnalisisDocumento()
 
 const rol = computed(() => sesion.usuario?.rol ?? 'asistente')
 const registro = ref<RegistroDeuda | null>(null)
@@ -110,6 +111,7 @@ onMounted(() => {
         :etapa="etapa"
         :archivo="archivo"
         :vista-previa="vistaPrevia"
+        :demorado="demorado"
         @elegir="cargar"
         @cambiar="otroDocumento"
       />
