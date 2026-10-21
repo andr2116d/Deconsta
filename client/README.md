@@ -58,8 +58,9 @@ Solo para gerencia. «Registrar asistente» (`/equipo/nueva`) es una pantalla in
 marcada la pestaña Mi equipo. El gerente escribe nombres, apellidos, celular y documento (el cargo
 es opcional) y elige o deja generar el usuario y la contraseña; al crear, una ventana los muestra
 una sola vez para copiarlos. Si esa persona ya fue eliminada del equipo, se ofrece recuperar su
-cuenta o crear otra. Cada asistente se puede bloquear (con motivo), desbloquear y eliminar; las
-acciones actualizan la lista al momento.
+cuenta o crear otra. Cada asistente se puede bloquear (con motivo), desbloquear, eliminar y
+restablecer su contraseña (la temporal nueva se muestra una sola vez para copiarla); las acciones
+actualizan la lista al momento.
 
 En su primer ingreso, la asistente acepta las políticas, puede cambiar su contraseña o posponerlo
 y, como paso obligatorio, confirma sus datos (completa su correo y revisa lo que registró su
