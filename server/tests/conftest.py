@@ -94,6 +94,7 @@ LIMITES_AMPLIOS = {
     "limite_actualizacion_cuenta": 1000,
     "limite_gestion_equipo": 1000,
     "limite_gestion_categorias": 1000,
+    "limite_gestion_reglas": 1000,
 }
 
 FabricaCliente = Callable[..., TestClient]
