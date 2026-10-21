@@ -49,6 +49,7 @@ from app.core.database import crear_motor
 from app.deudas.aplicacion.deudas import (
     AnularDeuda,
     AutorizarDeuda,
+    ConsultarCalendario,
     ConsultarDeuda,
     DarVistoBueno,
     ListarDeudas,
@@ -163,6 +164,7 @@ class Contenedor:
     registrar_deuda: RegistrarDeuda
     listar_deudas: ListarDeudas
     consultar_deuda: ConsultarDeuda
+    consultar_calendario: ConsultarCalendario
     autorizar_deuda: AutorizarDeuda
     rechazar_deuda: RechazarDeuda
     dar_visto_bueno: DarVistoBueno
@@ -302,6 +304,7 @@ class Contenedor:
             registrar_deuda=RegistrarDeuda(*deudas),
             listar_deudas=ListarDeudas(*deudas),
             consultar_deuda=ConsultarDeuda(*deudas),
+            consultar_calendario=ConsultarCalendario(*deudas),
             autorizar_deuda=AutorizarDeuda(*deudas),
             rechazar_deuda=RechazarDeuda(*deudas),
             dar_visto_bueno=DarVistoBueno(*deudas),

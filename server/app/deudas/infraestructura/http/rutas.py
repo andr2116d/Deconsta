@@ -1,9 +1,9 @@
 """Rutas de las deudas.
 
-Registrar y consultar: gerente y asistentes con la incorporación completa. El gerente ve las de su
-espacio; una asistente, las que registró. Una deuda de otro espacio responde 404
-DEUDA_NO_ENCONTRADA. Autorizar, rechazar, dar visto bueno y anular: solo el gerente (403
-SIN_PERMISO).
+Registrar y consultar (también el calendario de vencimientos): gerente y asistentes con la
+incorporación completa. El gerente ve las de su espacio; una asistente, las que registró. Una
+deuda de otro espacio responde 404 DEUDA_NO_ENCONTRADA. Autorizar, rechazar, dar visto bueno y
+anular: solo el gerente (403 SIN_PERMISO).
 
 Errores propios: 403 REGISTRO_DEUDAS_BLOQUEADO; 404 DEUDA_NO_ENCONTRADA y DOCUMENTO_NO_ENCONTRADO;
 409 DOCUMENTO_EN_ANALISIS, DOCUMENTO_ILEGIBLE, DOCUMENTO_REPETIDO, DOCUMENTO_RECHAZADO,
@@ -11,6 +11,7 @@ DOCUMENTO_FALLIDO, DOCUMENTO_YA_USADO y ESTADO_NO_PERMITE; 422 CAMPOS_OBLIGATORI
 DATOS_INVALIDOS y CATEGORIA_NO_DISPONIBLE; 429 DEMASIADAS_SOLICITUDES.
 """
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, status
@@ -24,6 +25,7 @@ from app.acceso.infraestructura.http.dependencias import (
 from app.acceso.infraestructura.http.rutas import ERRORES
 from app.contenedor import Contenedor
 from app.deudas.infraestructura.http.esquemas import (
+    CalendarioSalida,
     DeudaDetalleSalida,
     DeudaEntrada,
     DeudaSalida,
@@ -54,6 +56,16 @@ def listar(
     """Con `pendientes=true`, el gerente ve solo lo que espera su autorización o su visto bueno."""
     deudas = contenedor.listar_deudas.ejecutar(sesion, solo_pendientes=pendientes)
     return [DeudaSalida.con_detalle(d) for d in deudas]
+
+
+@router.get("/calendario", responses=ERRORES)
+def calendario(
+    desde: date, hasta: date, sesion: SesionHabilitadaDep, contenedor: ContenedorDep
+) -> CalendarioSalida:
+    """Las cuotas que vencen entre `desde` y `hasta` (como máximo 62 días), con el día de hoy."""
+    return CalendarioSalida.desde_calendario(
+        contenedor.consultar_calendario.ejecutar(sesion, desde, hasta)
+    )
 
 
 @router.get("/{deuda_id}", responses=ERRORES)

@@ -106,6 +106,7 @@ export const SECCIONES: readonly Seccion[] = [
     icono: 'calendario',
     ubicacion: 'pestana',
     roles: AMBOS,
+    vista: () => import('@/features/calendario/views/CalendarioView.vue'),
   },
   {
     nombre: 'historial',

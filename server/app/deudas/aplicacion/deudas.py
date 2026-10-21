@@ -27,7 +27,7 @@ from app.deudas.dominio.errores import (
     DeudaNoEncontrada,
     DocumentoNoRegistrable,
 )
-from app.deudas.dominio.modelos import Deuda, EstadoDeuda, MotivoEspera
+from app.deudas.dominio.modelos import Cuota, Deuda, EstadoDeuda, MotivoEspera
 from app.deudas.dominio.puertos import FabricaUnidadDeudas, UnidadDeudas
 from app.deudas.dominio.registro import (
     CuotaEnviada,
@@ -312,6 +312,59 @@ class ConsultarDeuda(_OperacionDeudas):
             deuda = self._deuda(uow, sesion, deuda_id)
             documento = uow.documentos.por_id(deuda.documento_id)
             return DeudaConDetalle(deuda, documento, _nombre(uow, deuda.registrada_por, {}))
+
+
+DIAS_CALENDARIO = 62
+
+
+@dataclass(frozen=True)
+class Vencimiento:
+    """Una cuota que vence en el rango pedido, con la deuda a la que pertenece."""
+
+    deuda: Deuda
+    cuota: Cuota
+    registrada_por: str
+
+
+@dataclass(frozen=True)
+class Calendario:
+    # El día de hoy en la zona del espacio: el cliente no decide qué está vencido.
+    hoy: date
+    desde: date
+    hasta: date
+    vencimientos: list[Vencimiento]
+
+
+class ConsultarCalendario(_OperacionDeudas):
+    def ejecutar(self, sesion: SesionActiva, desde: date, hasta: date) -> Calendario:
+        """Las cuotas que vencen entre dos fechas, en el pasado o en el futuro. El gerente ve las
+        de su espacio; una asistente, las de las deudas que registró. Las rechazadas y las anuladas
+        no se muestran: ya no se pagan."""
+        if hasta < desde:
+            raise DeudaInvalida(
+                campos={"hasta": "La fecha final no puede ser anterior a la inicial."}
+            )
+        if (hasta - desde).days >= DIAS_CALENDARIO:
+            raise DeudaInvalida(
+                campos={"hasta": f"Consulta como máximo {DIAS_CALENDARIO} días a la vez."}
+            )
+        usuario = sesion.usuario
+        with self._unidad() as uow:
+            deudas = uow.deudas.con_vencimientos_entre(
+                espacio_de(sesion),
+                desde,
+                hasta,
+                registrada_por=None if usuario.rol is Rol.GERENTE else usuario.id,
+            )
+            nombres: dict[UUID, str] = {}
+            vencimientos = [
+                Vencimiento(d, c, _nombre(uow, d.registrada_por, nombres))
+                for d in deudas
+                for c in d.cuotas
+                if desde <= c.vence_el <= hasta
+            ]
+        vencimientos.sort(key=lambda v: (v.cuota.vence_el, v.deuda.concepto.casefold()))
+        return Calendario(self._hoy(), desde, hasta, vencimientos)
 
 
 def _motivo_obligatorio(motivo: str | None, accion: str) -> str:

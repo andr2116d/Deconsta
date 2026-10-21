@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.acceso.infraestructura.http.esquemas import enmascarar, exigir
 from app.core.esquemas import Entrada
-from app.deudas.aplicacion.deudas import DeudaConDetalle, NuevaDeuda
+from app.deudas.aplicacion.deudas import Calendario, DeudaConDetalle, NuevaDeuda, Vencimiento
 from app.deudas.dominio.modelos import Deuda, EstadoDeuda, LugarPago, MotivoEspera
 from app.deudas.dominio.registro import CuotaEnviada
 from app.documentos.dominio.modelos import TipoDocumento
@@ -127,6 +127,57 @@ class RegistroSalida(BaseModel):
     deuda: DeudaSalida
     # Lo que se le advierte al gerente cuando la registra él mismo.
     avisos: list[str]
+
+
+class VencimientoSalida(BaseModel):
+    deuda_id: UUID
+    concepto: str
+    categoria_id: UUID | None
+    tipo_documento: TipoDocumento
+    lugar_pago: LugarPago
+    estado: EstadoDeuda
+    revision_pendiente: bool
+    vence_el: date
+    # En soles: el importe de esta cuota, no el de toda la deuda.
+    importe: str
+    cuota: int
+    # Cuántas cuotas tiene la deuda: 1 en un recibo.
+    cuotas: int
+    registrada_por: str
+
+    @classmethod
+    def desde(cls, vencimiento: Vencimiento) -> "VencimientoSalida":
+        deuda, cuota = vencimiento.deuda, vencimiento.cuota
+        return cls(
+            deuda_id=deuda.id,
+            concepto=deuda.concepto,
+            categoria_id=deuda.categoria_id,
+            tipo_documento=deuda.tipo_documento,
+            lugar_pago=deuda.lugar_pago,
+            estado=deuda.estado,
+            revision_pendiente=deuda.revision_pendiente,
+            vence_el=cuota.vence_el,
+            importe=str(cuota.importe),
+            cuota=cuota.numero,
+            cuotas=len(deuda.cuotas),
+            registrada_por=vencimiento.registrada_por,
+        )
+
+
+class CalendarioSalida(BaseModel):
+    hoy: date
+    desde: date
+    hasta: date
+    vencimientos: list[VencimientoSalida]
+
+    @classmethod
+    def desde_calendario(cls, calendario: Calendario) -> "CalendarioSalida":
+        return cls(
+            hoy=calendario.hoy,
+            desde=calendario.desde,
+            hasta=calendario.hasta,
+            vencimientos=[VencimientoSalida.desde(v) for v in calendario.vencimientos],
+        )
 
 
 class DeudaDetalleSalida(DeudaSalida):
