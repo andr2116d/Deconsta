@@ -103,6 +103,40 @@ describe('RegistrarDeudaView', () => {
     expect(document.body.textContent).toContain('Registro de deudas en pausa')
   })
 
+  it('un corte de red mientras se analiza no pierde el documento', async () => {
+    const fetch = simularFetch(respuesta(200, []), respuesta(202, SUBIDO))
+    fetch.mockImplementationOnce(() => Promise.reject(new TypeError('Failed to fetch')))
+    fetch.mockImplementationOnce(() =>
+      Promise.resolve(respuesta(503, { code: 'SERVICIO_NO_DISPONIBLE', detail: 'No disponible.' })),
+    )
+    fetch.mockImplementationOnce(() =>
+      Promise.resolve(respuesta(200, { ...SUBIDO, estado: 'listo', riesgo: 'bajo' })),
+    )
+    const vista = montar()
+    await flushPromises()
+
+    await elegir(vista)
+    await vi.advanceTimersByTimeAsync(4000)
+    await flushPromises()
+
+    expect(vista.text()).not.toContain('No pudimos usar este documento')
+    expect(vista.find('form').exists()).toBe(true)
+  })
+
+  it('avisa cuando el análisis tarda más de lo habitual', async () => {
+    const analizando = Array.from({ length: 20 }, () => respuesta(200, SUBIDO))
+    simularFetch(respuesta(200, []), respuesta(202, SUBIDO), ...analizando)
+    const vista = montar()
+    await flushPromises()
+
+    await elegir(vista)
+    expect(vista.text()).not.toContain('Está tardando un poco más')
+    await vi.advanceTimersByTimeAsync(21_000)
+    await flushPromises()
+
+    expect(vista.text()).toContain('Está tardando un poco más')
+  })
+
   it('rechaza en el navegador lo que no es una imagen ni un PDF, sin subirlo', async () => {
     const fetch = simularFetch(respuesta(200, []))
     const vista = montar()
