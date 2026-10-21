@@ -11,6 +11,7 @@ from app.notificaciones.infraestructura.http.rutas import router as notificacion
 from app.pagos.infraestructura.http.rutas import router as pagos
 from app.pagos.infraestructura.http.rutas_moras import router as moras
 from app.pagos.infraestructura.http.rutas_pedidos import router as pedidos
+from app.panel.infraestructura.http.rutas import router as panel
 from app.reglas.infraestructura.http.rutas import router as reglas
 
 router = APIRouter()
@@ -27,3 +28,4 @@ router.include_router(pedidos)
 router.include_router(pagos)
 router.include_router(notificaciones)
 router.include_router(historial)
+router.include_router(panel)
