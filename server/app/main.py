@@ -15,6 +15,8 @@ from app.core.cuerpo import limitar_cuerpo
 from app.core.errores import registrar_manejadores
 from app.core.migraciones import aplicar_pendientes
 from app.core.registro import configurar_registro, crear_middleware_seguridad
+from app.documentos.dominio.modelos import TAMANO_MAXIMO
+from app.documentos.infraestructura.http.errores import registrar_manejadores_documentos
 from app.notificaciones.infraestructura.http.errores import registrar_manejadores_notificaciones
 from app.reglas.infraestructura.http.errores import registrar_manejadores_reglas
 
@@ -47,9 +49,11 @@ def crear_app(config: Settings = settings, contenedor: Contenedor | None = None)
     registrar_manejadores_acceso(app)
     registrar_manejadores_categorias(app)
     registrar_manejadores_reglas(app)
+    registrar_manejadores_documentos(app)
     registrar_manejadores_notificaciones(app)
-    # Antes que el de seguridad: así un 413 también lleva sus cabeceras.
-    limitar_cuerpo(app)
+    # Antes que el de seguridad: así un 413 también lleva sus cabeceras. Solo la subida de
+    # documentos admite un archivo; el margen cubre las cabeceras del multipart.
+    limitar_cuerpo(app, excepciones={"/api/v1/documentos": TAMANO_MAXIMO + 64 * 1024})
     app.middleware("http")(crear_middleware_seguridad(hsts=produccion))
     app.add_middleware(
         CORSMiddleware,

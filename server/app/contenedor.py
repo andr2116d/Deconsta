@@ -46,6 +46,16 @@ from app.categorias.aplicacion.categorias import (
 from app.categorias.infraestructura.persistencia import UnidadCategoriasSql
 from app.core.config import Settings
 from app.core.database import crear_motor
+from app.documentos.aplicacion.documentos import (
+    ConsultarDocumento,
+    LeerContenido,
+    LevantarBloqueo,
+    ListarBloqueos,
+    SubirDocumento,
+)
+from app.documentos.dominio.puertos import ColaAnalisis
+from app.documentos.infraestructura.cola_celery import ColaCelery
+from app.documentos.infraestructura.componentes import Componentes
 from app.notificaciones.aplicacion.notificaciones import (
     ListarNotificaciones,
     MarcarLeida,
@@ -134,16 +144,35 @@ class Contenedor:
     editar_titular: EditarTitular
     quitar_titular: QuitarTitular
     evaluar_documento: EvaluarDocumento
+    componentes: Componentes
+    subir_documento: SubirDocumento
+    consultar_documento: ConsultarDocumento
+    leer_contenido: LeerContenido
+    listar_bloqueos: ListarBloqueos
+    levantar_bloqueo: LevantarBloqueo
     listar_notificaciones: ListarNotificaciones
     marcar_leida: MarcarLeida
     marcar_todas_leidas: MarcarTodasLeidas
     suscriptor_avisos: SuscriptorAvisos
 
     @classmethod
-    def crear(cls, config: Settings) -> "Contenedor":
+    def crear(
+        cls,
+        config: Settings,
+        *,
+        componentes: Componentes | None = None,
+        cola: ColaAnalisis | None = None,
+    ) -> "Contenedor":
+        """`componentes` y `cola` reemplazan los adaptadores de los documentos (las pruebas los
+        cambian por unos en memoria)."""
         motor = crear_motor(config.database_url)
         cifrador = CifradorDatos(config.clave_cifrado, config.clave_huella)
         redis = Redis.from_url(config.redis_url, socket_timeout=2, socket_connect_timeout=2)
+        componentes = componentes or Componentes.crear(config, motor, redis)
+        if cola is None:
+            from app.workers.celery_app import celery_app
+
+            cola = ColaCelery(celery_app)
         limitador = LimitadorRedis(redis, cifrador)
         contrasenas = ProtectorArgon2()
         limites = limites_de(config)
@@ -176,6 +205,7 @@ class Contenedor:
             reloj,
         )
 
+        documentos = (componentes.unidad, reloj, componentes.publicador)
         notificaciones = (lambda: UnidadNotificacionesSql(motor), reloj)
 
         return cls(
@@ -222,6 +252,24 @@ class Contenedor:
             editar_titular=EditarTitular(*reglas),
             quitar_titular=QuitarTitular(*reglas),
             evaluar_documento=EvaluarDocumento(*reglas),
+            componentes=componentes,
+            subir_documento=SubirDocumento(
+                *documentos,
+                almacen=componentes.almacen,
+                inspector=componentes.inspector,
+                huellero=componentes.cifrador,
+                cola=cola,
+                limitador=limitador,
+                limite=Limite(
+                    "subida_documentos",
+                    config.limite_subida_documentos,
+                    config.ventana_subida_documentos_segundos,
+                ),
+            ),
+            consultar_documento=ConsultarDocumento(*documentos),
+            leer_contenido=LeerContenido(*documentos, almacen=componentes.almacen),
+            listar_bloqueos=ListarBloqueos(*documentos),
+            levantar_bloqueo=LevantarBloqueo(*documentos),
             listar_notificaciones=ListarNotificaciones(*notificaciones),
             marcar_leida=MarcarLeida(*notificaciones),
             marcar_todas_leidas=MarcarTodasLeidas(*notificaciones),
