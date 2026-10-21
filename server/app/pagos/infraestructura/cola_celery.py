@@ -1,5 +1,6 @@
-"""Cola del análisis de comprobantes de pago (Celery sobre Redis), en la misma cola ocr de los
-documentos: el análisis usa el mismo motor de lectura.
+"""Cola del análisis de comprobantes de pago (Celery sobre Redis). Tiene su propia cola, pagos, para
+que un voucher no espere detrás de los documentos de deudas: en producción la atiende un worker
+dedicado.
 
 La API solo publica el id del comprobante con send_task. Sin reintentos de conexión al publicar:
 si Redis no responde, la subida falla rápido.
@@ -11,9 +12,9 @@ from celery import Celery
 from kombu.exceptions import OperationalError
 
 from app.documentos.dominio.puertos import ErrorCola
-from app.documentos.infraestructura.cola_celery import COLA_OCR
 
 TAREA_ANALIZAR_COMPROBANTE = "pagos.analizar_comprobante"
+COLA_PAGOS = "pagos"
 
 
 class ColaComprobantesCelery:
@@ -23,7 +24,10 @@ class ColaComprobantesCelery:
     def encolar(self, comprobante_id: UUID) -> None:
         try:
             self._aplicacion.send_task(
-                TAREA_ANALIZAR_COMPROBANTE, args=[str(comprobante_id)], queue=COLA_OCR, retry=False
+                TAREA_ANALIZAR_COMPROBANTE,
+                args=[str(comprobante_id)],
+                queue=COLA_PAGOS,
+                retry=False,
             )
         except (OperationalError, OSError) as error:
             raise ErrorCola("La cola de análisis no respondió") from error
