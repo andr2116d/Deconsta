@@ -80,3 +80,23 @@ export function enviarJson<T>(ruta: string, datos?: unknown): Promise<T> {
     body: datos === undefined ? undefined : JSON.stringify(datos),
   })
 }
+
+/** Envía un formulario con archivos (multipart): el navegador pone el límite del cuerpo. */
+export function enviarFormulario<T>(ruta: string, datos: FormData): Promise<T> {
+  return solicitar<T>(ruta, { method: 'POST', body: datos })
+}
+
+/** Descarga un archivo protegido por la sesión. Los errores llegan como ErrorApi. */
+export async function descargar(ruta: string): Promise<Blob> {
+  let respuesta: Response
+  try {
+    respuesta = await fetch(`/api/v1${ruta}`, { credentials: 'same-origin' })
+  } catch {
+    throw new ErrorApi(0, SIN_CONEXION)
+  }
+  if (!respuesta.ok) {
+    const cuerpo: unknown = await respuesta.json().catch(() => null)
+    throw new ErrorApi(respuesta.status, esCuerpoError(cuerpo) ? cuerpo : RESPUESTA_INESPERADA)
+  }
+  return respuesta.blob()
+}

@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import { useSesionStore } from '@/features/acceso/stores/sesion'
+import { levantarBloqueo, listarBloqueos } from '@/features/deudas/api/deudas'
+import type { BloqueoRegistro } from '@/features/deudas/types'
 import { ErrorApi } from '@/shared/api/http'
 import BaseAviso from '@/shared/components/BaseAviso.vue'
 import BaseBoton from '@/shared/components/BaseBoton.vue'
@@ -27,6 +29,9 @@ const aviso = ref<string | null>(
   typeof history.state?.aviso === 'string' ? (history.state.aviso as string) : null,
 )
 const fallo = ref<ErrorApi | null>(null)
+const bloqueos = ref<BloqueoRegistro[]>([])
+const bloqueoDe = (a: Asistente) =>
+  bloqueos.value.find((b) => b.asistente_id === a.id)?.bloqueado_en ?? null
 
 const cantidad = computed(() => equipo.asistentes?.length ?? 0)
 const nombreDe = (a: Asistente) => `${a.nombres} ${a.apellidos}`
@@ -50,6 +55,7 @@ function mostrarFallo(error: unknown) {
 async function cargar() {
   try {
     await equipo.cargar()
+    bloqueos.value = await listarBloqueos()
   } catch (error) {
     if (error instanceof ErrorApi && error.codigo === 'NO_AUTENTICADO') sesionTerminada()
   }
@@ -93,6 +99,20 @@ async function desbloquear(asistente: Asistente) {
   try {
     await equipo.desbloquear(asistente.id)
     aviso.value = `Desbloqueaste a ${nombreDe(asistente)}. Ya puede volver a ingresar.`
+  } catch (error) {
+    mostrarFallo(error)
+  } finally {
+    ocupada.value = null
+  }
+}
+
+async function permitirRegistro(asistente: Asistente) {
+  ocupada.value = asistente.id
+  aviso.value = null
+  try {
+    await levantarBloqueo(asistente.id)
+    bloqueos.value = bloqueos.value.filter((b) => b.asistente_id !== asistente.id)
+    aviso.value = `${nombreDe(asistente)} ya puede registrar deudas otra vez. Le avisamos.`
   } catch (error) {
     mostrarFallo(error)
   } finally {
@@ -208,6 +228,8 @@ onMounted(() => {
             :key="asistente.id"
             :asistente="asistente"
             :ocupada="ocupada === asistente.id"
+            :registro-bloqueado="bloqueoDe(asistente)"
+            @permitir-registro="permitirRegistro(asistente)"
             @bloquear="accion = { tipo: 'bloquear', asistente }"
             @desbloquear="desbloquear(asistente)"
             @eliminar="accion = { tipo: 'eliminar', asistente }"

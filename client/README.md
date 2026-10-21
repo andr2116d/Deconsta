@@ -25,6 +25,10 @@ src/
       secciones.ts     secciones de cada rol; de aquí salen rutas, pestañas y menú. Una sección con
                        `pestana` es una pestaña de su página («Mi cuenta», «Límites y categorías»)
       views/           EnDesarrolloView, lugar de cada sección mientras se construye
+    deudas/          registro de deudas desde su documento y la mesa «Por autorizar» del gerente
+      composables/     useAnalisisDocumento: sube el documento y espera su análisis
+      cuotas.ts        cuotas en céntimos y por mes, solo para llenar el formulario
+    notificaciones/  avisos guardados de la cuenta, su flujo en tiempo real (SSE) y la campana
     cuenta/          Mi cuenta: datos personales, usuario y contraseña, rol y permisos, privacidad
       layouts/         CuentaLayout: encabezado, pestañas y tarjeta lateral que se quedan al
                        cambiar de pestaña
@@ -91,6 +95,33 @@ escribe si el nombre es muy corto o ya existe, y no deja escribir signos inváli
 vuelve a validar todo y su respuesta (por ejemplo, un nombre repetido de una categoría archivada,
 con la opción de reactivarla) se muestra junto al campo.
 
+## Registrar deuda
+
+Se llega desde la acción de la cabecera. El documento (foto o PDF de hasta 10 MB) se suelta o se
+elige, se muestra tal cual y se sube; mientras el backend lo analiza, la pantalla consulta su
+estado. «Lo que comprobamos» resume las tres capas (lectura, revisión del contenido y archivo
+original) y si el documento ya respalda otra deuda.
+
+- Ilegible, con señales de alteración (de una asistente) o repetido: no se llenan datos. El
+  repetido dice en qué deuda se usó y, al tercer intento de la asistente, que su registro quedó en
+  pausa hasta que su gerente lo permita desde Mi equipo.
+- Listo: el formulario llega prellenado con lo leído y todo se corrige a mano. «Se paga en cuotas»
+  abre las cuotas de un cronograma, con un generador mensual y cada cuota editable. Si el análisis
+  sugiere una categoría nueva, se crea ahí mismo o se deja en «Otros».
+- Si la asistente corrige el importe o el código de pago, se le avisa que su gerente deberá
+  autorizar la deuda. El backend decide y su respuesta se muestra junto a cada campo.
+
+## Por autorizar y notificaciones
+
+Solo para gerencia. Lista lo que espera su autorización y lo que aguarda su visto bueno; cada deuda
+muestra su documento (descargado con la sesión, sin enlaces públicos), las comprobaciones, los
+motivos y lo corregido frente a lo leído. Rechazar y anular piden un motivo.
+
+Las notificaciones se guardan en el backend. Al entrar al espacio se abre su flujo de eventos:
+cada aviso nuevo recarga la lista, la campana muestra cuántos faltan leer y un aviso en pantalla lo
+anuncia sin quitar el foco. Las pantallas que dependen de los avisos (Por autorizar) se refrescan
+solas. La asistente ve y crea categorías desde el menú de su cuenta («Categorías»).
+
 ## Validación de datos personales
 
 `shared/validaciones/persona.ts` filtra lo que se escribe o pega y avisa lo que falta mientras se
@@ -137,7 +168,8 @@ pnpm lint
 pnpm test:e2e --project=chromium   # Playwright; requiere la API y Postgres en marcha
 ```
 
-Las pruebas de punta a punta crean cuentas nuevas con el comando del server
+`e2e/deudas.spec.ts` además necesita el worker de la cola ocr (`pnpm worker:ocr`). Las pruebas de
+punta a punta crean cuentas nuevas con el comando del server
 (`app.acceso.infraestructura.cli`) en la base de desarrollo. La suite completa hace más de 20
 ingresos desde la misma IP y el límite por defecto es de 20 por minuto: al ejecutarla entera, la
 última prueba puede recibir 429. Conviene correr los archivos por separado o esperar un minuto.

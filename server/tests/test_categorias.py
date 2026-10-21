@@ -135,12 +135,17 @@ def test_solo_el_gerente_administra_y_cada_equipo_ve_lo_suyo(
     archivada = crear(gerente, nombre="Seguros")
     gerente.post(f"{CATEGORIAS}/{archivada['id']}/archivado")
 
-    # La asistente del equipo consulta solo las activas, pero no administra.
+    # La asistente del equipo consulta solo las activas y crea en el espacio de su gerente, pero
+    # no edita, archiva ni reactiva.
     asistente = sesion(cliente, equipo.asistente)
     vistas = asistente.get(CATEGORIAS, params={"archivadas": True}).json()
     assert [c["nombre"] for c in vistas] == ["Agua"]
-    assert asistente.post(CATEGORIAS, json=AGUA).json()["code"] == "SIN_PERMISO"
+    assert asistente.post(CATEGORIAS, json=AGUA).json()["code"] == "CATEGORIA_DUPLICADA"
+    papeletas = crear(asistente, nombre="Papeletas")
+    assert "Papeletas" in [c["nombre"] for c in gerente.get(CATEGORIAS).json()]
     assert asistente.post(f"{CATEGORIAS}/{agua['id']}/archivado").status_code == 403
+    edicion = asistente.post(f"{CATEGORIAS}/{papeletas['id']}/edicion", json={"nombre": "Multas"})
+    assert edicion.json()["code"] == "SIN_PERMISO"
 
     # Otro gerente no ve ni toca las categorías ajenas.
     otro = sesion(cliente, equipo.otro_gerente)

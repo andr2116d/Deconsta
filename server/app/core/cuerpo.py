@@ -2,7 +2,7 @@
 
 Los formularios de la API pesan unos cientos de bytes: un cuerpo enorme solo sirve para gastar
 memoria y CPU del servidor. Se rechaza antes de leerlo si declara su tamaño (Content-Length) y,
-si llega por partes, en cuanto supera el tope. Las rutas de archivos tendrán su propio tope.
+si llega por partes, en cuanto supera el tope. Las rutas de archivos tienen su propio tope.
 """
 
 from collections.abc import Awaitable, Callable, MutableMapping
@@ -31,9 +31,13 @@ class LimiteCuerpo:
     """Lee el cuerpo completo (como mucho, el tope) antes de pasarlo a la API y lo entrega
     intacto. Así un exceso se responde siempre con 413, sin importar cómo llegó."""
 
-    def __init__(self, app: AppAsgi, maximo: int = TAMANO_MAXIMO) -> None:
+    def __init__(
+        self, app: AppAsgi, maximo: int = TAMANO_MAXIMO, excepciones: dict[str, int] | None = None
+    ) -> None:
         self.app = app
         self.maximo = maximo
+        # Tope propio de algunas rutas exactas (POST de un archivo), por su ruta.
+        self.excepciones = excepciones or {}
 
     async def __call__(
         self, scope: MutableMapping[str, Any], receive: Recibir, send: Enviar
@@ -41,8 +45,9 @@ class LimiteCuerpo:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        maximo = self.excepciones.get(scope["path"], self.maximo)
         declarado = dict(scope["headers"]).get(b"content-length", b"")
-        if declarado.isdigit() and int(declarado) > self.maximo:
+        if declarado.isdigit() and int(declarado) > maximo:
             await respuesta_cuerpo_grande()(scope, receive, send)
             return
         cuerpo = bytearray()
@@ -51,7 +56,7 @@ class LimiteCuerpo:
             if mensaje["type"] == "http.disconnect":
                 return
             cuerpo += mensaje.get("body", b"")
-            if len(cuerpo) > self.maximo:
+            if len(cuerpo) > maximo:
                 await respuesta_cuerpo_grande()(scope, receive, send)
                 return
             if not mensaje.get("more_body", False):
@@ -68,5 +73,7 @@ class LimiteCuerpo:
         await self.app(scope, recibir, send)
 
 
-def limitar_cuerpo(app: FastAPI, maximo: int = TAMANO_MAXIMO) -> None:
-    app.add_middleware(LimiteCuerpo, maximo=maximo)
+def limitar_cuerpo(
+    app: FastAPI, maximo: int = TAMANO_MAXIMO, excepciones: dict[str, int] | None = None
+) -> None:
+    app.add_middleware(LimiteCuerpo, maximo=maximo, excepciones=excepciones)

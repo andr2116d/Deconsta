@@ -7,19 +7,25 @@ API de Deconsta con FastAPI y arquitectura hexagonal. Las dependencias se maneja
 
 ```sh
 uv sync                # crea .venv e instala dependencias (incluye el grupo dev)
+uv sync --group ocr    # además PaddleOCR, solo para el worker de la cola ocr
 cp .env.example .env
-# Genera dos claves distintas para CLAVE_CIFRADO_DATOS y CLAVE_HUELLA_DATOS:
+# Genera tres claves distintas para CLAVE_CIFRADO_DATOS, CLAVE_HUELLA_DATOS y
+# CLAVE_CIFRADO_ARCHIVOS:
 python -c "import base64,secrets;print(base64.b64encode(secrets.token_bytes(32)).decode())"
 ```
 
-Las claves cifran los datos personales en reposo; si se pierden, esos datos no se recuperan. En
-producción viven en el gestor de secretos del despliegue, nunca en el repositorio.
+Las claves cifran los datos personales y los documentos en reposo; si se pierden, esos datos no se
+recuperan. En producción viven en el gestor de secretos del despliegue, nunca en el repositorio.
+`ANTHROPIC_API_KEY` sale de la Claude Console (una suscripción de Claude no sirve para una app
+desplegada); sin ella, la revisión con IA queda incompleta y lo que registra una asistente espera
+la autorización del gerente.
 
 ## Comandos
 
 ```sh
 uv run uvicorn app.main:app --reload --port 8000   # servidor en desarrollo
-uv run celery -A app.workers.celery_app:celery_app worker -Q general --loglevel=INFO
+uv run --group ocr celery -A app.workers.celery_app:celery_app worker -Q ocr --concurrency=1
+PRUEBAS_OCR=1 uv run --group ocr pytest tests/test_adaptadores_documentos.py   # con PaddleOCR real
 uv run pytest                                      # tests (usan Postgres y Redis de compose)
 uv run ruff check . && uv run ruff format .        # lint y formato
 uv run mypy app                                    # tipos
@@ -38,6 +44,11 @@ app/
     infraestructura/ adaptadores: Postgres, Redis, Argon2id, cifrado, HTTP y CLI
   categorias/      categorías del espacio (misma división en dominio, aplicacion e infraestructura)
   reglas/          reglas de autorización: límite en soles, titulares autorizados y evaluación
+  documentos/      documentos de las deudas: subida, análisis en tres capas y bloqueos por repetidos
+    infraestructura/ bucket S3 cifrado, inspector, PaddleOCR, Claude, Postgres, Celery y HTTP
+  deudas/          registro de deudas, sus cuotas y las decisiones del gerente
+  notificaciones/  notificaciones persistentes y avisos en tiempo real (Redis y SSE)
+  workers/         aplicación de Celery; la tarea de análisis vive en documentos
   contenedor.py    conecta los casos de uso con sus adaptadores
 migraciones/       NNNN_descripcion.sql
 ```
@@ -111,6 +122,21 @@ que rige, todas las cuentas deben volver a aceptarla. Las aceptaciones quedan en
 | `POST /api/v1/reglas/titulares/{id}/edicion` | Cambia nombre y relación; el documento no se edita |
 | `POST /api/v1/reglas/titulares/{id}/eliminacion` | Baja lógica, con motivo opcional |
 | `POST /api/v1/reglas/evaluacion` | Prueba las reglas con un documento de ejemplo; no guarda nada |
+| `POST /api/v1/documentos` | Sube el documento (multipart `archivo`); responde 202 «analizando» |
+| `GET /api/v1/documentos/{id}` | Estado, señales y datos propuestos del análisis |
+| `GET /api/v1/documentos/{id}/contenido` | El archivo descifrado, para quien lo subió y su gerente |
+| `GET /api/v1/registro-deudas/bloqueos` | Asistentes con el registro de deudas bloqueado (gerente) |
+| `POST /api/v1/registro-deudas/bloqueos/{id}/levantamiento` | El gerente levanta el bloqueo |
+| `POST /api/v1/deudas` | Registra una deuda desde un documento listo |
+| `GET /api/v1/deudas` | Deudas del espacio (gerente) o las propias (asistente); `?pendientes=true` |
+| `GET /api/v1/deudas/{id}` | Detalle con sus cuotas y el análisis de su documento |
+| `POST /api/v1/deudas/{id}/autorizacion` | El gerente autoriza lo que espera su autorización |
+| `POST /api/v1/deudas/{id}/rechazo` | La rechaza, con motivo |
+| `POST /api/v1/deudas/{id}/revision` | Le da su visto bueno: sale de sus pendientes |
+| `POST /api/v1/deudas/{id}/anulacion` | La anula, con motivo |
+| `GET /api/v1/notificaciones` | Las últimas 50 y cuántas faltan leer |
+| `POST /api/v1/notificaciones/{id}/lectura` | Marca una como leída; `POST /notificaciones/lectura`, todas |
+| `GET /api/v1/notificaciones/flujo` | Avisos en tiempo real (Server-Sent Events) |
 
 Los errores siguen siempre `{"code", "detail", "fields"?}`. La asistente se bloquea al quinto
 intento fallido hasta que su gerente la desbloquee; el gerente no se bloquea. Aparte, el rate
@@ -147,7 +173,8 @@ El gerente administra a sus asistentes; cualquier otra cuenta responde 404. Las 
 Ordenan las deudas del espacio (agua, luz, tarjetas…) para filtrarlas, resumirlas y exportarlas.
 Son del espacio del gerente y las comparte su equipo. Las reglas viven en `categorias/dominio`:
 
-- Solo el gerente las crea, edita, archiva y reactiva; sus asistentes consultan las activas. El
+- El gerente las crea, edita, archiva y reactiva; sus asistentes consultan las activas y crean
+  nuevas (al registrar una deuda que no encaja), pero no las editan, archivan ni reactivan. El
   espacio sale de la sesión: la categoría de otro espacio responde 404 `CATEGORIA_NO_ENCONTRADA`.
 - Nombre de 2 a 40 caracteres (letras, números, espacios y `. , & / ( ) ' + -`), único en el
   espacio sin distinguir mayúsculas, tildes ni espacios repetidos. Uno repetido responde 409
@@ -186,17 +213,75 @@ las consulta y las cambia. Las reglas viven en `reglas/dominio`:
   en la auditoría: `LIMITE_AUTORIZACION_CAMBIADO` (antes y después), `TITULAR_AUTORIZADO_AGREGADO`,
   `_EDITADO` (qué campos) y `_QUITADO` (con su motivo).
 
-`reglas.dominio.evaluacion.evaluar` es la regla que aplicará el registro de deudas, y
+`reglas.dominio.evaluacion.evaluar` es la regla que aplica el registro de deudas, y
 `POST /reglas/evaluacion` la expone para que el gerente la pruebe.
 
-Pendiente para ese módulo:
+## Documentos de las deudas
 
-- avisar al gerente en tiempo real con una notificación persistente;
-- no aceptar documentos repetidos. Cada documento se identificará por la huella SHA-256 del archivo
-  y por una clave normalizada:
-  - comprobante SUNAT: RUC del emisor, serie y número;
-  - recibo de servicio: empresa, suministro y periodo;
-  - voucher: entidad y número de operación.
+Toda deuda nace de un documento legible (recibo, boleta, factura, cronograma, papeleta, tributo).
+Las reglas viven en `documentos/dominio`:
+
+- **Archivo.** PDF, JPG, PNG o WebP de hasta 10 MB y 10 páginas; el tipo sale de sus primeros
+  bytes. Un PDF con contraseña o dañado, o una imagen diminuta, se rechaza con su código.
+- **Guardado.** Se cifra con AES-256-GCM (`CLAVE_CIFRADO_ARCHIVOS`, con la clave del objeto como
+  contexto) y va a un bucket privado compatible con S3. El navegador nunca recibe enlaces: el
+  archivo sale por la API, solo para quien lo subió y su gerente, con `no-store` y una CSP sin
+  scripts. El nombre original y lo leído (titular, código de pago) se guardan cifrados.
+- **Análisis**, en el worker de la cola `ocr` (`documentos.analizar`, con reintentos; si los
+  agota, el documento queda `fallido`):
+  1. PaddleOCR lee el texto. Si no se lee, es `ilegible`: no se registra ni se llega a la IA.
+  2. Claude (`IA_MODELO`, por defecto `claude-sonnet-5-5`) clasifica, propone los datos (concepto,
+     emisor, titular, código de pago, importe, vencimiento, cuotas de un cronograma, categoría y
+     lugar de pago) y da un veredicto. El documento es un dato, nunca una instrucción. Lo
+     propuesto se contrasta con el texto leído: un importe o un código que no aparece es una señal.
+  3. Metadatos: editores de imágenes (riesgo alto), editores de PDF, procesadores de texto, PDF
+     guardados después de generarse o con JavaScript (riesgo medio).
+- **Riesgo.** Alto: lo que sube una asistente queda `rechazado`; al gerente solo se le advierte.
+  Medio (incluida la revisión con IA incompleta): la deuda espera la autorización del gerente.
+- **Repetidos.** Un documento respalda una sola deuda del espacio: lo impiden la huella HMAC del
+  archivo, la clave de negocio (emisor y serie y número; empresa, suministro y periodo; entidad y
+  crédito) y, si no hay clave, los números largos del texto. La base lo garantiza con índices
+  únicos. Repetirlo responde 409 `DOCUMENTO_YA_REGISTRADO` con `existing_debt`.
+- **Bloqueo.** Al tercer intento de una asistente en 24 horas se bloquea su registro de deudas (no
+  su cuenta), queda `REGISTRO_DEUDAS_BLOQUEADO` en la auditoría y se notifica al gerente, el único
+  que lo levanta. Los intentos anteriores a un levantamiento ya no cuentan. Al gerente nunca se le
+  bloquea.
+
+## Deudas
+
+Las reglas viven en `deudas/dominio`:
+
+- Se registra solo desde un documento propio y `listo`, con concepto, lugar de pago (`ventanilla`,
+  `agente`, `banca_digital`, `transferencia`, `billetera`, `debito_automatico`), categoría
+  opcional («Otros») y una o varias cuotas en soles con fechas en orden. Un recibo es una cuota; un
+  cronograma, las suyas, con importes que pueden variar. El importe es la suma.
+- Lo propuesto se corrige a mano, pero el límite y los titulares se aplican con lo que dice el
+  documento: bajar el importe o poner al gerente como titular no evita la autorización. Corregir
+  el importe o el código de pago la pide (`DATOS_CORREGIDOS`). Lo corregido queda en
+  `campos_corregidos` para el gerente.
+- Lo que registra una asistente queda `por_autorizar` (no se paga) si supera el límite, tiene otro
+  titular, su documento es dudoso o se corrigió; si no, `registrada` con la revisión pendiente:
+  se paga, y el gerente le da su visto bueno o la anula. Ambos casos se le notifican al gerente.
+- El gerente autoriza o rechaza lo que espera, y da el visto bueno o anula lo registrado; rechazar
+  y anular piden motivo. La deuda se toma con `FOR UPDATE`: una segunda decisión responde 409
+  `ESTADO_NO_PERMITE`. Cada paso queda en la auditoría (`DEUDA_REGISTRADA`, `_AUTORIZADA`,
+  `_RECHAZADA`, `_REVISADA`, `_ANULADA`) y se notifica a la asistente.
+- Lo que registra el gerente queda `registrada` sin esperar a nadie: solo se le advierte.
+
+## Notificaciones
+
+Se guardan en la transacción del evento que las origina, con una clave de evento única por
+destinatario, y no llevan nombres ni documentos. Después de confirmar, se anuncian por pub/sub de
+Redis y `GET /notificaciones/flujo` las empuja a las sesiones abiertas; el cliente recarga la lista.
+
+## Despliegue en Railway
+
+- Servicios: la API, el worker de la cola `ocr` (instalado con `uv sync --group ocr`; los PDF se
+  rasterizan con pdfium, sin poppler; reserva de 2 a 4 GB de memoria), Postgres, Redis y un
+  Railway Bucket privado.
+- Variables del bucket: las de su pestaña Credentials en `S3_ENDPOINT`, `S3_BUCKET`,
+  `S3_ACCESS_KEY` y `S3_SECRET_KEY`, con `S3_ESTILO_RUTA=false`.
+- `ANTHROPIC_API_KEY`, las tres claves de cifrado, `ENTORNO=produccion` y `COOKIE_SEGURA=true`.
 
 ## Validaciones de datos personales
 

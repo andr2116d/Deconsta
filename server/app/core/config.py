@@ -24,6 +24,23 @@ class Settings(BaseSettings):
     # las huellas HMAC que permiten buscarlos y exigir unicidad sin descifrarlos.
     clave_cifrado_datos: SecretStr
     clave_huella_datos: SecretStr
+    # Cifra los archivos de los documentos antes de subirlos al bucket (AES-256-GCM).
+    clave_cifrado_archivos: SecretStr
+
+    # Bucket privado compatible con S3: Railway Buckets en producción (estilo virtual, según su
+    # pestaña Credentials) y SeaweedFS en desarrollo (estilo de ruta).
+    s3_endpoint: str = "http://localhost:8333"
+    s3_region: str = "us-east-1"
+    s3_bucket: str = "deconsta"
+    s3_access_key: SecretStr
+    s3_secret_key: SecretStr
+    s3_estilo_ruta: bool = True
+
+    # Revisión de documentos con Claude. Sin clave, la revisión queda incompleta y lo que registra
+    # una asistente espera la autorización del gerente.
+    anthropic_api_key: SecretStr | None = None
+    ia_modelo: str = "claude-sonnet-5-5"
+    ia_esfuerzo: Literal["low", "medium", "high", "xhigh", "max"] = "high"
 
     sesion_duracion_minutos: int = Field(default=480, ge=5, le=1440)
     cookie_sesion_nombre: str = "deconsta_sesion"
@@ -51,8 +68,14 @@ class Settings(BaseSettings):
     # Cambios del límite y de los titulares autorizados, y pruebas de las reglas, por gerente.
     limite_gestion_reglas: int = Field(default=60, ge=1)
     ventana_gestion_reglas_segundos: int = Field(default=3600, ge=1)
+    # Documentos que sube una misma cuenta.
+    limite_subida_documentos: int = Field(default=30, ge=1)
+    ventana_subida_documentos_segundos: int = Field(default=3600, ge=1)
+    # Registros y decisiones sobre deudas de una misma cuenta.
+    limite_gestion_deudas: int = Field(default=120, ge=1)
+    ventana_gestion_deudas_segundos: int = Field(default=3600, ge=1)
 
-    @field_validator("clave_cifrado_datos", "clave_huella_datos")
+    @field_validator("clave_cifrado_datos", "clave_huella_datos", "clave_cifrado_archivos")
     @classmethod
     def validar_clave(cls, valor: SecretStr) -> SecretStr:
         try:
@@ -65,8 +88,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validar_seguridad(self) -> Self:
-        if self.clave_cifrado_datos == self.clave_huella_datos:
-            raise ValueError("clave_cifrado_datos y clave_huella_datos deben ser distintas")
+        claves = {
+            self.clave_cifrado_datos.get_secret_value(),
+            self.clave_huella_datos.get_secret_value(),
+            self.clave_cifrado_archivos.get_secret_value(),
+        }
+        if len(claves) < 3:
+            raise ValueError(
+                "clave_cifrado_datos, clave_huella_datos y clave_cifrado_archivos deben ser "
+                "distintas"
+            )
         if self.entorno == "produccion" and not self.cookie_segura:
             raise ValueError("En producción la cookie de sesión debe ser segura (HTTPS)")
         return self
@@ -78,6 +109,10 @@ class Settings(BaseSettings):
     @property
     def clave_huella(self) -> bytes:
         return base64.b64decode(self.clave_huella_datos.get_secret_value())
+
+    @property
+    def clave_archivos(self) -> bytes:
+        return base64.b64decode(self.clave_cifrado_archivos.get_secret_value())
 
 
 # Las claves llegan del entorno o del .env; mypy no puede saberlo.

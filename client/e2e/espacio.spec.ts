@@ -41,7 +41,9 @@ test('gerencia recorre sus pestañas y las secciones anuncian que llegan pronto'
   await expect(page.getByText('Estaremos disponibles pronto, con todo y mejoras.')).toBeVisible()
 
   await page.getByRole('link', { name: 'Registrar deuda' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Registrar deuda' })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Del documento a tu agenda.' }),
+  ).toBeVisible()
 
   // La tarjeta de la cuenta lleva a las secciones de la cuenta y se cierra al navegar.
   await page.getByRole('button', { name: /Tu cuenta/ }).click()

@@ -1,7 +1,7 @@
 """Rutas de las categorías del espacio.
 
-Consultar: gerente y asistentes con la incorporación completa; las asistentes solo ven las activas.
-Crear, editar, archivar y reactivar: solo el gerente (403 SIN_PERMISO). Una categoría de otro
+Consultar y crear: gerente y asistentes con la incorporación completa; las asistentes solo ven las
+activas. Editar, archivar y reactivar: solo el gerente (403 SIN_PERMISO). Una categoría de otro
 espacio responde 404 CATEGORIA_NO_ENCONTRADA.
 
 Errores propios: 409 CATEGORIA_DUPLICADA (con existing_category si la otra está archivada),
@@ -35,7 +35,7 @@ def listar(
 
 @router.post("", status_code=status.HTTP_201_CREATED, responses=ERRORES)
 def crear(
-    entrada: CategoriaEntrada, sesion: GerenteDep, contenedor: ContenedorDep
+    entrada: CategoriaEntrada, sesion: SesionHabilitadaDep, contenedor: ContenedorDep
 ) -> CategoriaSalida:
     return CategoriaSalida.desde(contenedor.crear_categoria.ejecutar(sesion, entrada.nueva()))
 

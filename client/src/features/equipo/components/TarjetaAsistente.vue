@@ -7,8 +7,22 @@ import BaseIcono from '@/shared/components/BaseIcono.vue'
 import { formatearCelular } from '../credenciales'
 import type { Asistente } from '../types'
 
-const props = defineProps<{ asistente: Asistente; ocupada: boolean }>()
-const emit = defineEmits<{ bloquear: []; desbloquear: []; eliminar: []; restablecer: [] }>()
+const props = withDefaults(
+  defineProps<{
+    asistente: Asistente
+    ocupada: boolean
+    /** Desde cuándo no puede registrar deudas por documentos repetidos; null si puede. */
+    registroBloqueado?: string | null
+  }>(),
+  { registroBloqueado: null },
+)
+const emit = defineEmits<{
+  bloquear: []
+  desbloquear: []
+  eliminar: []
+  restablecer: []
+  'permitir-registro': []
+}>()
 
 const nombre = computed(() => `${props.asistente.nombres} ${props.asistente.apellidos}`)
 const inicial = computed(() => props.asistente.nombres.trim().slice(0, 1).toUpperCase())
@@ -103,6 +117,28 @@ const ultimoIngreso = computed(() =>
     </dl>
 
     <p v-if="detalleBloqueo" class="mt-3 text-[12px] text-error">{{ detalleBloqueo }}</p>
+    <div
+      v-if="registroBloqueado"
+      class="mt-3 flex flex-col gap-3 rounded-lg bg-aviso-fondo p-3.5 text-[12px] text-aviso sm:flex-row sm:items-center"
+    >
+      <BaseIcono nombre="alerta" class="size-[18px] shrink-0" />
+      <p class="flex-1 leading-snug">
+        <strong class="block"
+          >No puede registrar deudas desde el
+          {{ fecha.format(new Date(registroBloqueado)) }}</strong
+        >
+        Intentó 3 veces usar documentos que ya respaldan otras deudas. Puede seguir trabajando en lo
+        demás.
+      </p>
+      <BaseBoton
+        variante="secundario"
+        class="shrink-0"
+        :cargando="ocupada"
+        @click="emit('permitir-registro')"
+      >
+        Permitir registrar
+      </BaseBoton>
+    </div>
 
     <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
       <BaseBoton variante="discreto" :deshabilitado="ocupada" @click="emit('restablecer')">
