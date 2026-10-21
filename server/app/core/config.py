@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     ventana_cambio_contrasena_segundos: int = Field(default=900, ge=1)
     limite_desbloqueo: int = Field(default=20, ge=1)
     ventana_desbloqueo_segundos: int = Field(default=3600, ge=1)
+    # Actualizaciones de «Mi cuenta» (datos y usuario), que pueden pedir la contraseña actual.
+    limite_actualizacion_cuenta: int = Field(default=10, ge=1)
+    ventana_actualizacion_cuenta_segundos: int = Field(default=900, ge=1)
 
     @field_validator("clave_cifrado_datos", "clave_huella_datos")
     @classmethod

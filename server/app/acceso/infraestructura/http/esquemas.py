@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
 from app.acceso.aplicacion.autenticar import SesionActiva
+from app.acceso.aplicacion.cuenta import CuentaPropia
+from app.acceso.dominio.datos_personales import TipoDocumento
 from app.acceso.dominio.incorporacion import DocumentoVigente, PasoPendiente, TipoDocumentoLegal
 from app.acceso.dominio.modelos import Rol, Usuario
 
@@ -141,6 +143,91 @@ class DesbloqueoSalida(BaseModel):
     id: UUID
     nombre_usuario: str
     bloqueada: bool
+
+
+class DatosPersonalesEntrada(BaseModel):
+    """Los datos completos tal como quedarán. Las reglas (formato, qué cambia y qué no) las aplica
+    el dominio; aquí solo se acotan los tamaños."""
+
+    nombres: str = Field("", max_length=200)
+    apellidos: str = Field("", max_length=200)
+    correo: str = Field("", max_length=254)
+    telefono: str | None = Field(None, max_length=30)
+    tipo_documento: str = Field("", max_length=10)
+    numero_documento: str = Field("", max_length=30)
+    nombre_recibos: str | None = Field(None, max_length=200)
+    # Solo se exige si cambia el correo o el documento.
+    contrasena_actual: str | None = Field(None, max_length=128)
+    # Pasar de DNI a carné de extranjería exige esta confirmación expresa.
+    confirmar_cambio_documento: bool = False
+
+
+class NombreUsuarioEntrada(BaseModel):
+    nombre_usuario: str = Field("", max_length=64, validate_default=True)
+    contrasena_actual: str = Field("", max_length=128, validate_default=True)
+
+    @field_validator("nombre_usuario")
+    @classmethod
+    def validar_nombre_usuario(cls, valor: str) -> str:
+        return exigir(valor, "Escribe tu nuevo usuario.")
+
+    @field_validator("contrasena_actual")
+    @classmethod
+    def validar_contrasena(cls, valor: str) -> str:
+        return exigir(valor, "Confirma el cambio con tu contraseña actual.")
+
+
+class CambiosNombreUsuarioSalida(BaseModel):
+    maximo: int
+    usados: int
+    restantes: int
+    # Inicio del mes siguiente en la hora del negocio: desde entonces vuelve a haber cupo.
+    renueva_en: datetime
+
+
+class CuentaSalida(BaseModel):
+    """Datos de la propia cuenta, descifrados solo para ella."""
+
+    id: UUID
+    rol: Rol
+    nombre_usuario: str
+    nombres: str
+    apellidos: str
+    correo: str
+    telefono: str | None
+    tipo_documento: TipoDocumento
+    numero_documento: str
+    # Solo el gerente; en una asistente siempre es nulo.
+    nombre_recibos: str | None
+    cargo: str | None
+    debe_cambiar_contrasena: bool
+    contrasena_actualizada_en: datetime
+    cambios_nombre_usuario: CambiosNombreUsuarioSalida
+
+    @classmethod
+    def desde(cls, cuenta: CuentaPropia) -> "CuentaSalida":
+        usuario, datos, cupo = cuenta.usuario, cuenta.ficha.datos, cuenta.cambios_nombre_usuario
+        return cls(
+            id=usuario.id,
+            rol=usuario.rol,
+            nombre_usuario=usuario.nombre_usuario,
+            nombres=datos.nombres,
+            apellidos=datos.apellidos,
+            correo=datos.correo,
+            telefono=datos.telefono,
+            tipo_documento=datos.tipo_documento,
+            numero_documento=datos.numero_documento,
+            nombre_recibos=datos.nombre_recibos,
+            cargo=cuenta.ficha.cargo,
+            debe_cambiar_contrasena=usuario.debe_cambiar_contrasena,
+            contrasena_actualizada_en=usuario.contrasena_actualizada_en,
+            cambios_nombre_usuario=CambiosNombreUsuarioSalida(
+                maximo=cupo.maximo,
+                usados=cupo.usados,
+                restantes=cupo.restantes,
+                renueva_en=cupo.renueva_en,
+            ),
+        )
 
 
 class ErrorSalida(BaseModel):
