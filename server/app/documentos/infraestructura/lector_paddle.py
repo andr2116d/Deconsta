@@ -75,6 +75,9 @@ class LectorPaddle:
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
                 use_textline_orientation=False,
+                # Con oneDNN, Paddle 3 falla en procesadores x86 (servidores Intel o AMD) al
+                # ejecutar estos modelos: ConvertPirAttribute2RuntimeAttribute not support.
+                enable_mkldnn=False,
             )
         return self._ocr
 
