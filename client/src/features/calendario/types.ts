@@ -12,7 +12,7 @@ export interface Vencimiento {
   concepto: string
   categoria_id: string | null
   tipo_documento: TipoDocumento
-  lugar_pago: LugarPago
+  lugares_pago: LugarPago[]
   estado: EstadoDeuda
   revision_pendiente: boolean
   vence_el: Dia

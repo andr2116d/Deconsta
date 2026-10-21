@@ -70,13 +70,15 @@ describe('FormularioDeuda', () => {
     expect((campo(formulario, 'Concepto').element as HTMLInputElement).value).toBe(
       'Luz Hidrandina setiembre 2026',
     )
+    // El lugar que propuso el análisis queda marcado; se pueden sumar otros.
+    await formulario.get('input[value="billetera"]').setValue(true)
     await formulario.get('form').trigger('submit')
     await flushPromises()
 
     const cuerpo = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))
     expect(cuerpo).toMatchObject({
       documento_id: 'd1',
-      lugar_pago: 'agente',
+      lugares_pago: ['agente', 'billetera'],
       cuotas: [{ vence_el: '2026-10-28', importe: '182.40' }],
       codigo_pago: '54871236',
       categoria_id: null,
@@ -90,7 +92,7 @@ describe('FormularioDeuda', () => {
         code: 'DATOS_INVALIDOS',
         detail: 'Revisa los datos marcados.',
         fields: {
-          lugar_pago: 'Elige dónde se pagará esta deuda.',
+          lugares_pago: 'Elige dónde se puede pagar esta deuda: uno o varios lugares.',
           'cuotas.0.importe': 'Escribe el importe en soles.',
           'cuotas.0.vence_el': 'Indica la fecha de vencimiento.',
         },
@@ -101,7 +103,7 @@ describe('FormularioDeuda', () => {
     await formulario.get('form').trigger('submit')
     await flushPromises()
 
-    expect(formulario.text()).toContain('Elige dónde se pagará esta deuda.')
+    expect(formulario.text()).toContain('Elige dónde se puede pagar esta deuda')
     expect(formulario.text()).toContain('Escribe el importe en soles.')
     expect(formulario.text()).toContain('Indica la fecha de vencimiento.')
     expect(formulario.get('#vence-el').attributes('aria-invalid')).toBe('true')

@@ -48,7 +48,7 @@ const iniciales = cuotasPropuestas(propuesta)
 const datos = reactive({
   concepto: propuesta?.concepto ?? '',
   categoria_id: '',
-  lugar_pago: (propuesta?.lugar_pago ?? null) as LugarPago | null,
+  lugares_pago: (propuesta?.lugar_pago ? [propuesta.lugar_pago] : []) as LugarPago[],
   en_cuotas: propuesta?.tipo === 'cronograma' || iniciales.length > 1,
   importe: iniciales[0]?.importe ?? '',
   vence_el: iniciales[0]?.vence_el ?? '',
@@ -171,7 +171,7 @@ async function enviar() {
       documento_id: props.documento.id,
       concepto: datos.concepto,
       categoria_id: datos.categoria_id || null,
-      lugar_pago: datos.lugar_pago,
+      lugares_pago: datos.lugares_pago,
       cuotas,
       titular_nombre: datos.titular_nombre || null,
       titular_tipo_documento: datos.titular_tipo,
@@ -343,31 +343,34 @@ async function enviar() {
       </Transition>
 
       <fieldset>
-        <legend :id="idLugar" class="mb-2 text-[12px] font-bold">¿Dónde se pagará?</legend>
-        <div class="grid gap-2 sm:grid-cols-2" :data-error="errores.lugar_pago ? '' : undefined">
+        <legend :id="idLugar" class="text-[12px] font-bold">¿Dónde se puede pagar?</legend>
+        <p class="mt-0.5 mb-2 text-[12px] text-secundario">
+          Marca todos los que acepta la empresa: el voucher del pago deberá ser de uno de ellos.
+        </p>
+        <div class="grid gap-2 sm:grid-cols-2" :data-error="errores.lugares_pago ? '' : undefined">
           <label
             v-for="lugar in LUGARES_PAGO"
             :key="lugar.valor"
             class="flex cursor-pointer items-center gap-3 rounded-[10px] border p-3 transition-colors duration-200 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-acento"
             :class="
-              datos.lugar_pago === lugar.valor
+              datos.lugares_pago.includes(lugar.valor)
                 ? 'border-acento bg-acento-suave'
-                : errores.lugar_pago
+                : errores.lugares_pago
                   ? 'border-error bg-white'
                   : 'border-borde bg-white hover:border-control'
             "
           >
             <input
-              v-model="datos.lugar_pago"
-              type="radio"
-              name="lugar_pago"
+              v-model="datos.lugares_pago"
+              type="checkbox"
+              name="lugares_pago"
               :value="lugar.valor"
               class="sr-only"
             />
             <span
               aria-hidden="true"
               class="grid size-9 shrink-0 place-items-center rounded-lg text-acento"
-              :class="datos.lugar_pago === lugar.valor ? 'bg-white' : 'bg-fondo'"
+              :class="datos.lugares_pago.includes(lugar.valor) ? 'bg-white' : 'bg-fondo'"
             >
               <BaseIcono :nombre="lugar.icono" class="size-[18px]" />
             </span>
@@ -376,14 +379,14 @@ async function enviar() {
               <small class="block text-[11px] text-secundario">{{ lugar.detalle }}</small>
             </span>
             <BaseIcono
-              v-if="datos.lugar_pago === lugar.valor"
+              v-if="datos.lugares_pago.includes(lugar.valor)"
               nombre="check"
               class="size-4 animate-aparecer text-acento"
             />
           </label>
         </div>
-        <p v-if="errores.lugar_pago" class="mt-1.5 text-[12px] text-error">
-          {{ errores.lugar_pago }}
+        <p v-if="errores.lugares_pago" class="mt-1.5 text-[12px] text-error">
+          {{ errores.lugares_pago }}
         </p>
       </fieldset>
     </section>

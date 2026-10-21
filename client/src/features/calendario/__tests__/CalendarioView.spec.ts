@@ -12,7 +12,7 @@ const VENCIMIENTO = {
   concepto: 'Luz de la casa',
   categoria_id: null,
   tipo_documento: 'recibo_servicio',
-  lugar_pago: 'agente',
+  lugares_pago: ['agente'],
   estado: 'registrada',
   revision_pendiente: false,
   vence_el: '2026-10-22',

@@ -47,6 +47,12 @@ export const LUGARES_PAGO: readonly {
   },
 ]
 
+/** «Agente o agencia, Billetera digital», en el orden de la lista. */
+export const nombresLugares = (lugares: readonly LugarPago[]) =>
+  LUGARES_PAGO.filter((l) => lugares.includes(l.valor))
+    .map((l) => l.etiqueta)
+    .join(', ')
+
 export const TIPOS_DOCUMENTO: Record<TipoDocumento, string> = {
   recibo_servicio: 'Recibo de servicio',
   boleta: 'Boleta',
