@@ -5,13 +5,14 @@ la incorporación completa. Un comprobante lo ven quien lo subió y el gerente; 
 responde 404 COMPROBANTE_NO_ENCONTRADO. La confianza de un pago solo la ve el gerente. Confirmar o
 devolver un pago y ver o levantar bloqueos: solo el gerente (403 SIN_PERMISO).
 
-`POST /pagos/comprobantes` recibe el archivo (multipart: `archivo` hasta 10 MB, `deuda_id` y
-`cuota`) y responde 202 con el comprobante «analizando»: el análisis corre en el worker y se
-consulta con `GET /pagos/comprobantes/{id}`.
+`POST /pagos/comprobantes` recibe el archivo (multipart: `archivo` hasta 10 MB, `deuda_id`,
+`cuota` y, para la prueba de una mora, `proposito=mora`) y responde 202 con el comprobante
+«analizando»: el análisis corre en el worker y se consulta con `GET /pagos/comprobantes/{id}`.
 
 Errores propios: 403 REGISTRO_PAGOS_BLOQUEADO (con `blocked_since`); 404 DEUDA_NO_ENCONTRADA,
 PAGO_NO_ENCONTRADO, COMPROBANTE_NO_ENCONTRADO, BLOQUEO_NO_ENCONTRADO y CUENTA_NO_ENCONTRADA; 409
-DEUDA_POR_AUTORIZAR, DEUDA_NO_SE_PAGA, CUOTA_YA_PAGADA, COMPROBANTE_EN_ANALISIS,
+DEUDA_POR_AUTORIZAR, DEUDA_NO_SE_PAGA, CUOTA_YA_PAGADA, MORA_POR_APROBAR, CUOTA_NO_VENCIDA,
+MORA_YA_DECLARADA, COMPROBANTE_DE_MORA, COMPROBANTE_EN_ANALISIS,
 COMPROBANTE_ILEGIBLE, COMPROBANTE_RECHAZADO, COMPROBANTE_REPETIDO, COMPROBANTE_FALLIDO,
 COMPROBANTE_YA_USADO, COMPROBANTE_DE_OTRA_CUOTA y ESTADO_NO_PERMITE; 413 ARCHIVO_DEMASIADO_GRANDE;
 422 CAMPOS_OBLIGATORIOS, DATOS_INVALIDOS, ARCHIVO_INVALIDO, COMPROBANTES_NO_COMBINAN e
@@ -36,6 +37,7 @@ from app.documentos.dominio.errores import ArchivoDemasiadoGrande, ArchivoFaltan
 from app.documentos.dominio.modelos import TAMANO_MAXIMO
 from app.documentos.infraestructura.http.rutas import CSP_ARCHIVO
 from app.pagos.aplicacion.pagos import ComprobanteConsultado
+from app.pagos.dominio.modelos import Proposito
 from app.pagos.infraestructura.http.esquemas import (
     BloqueoPagosSalida,
     ComprobanteSalida,
@@ -66,7 +68,9 @@ async def subir_comprobante(
     archivo: Annotated[UploadFile | None, File()] = None,
     deuda_id: Annotated[UUID | None, Form()] = None,
     cuota: Annotated[int | None, Form(ge=1, le=360)] = None,
+    proposito: Annotated[Proposito, Form()] = Proposito.PAGO,
 ) -> ComprobanteSalida:
+    """El voucher de un pago o, con `proposito=mora`, la prueba de la mora de la cuota."""
     if archivo is None:
         raise ArchivoFaltante()
     contenido = await archivo.read(TAMANO_MAXIMO + 1)
@@ -79,6 +83,7 @@ async def subir_comprobante(
         cuota,
         contenido,
         archivo.filename,
+        proposito,
     )
     return ComprobanteSalida.desde(ComprobanteConsultado(comprobante, registro_bloqueado=False))
 

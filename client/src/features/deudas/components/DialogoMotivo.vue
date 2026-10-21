@@ -8,7 +8,7 @@ import BaseIcono from '@/shared/components/BaseIcono.vue'
 /** Rechazar o anular una deuda, o devolver un pago, siempre deja un motivo: la asistente lo ve. */
 const props = defineProps<{
   abierto: boolean
-  accion: 'rechazar' | 'anular' | 'devolver'
+  accion: 'rechazar' | 'anular' | 'devolver' | 'rechazar-mora'
   concepto: string
   enviando: boolean
   error?: string
@@ -33,6 +33,12 @@ const TEXTOS = {
     detalle: 'volverá a estar por pagar. Tu asistente verá el motivo y subirá otro comprobante.',
     ejemplo: 'Por ejemplo: el voucher es de otro mes, el importe no llegó a la cuenta.',
     boton: 'Devolver pago',
+  },
+  'rechazar-mora': {
+    titulo: 'Rechaza la mora con contexto.',
+    detalle: 'se pagará sin la mora. Tu asistente verá el motivo.',
+    ejemplo: 'Por ejemplo: la empresa no cobra mora por esos días; paga solo la cuota.',
+    boton: 'Rechazar mora',
   },
 }
 

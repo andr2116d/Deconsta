@@ -4,6 +4,7 @@ export type TipoNotificacion =
   | 'REGISTRO_BLOQUEADO'
   | 'PAGO_POR_VERIFICAR'
   | 'REGISTRO_PAGOS_BLOQUEADO'
+  | 'MORA_POR_APROBAR'
   | 'DEUDA_AUTORIZADA'
   | 'DEUDA_RECHAZADA'
   | 'DEUDA_ANULADA'
@@ -11,6 +12,8 @@ export type TipoNotificacion =
   | 'REGISTRO_PAGOS_DESBLOQUEADO'
   | 'PAGO_CONFIRMADO'
   | 'PAGO_DEVUELTO'
+  | 'MORA_APROBADA'
+  | 'MORA_RECHAZADA'
 
 export interface Notificacion {
   id: string

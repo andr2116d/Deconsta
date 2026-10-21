@@ -38,6 +38,9 @@ const ICONOS: Record<Notificacion['tipo'], NombreIcono> = {
   REGISTRO_PAGOS_DESBLOQUEADO: 'check',
   PAGO_CONFIRMADO: 'check',
   PAGO_DEVUELTO: 'cerrar',
+  MORA_POR_APROBAR: 'alerta',
+  MORA_APROBADA: 'check',
+  MORA_RECHAZADA: 'cerrar',
 }
 
 /** El siguiente paso de cada aviso, según el rol. */
@@ -45,6 +48,9 @@ function destino(n: Notificacion): { etiqueta: string; ruta: RouteLocationRaw } 
   const gerente = sesion.usuario?.rol === 'gerente'
   if (gerente && n.tipo === 'PAGO_POR_VERIFICAR') {
     return { etiqueta: 'Verificar el pago', ruta: { name: 'por-verificar' } }
+  }
+  if (gerente && n.tipo === 'MORA_POR_APROBAR') {
+    return { etiqueta: 'Revisar la mora', ruta: { name: 'por-verificar' } }
   }
   if (gerente && n.deuda_id) {
     return {
@@ -57,6 +63,12 @@ function destino(n: Notificacion): { etiqueta: string; ruta: RouteLocationRaw } 
   }
   if (n.tipo === 'REGISTRO_DESBLOQUEADO') {
     return { etiqueta: 'Registrar una deuda', ruta: { name: 'registrar-deuda' } }
+  }
+  if ((n.tipo === 'MORA_APROBADA' || n.tipo === 'MORA_RECHAZADA') && n.deuda_id) {
+    return {
+      etiqueta: 'Registrar el pago',
+      ruta: { name: 'registrar-pago', query: { deuda: n.deuda_id } },
+    }
   }
   if (n.tipo === 'PAGO_DEVUELTO' && n.deuda_id) {
     return {

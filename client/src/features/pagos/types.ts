@@ -2,6 +2,11 @@ import type { EstadoPago, LugarPago, Riesgo, Senal, TipoDocumento } from '@/feat
 
 export type { EstadoPago }
 
+/** Para qué se subió el archivo: el voucher de un pago o la prueba de una mora. */
+export type Proposito = 'pago' | 'mora'
+
+export type EstadoMora = 'por_aprobar' | 'aprobada' | 'rechazada'
+
 export type EstadoComprobante =
   'analizando' | 'listo' | 'ilegible' | 'rechazado' | 'repetido' | 'fallido'
 
@@ -15,6 +20,8 @@ export interface Lectura {
   /** En soles, como texto: lo pagado por el servicio. */
   importe: string | null
   comision: string | null
+  /** En la prueba de una mora: la mora, si figura aparte. */
+  mora: string | null
 }
 
 export interface Comprobante {
@@ -31,6 +38,7 @@ export interface Comprobante {
   senales: Senal[]
   lectura: Lectura | null
   pago_id: string | null
+  proposito: Proposito
   /** Quien lo subió tiene el registro de pagos en pausa. */
   registro_bloqueado: boolean
 }
@@ -51,6 +59,48 @@ export interface CuotaPorPagar {
   registrada_por: string
   /** Por qué el gerente devolvió el último pago de esta cuota, si lo devolvió. */
   devuelto_por: string | null
+  /** La mora vigente de la cuota o, si no hay, la última rechazada. */
+  mora: MoraResumen | null
+}
+
+export interface MoraResumen {
+  id: string
+  estado: EstadoMora
+  /** En soles: la mora, sin la cuota. */
+  importe: string
+  motivo_decision: string | null
+}
+
+export interface Mora {
+  id: string
+  deuda_id: string
+  concepto: string
+  cuota: number
+  importe: string
+  importe_cuota: string
+  nota: string | null
+  estado: EstadoMora
+  /** Solo para el gerente, como en los pagos. */
+  confianza: number | null
+  comprobaciones: Comprobacion[] | null
+  prueba_id: string
+  declarada_por: string
+  declarada_en: string
+  decidida_en: string | null
+  motivo_decision: string | null
+}
+
+export interface MoraDetalle extends Mora {
+  prueba: Comprobante | null
+}
+
+export interface NuevaMora {
+  deuda_id: string
+  cuota: number
+  /** En soles, como texto («14.40»). */
+  importe: string
+  prueba_id: string
+  nota: string | null
 }
 
 export interface PorPagar {
@@ -76,6 +126,8 @@ export interface Pago {
   cuota: number
   importe: string
   comision: string
+  /** Lo pagado por una mora aprobada, dentro del importe. */
+  mora: string
   lugar_pago: LugarPago | null
   pagado_el: string
   estado: EstadoPago

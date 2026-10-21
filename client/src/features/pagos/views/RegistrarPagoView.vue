@@ -15,8 +15,14 @@ import BaseIcono from '@/shared/components/BaseIcono.vue'
 import { listarPorPagar, registrarPago } from '../api/pagos'
 import ComprobanteCargado from '../components/ComprobanteCargado.vue'
 import ConfirmacionPago from '../components/ConfirmacionPago.vue'
-import { aCentimos, MAXIMO_VOUCHERS, useComprobantes } from '../composables/useComprobantes'
-import type { CuotaPorPagar, Pago } from '../types'
+import DeclararMora from '../components/DeclararMora.vue'
+import {
+  aCentimos,
+  MAXIMO_VOUCHERS,
+  useComprobantes,
+  type Voucher,
+} from '../composables/useComprobantes'
+import type { CuotaPorPagar, Mora, Pago } from '../types'
 
 /**
  * Registrar el pago de una cuota: se suben los vouchers (varios si un agente la cobró por partes),
@@ -53,8 +59,21 @@ const {
 )
 
 const bloqueado = computed(() => pausado.value || bloqueadoAhora.value)
+// Declarando la mora: con el voucher que ya la pagó, si viene de uno.
+const declarando = ref<{ archivo: File | null; mora: string | null } | null>(null)
+const avisoMora = ref<string | null>(null)
+const moraEspera = computed(() => cuota.value?.mora?.estado === 'por_aprobar')
+const moraAprobada = computed(() =>
+  cuota.value?.mora?.estado === 'aprobada' ? aCentimos(cuota.value.mora.importe) : 0,
+)
 const cuotaCentimos = computed(() => aCentimos(cuota.value?.importe))
-const faltaCentimos = computed(() => cuotaCentimos.value - sumaCentimos.value)
+// Con la mora aprobada vale la cuota con ella o, si la empresa no la cobró, solo la cuota.
+const objetivoCentimos = computed(() =>
+  moraAprobada.value && sumaCentimos.value > cuotaCentimos.value
+    ? cuotaCentimos.value + moraAprobada.value
+    : cuotaCentimos.value,
+)
+const faltaCentimos = computed(() => objetivoCentimos.value - sumaCentimos.value)
 const soles = (centimos: number) => formatearSoles(centimos / 100)
 const porPartes = computed(
   () =>
@@ -63,8 +82,13 @@ const porPartes = computed(
 )
 const puedeRegistrar = computed(
   () =>
-    listos.value.length > 0 && !trabajando.value && faltaCentimos.value === 0 && !bloqueado.value,
+    listos.value.length > 0 &&
+    !trabajando.value &&
+    faltaCentimos.value === 0 &&
+    !bloqueado.value &&
+    !moraEspera.value,
 )
+const sinSubir = computed(() => bloqueado.value || moraEspera.value || declarando.value !== null)
 const lleno = computed(() => vouchers.length >= MAXIMO_VOUCHERS)
 
 function sesionTerminada() {
@@ -92,6 +116,24 @@ async function cargar() {
   }
 }
 
+function declararDesde(voucher: Voucher) {
+  const pagado = aCentimos(voucher.comprobante?.lectura?.importe)
+  const exceso = pagado - cuotaCentimos.value
+  declarando.value = {
+    archivo: voucher.archivo,
+    mora: exceso > 0 ? (exceso / 100).toFixed(2) : null,
+  }
+}
+
+async function alDeclarar(mora: Mora) {
+  declarando.value = null
+  avisoMora.value =
+    mora.estado === 'aprobada'
+      ? 'Registraste la mora. Ya puedes pagar la cuota con ella.'
+      : 'Le enviamos la mora a tu gerente. Te avisaremos cuando la apruebe o la rechace.'
+  await cargar()
+}
+
 function tomar(lista: FileList | null | undefined) {
   for (const archivo of Array.from(lista ?? [])) {
     if (vouchers.length >= MAXIMO_VOUCHERS) break
@@ -107,7 +149,7 @@ function alElegir(evento: Event) {
 
 function alSoltar(evento: DragEvent) {
   encima.value = false
-  if (!bloqueado.value) tomar(evento.dataTransfer?.files)
+  if (!sinSubir.value) tomar(evento.dataTransfer?.files)
 }
 
 async function registrar() {
@@ -225,23 +267,62 @@ onMounted(cargar)
           Varios comprobantes no correspondían a sus cuotas. Tu gerente ya recibió un aviso y puede
           permitirte registrar pagos otra vez.
         </BaseAviso>
-        <BaseAviso
-          v-else-if="cuota.vencida_hace"
-          tono="aviso"
-          titulo="Ya venció: la empresa pudo cobrar mora"
-        >
-          Si el voucher paga más que la cuota por la mora, por ahora no se registra aquí: avísale a
-          tu gerente. Si pagaste solo la cuota, súbelo con normalidad.
-        </BaseAviso>
+        <BaseAviso v-if="avisoMora" tono="exito">{{ avisoMora }}</BaseAviso>
+        <template v-if="!bloqueado">
+          <BaseAviso v-if="moraEspera" tono="info" titulo="La mora espera a tu gerente">
+            Declaraste una mora de {{ formatearSoles(cuota.mora!.importe) }}. Cuando tu gerente la
+            apruebe o la rechace, podrás registrar el pago.
+          </BaseAviso>
+          <BaseAviso v-else-if="moraAprobada" tono="exito" titulo="Mora aprobada">
+            Paga {{ soles(cuotaCentimos + moraAprobada) }}, con la mora de
+            {{ formatearSoles(cuota.mora!.importe) }}, o solo la cuota si al final la empresa no la
+            cobró.
+          </BaseAviso>
+          <template v-else-if="cuota.vencida_hace">
+            <BaseAviso
+              v-if="cuota.mora?.estado === 'rechazada'"
+              tono="aviso"
+              titulo="Tu gerente rechazó la mora"
+            >
+              {{ cuota.mora.motivo_decision }} La cuota se paga sin la mora.
+            </BaseAviso>
+            <DeclararMora
+              v-if="declarando"
+              :cuota="cuota"
+              :archivo-inicial="declarando.archivo"
+              :mora-inicial="declarando.mora"
+              @declarada="alDeclarar"
+              @cancelar="declarando = null"
+              @sesion-terminada="sesionTerminada"
+            />
+            <div
+              v-else
+              class="flex flex-col gap-3 rounded-[14px] bg-aviso-fondo p-4 text-[13px] text-aviso sm:flex-row sm:items-center"
+            >
+              <p class="flex-1">
+                <strong class="block">Ya venció: ¿la empresa te cobra mora?</strong>
+                Decláralo con una prueba antes o después de pagar. Si pagaste solo la cuota, sube el
+                voucher con normalidad.
+              </p>
+              <BaseBoton
+                variante="secundario"
+                class="shrink-0"
+                @click="declarando = { archivo: null, mora: null }"
+              >
+                Declarar la mora
+              </BaseBoton>
+            </div>
+          </template>
+        </template>
 
         <div
           class="flex flex-col items-center rounded-[14px] border border-dashed p-6 text-center transition-colors duration-200"
           :class="[
             encima ? 'border-acento bg-acento-suave' : 'border-[#ad96a6] bg-[#f5f0f4]',
-            bloqueado || lleno ? 'opacity-60' : '',
+            sinSubir || lleno ? 'opacity-60' : '',
           ]"
-          @dragenter.prevent="encima = !bloqueado"
-          @dragover.prevent="encima = !bloqueado"
+          @dragenter.prevent="encima = !sinSubir"
+          @dragover.prevent="encima = !sinSubir"
           @dragleave.prevent="encima = false"
           @drop.prevent="alSoltar"
         >
@@ -270,7 +351,7 @@ onMounted(cargar)
           </p>
           <BaseBoton
             :aria-describedby="idAyuda"
-            :deshabilitado="bloqueado || lleno"
+            :deshabilitado="sinSubir || lleno"
             @click="entrada?.click()"
           >
             Elegir {{ vouchers.length ? 'otro voucher' : 'voucher' }}
@@ -291,6 +372,7 @@ onMounted(cargar)
             :numero="indice + 1"
             :bloqueado="enviando"
             @quitar="quitar(voucher.clave)"
+            @declarar-mora="declararDesde(voucher)"
           />
         </TransitionGroup>
       </div>
@@ -302,6 +384,10 @@ onMounted(cargar)
             <div class="flex justify-between">
               <dt class="text-secundario">Cuota</dt>
               <dd class="font-bold">{{ formatearSoles(cuota.importe) }}</dd>
+            </div>
+            <div v-if="moraAprobada" class="flex justify-between">
+              <dt class="text-secundario">Mora aprobada</dt>
+              <dd class="font-bold">+ {{ soles(moraAprobada) }}</dd>
             </div>
             <div class="flex justify-between">
               <dt class="text-secundario">

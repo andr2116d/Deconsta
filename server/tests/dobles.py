@@ -32,6 +32,12 @@ Periodo: SETIEMBRE 2026
 Fecha de vencimiento: 28/10/2026
 TOTAL A PAGAR S/ 182.40"""
 
+TEXTO_PRUEBA_MORA = """HIDRANDINA S.A.
+Suministro: 54871236
+Deuda vencida: S/ 182.40
+Interes moratorio: S/ 14.40
+TOTAL A PAGAR S/ 196.80"""
+
 TEXTO_VOUCHER = """AGENTE BCP - PAGO DE SERVICIOS
 HIDRANDINA S.A.
 Suministro: 54871236
@@ -92,6 +98,28 @@ class RevisorDePrueba:
     comprobante: DatosComprobante = VOUCHER
     veredicto_comprobante: str = "autentico"
     comprobantes_revisados: int = 0
+
+    # Lo que lee de la prueba de una mora: el recibo con la mora de S/ 14.40.
+    prueba_mora: DatosComprobante = field(
+        default_factory=lambda: DatosComprobante(
+            empresa="HIDRANDINA S.A.",
+            codigo_pago="54871236",
+            moneda=Moneda.SOLES,
+            importe=Decimal("196.80"),
+            total=Decimal("196.80"),
+            mora=Decimal("14.40"),
+        )
+    )
+
+    def revisar_prueba_mora(
+        self, contenido: bytes, tipo: TipoArchivo, lectura: Lectura
+    ) -> RevisionComprobante:
+        self.comprobantes_revisados += 1
+        if self.falla:
+            raise ErrorRevision("Sin conexión")
+        return RevisionComprobante(
+            self.legible, self.prueba_mora, self.veredicto_comprobante, self.motivos
+        )
 
     def revisar_comprobante(
         self, contenido: bytes, tipo: TipoArchivo, lectura: Lectura

@@ -69,6 +69,8 @@ class CuotaEsperada:
     # El día en que se registró la deuda, en la zona del espacio.
     registrada_el: date
     vencida: bool
+    # La mora aprobada de la cuota: el pago puede incluirla.
+    mora: Decimal | None = None
 
 
 def _senal(capa: Capa, codigo: str, detalle: str, riesgo: Riesgo) -> Senal:
@@ -119,17 +121,23 @@ def mismo_codigo(leido: str, esperado: str) -> bool:
 
 
 def _importe(senales: list[Senal], datos: DatosComprobante, esperada: CuotaEsperada) -> None:
+    """Vale la cuota y, con una mora aprobada, también la cuota con la mora: la empresa pudo no
+    cobrarla al final."""
     importe = datos.importe
     assert importe is not None
-    pagado, cuota = formatear_soles(importe), formatear_soles(esperada.importe)
-    if importe < esperada.importe:
+    objetivo = esperada.importe + (esperada.mora or Decimal("0"))
+    if importe in (esperada.importe, objetivo):
+        return
+    pagado, total = formatear_soles(importe), formatear_soles(objetivo)
+    con_mora = " con la mora aprobada" if esperada.mora else ""
+    if importe < objetivo:
         if datos.lugar is LugarPago.AGENTE:
             senales.append(
                 _senal(
                     Capa.IA,
                     "PAGO_PARCIAL",
-                    f"Este voucher paga {pagado} de {cuota}. Si el agente te lo cobró por partes, "
-                    "sube los otros vouchers del mismo día: juntos deben sumar la cuota.",
+                    f"Este voucher paga {pagado} de {total}{con_mora}. Si el agente te lo cobró "
+                    "por partes, sube los otros vouchers del mismo día: juntos deben sumarlo.",
                     Riesgo.BAJO,
                 )
             )
@@ -138,34 +146,34 @@ def _importe(senales: list[Senal], datos: DatosComprobante, esperada: CuotaEsper
             _senal(
                 Capa.IA,
                 "MONTO_MENOR",
-                f"El voucher paga {pagado} y la cuota es {cuota}. Sube el comprobante del pago "
-                "completo de esta cuota.",
+                f"El voucher paga {pagado} y la cuota es {total}{con_mora}. Sube el comprobante "
+                "del pago completo de esta cuota.",
                 Riesgo.ALTO,
             )
         )
-    elif importe > esperada.importe:
-        diferencia = formatear_soles(importe - esperada.importe)
-        if esperada.vencida:
-            senales.append(
-                _senal(
-                    Capa.IA,
-                    "POSIBLE_MORA",
-                    f"El voucher paga {pagado}, {diferencia} más que la cuota. Como la deuda está "
-                    "vencida, puede ser mora. Por ahora no se registra un pago con mora: avísale "
-                    "a tu gerente.",
-                    Riesgo.ALTO,
-                )
-            )
-            return
+        return
+    diferencia = formatear_soles(importe - objetivo)
+    if esperada.vencida and not esperada.mora:
         senales.append(
             _senal(
                 Capa.IA,
-                "MONTO_MAYOR",
-                f"El voucher paga {pagado} y la cuota es {cuota}. Si incluye una comisión, debe "
-                "figurar aparte en el voucher.",
+                "POSIBLE_MORA",
+                f"El voucher paga {pagado}, {diferencia} más que la cuota. Como la deuda está "
+                "vencida, puede ser mora: declárala con este voucher como prueba y, cuando tu "
+                "gerente la apruebe, registra el pago.",
                 Riesgo.ALTO,
             )
         )
+        return
+    senales.append(
+        _senal(
+            Capa.IA,
+            "MONTO_MAYOR",
+            f"El voucher paga {pagado} y la cuota es {total}{con_mora}. Si incluye una comisión, "
+            "debe figurar aparte en el voucher.",
+            Riesgo.ALTO,
+        )
+    )
 
 
 def _codigo(
@@ -340,6 +348,104 @@ def evaluar(
     _codigo(senales, datos, lectura, esperada)
     _contraste(senales, datos, lectura, esperada)
     return senales
+
+
+def evaluar_prueba_mora(
+    datos: DatosComprobante, lectura: Lectura, esperada: CuotaEsperada, hoy: date
+) -> list[Senal]:
+    """La prueba de una mora: un documento de la empresa o un voucher por más que la cuota, del
+    mismo código de pago. La mora declarada se compara al declararla."""
+    if not datos.es_comprobante:
+        return [
+            _senal(
+                Capa.IA,
+                "NO_ES_PRUEBA",
+                "Este archivo no muestra la deuda con mora ni su pago. Sube el documento de la "
+                "empresa con el monto con mora, o el voucher que la pagó.",
+                Riesgo.ALTO,
+            )
+        ]
+    if datos.moneda in (Moneda.DOLARES, Moneda.OTRA):
+        return [
+            _senal(
+                Capa.IA,
+                "OTRA_MONEDA",
+                "El monto no está en soles. Deconsta registra solo pagos en soles (PEN).",
+                Riesgo.ALTO,
+            )
+        ]
+    senales: list[Senal] = []
+    total = datos.total or datos.importe
+    if total is None:
+        senales.append(
+            _senal(
+                Capa.IA,
+                "SIN_IMPORTE",
+                "No pudimos leer el monto con la mora. Sube una foto en la que se vea el total.",
+                Riesgo.ALTO,
+            )
+        )
+    elif total <= esperada.importe:
+        senales.append(
+            _senal(
+                Capa.IA,
+                "SIN_MORA",
+                f"La prueba muestra {formatear_soles(total)}, no más que la cuota de "
+                f"{formatear_soles(esperada.importe)}: no prueba una mora.",
+                Riesgo.ALTO,
+            )
+        )
+    if datos.pagado_el and datos.pagado_el > hoy:
+        senales.append(
+            _senal(
+                Capa.IA,
+                "FECHA_FUTURA",
+                "La fecha de la prueba es posterior a hoy. Revisa que sea el documento correcto.",
+                Riesgo.ALTO,
+            )
+        )
+    _codigo(senales, datos, lectura, esperada)
+    if total is not None and total not in importes_en_texto(lectura.texto):
+        senales.append(
+            _senal(
+                Capa.IA,
+                "IMPORTE_NO_CONFIRMADO",
+                "El monto que leímos no aparece tal cual en el texto de la prueba.",
+                Riesgo.MEDIO,
+            )
+        )
+    if datos.empresa and esperada.empresa and not mismo_nombre(datos.empresa, esperada.empresa):
+        senales.append(
+            _senal(
+                Capa.IA,
+                "EMPRESA_DISTINTA",
+                "La empresa de la prueba no parece la que emitió el documento de la deuda.",
+                Riesgo.MEDIO,
+            )
+        )
+    return senales
+
+
+def mora_de_la_prueba(datos: DatosComprobante, cuota: Decimal) -> Decimal | None:
+    """La mora que muestra la prueba: la que figura aparte o, si no, lo que excede a la cuota."""
+    if datos.mora:
+        return datos.mora
+    total = datos.total or datos.importe
+    return total - cuota if total and total > cuota else None
+
+
+def comparar_mora(datos: DatosComprobante, cuota: Decimal, declarada: Decimal) -> Senal | None:
+    mora = mora_de_la_prueba(datos, cuota)
+    if mora == declarada:
+        return None
+    leida = formatear_soles(mora) if mora else "otra"
+    return _senal(
+        Capa.IA,
+        "MORA_NO_COINCIDE",
+        f"La mora declarada ({formatear_soles(declarada)}) no coincide con la de la prueba "
+        f"({leida}).",
+        Riesgo.MEDIO,
+    )
 
 
 def senal_repetido() -> Senal:

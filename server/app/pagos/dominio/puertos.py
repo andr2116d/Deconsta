@@ -14,7 +14,7 @@ from app.documentos.dominio.bloqueos import Bloqueo
 from app.documentos.dominio.modelos import Lectura, TipoArchivo
 from app.documentos.dominio.puertos import RepositorioCuentas, RepositorioDocumentos
 from app.notificaciones.dominio.puertos import RepositorioNotificaciones
-from app.pagos.dominio.modelos import Comprobante, DatosComprobante, Pago
+from app.pagos.dominio.modelos import Comprobante, DatosComprobante, EstadoMora, Mora, Pago
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,13 @@ class RevisorComprobantes(Protocol):
     ) -> RevisionComprobante:
         """Lee el comprobante sin saber qué cuota dice pagar. Lanza ErrorRevision si el modelo no
         respondió o no dio una respuesta usable."""
+        ...
+
+    def revisar_prueba_mora(
+        self, contenido: bytes, tipo: TipoArchivo, lectura: Lectura
+    ) -> RevisionComprobante:
+        """Lee la prueba de una mora (un documento de cobro o un voucher) sin saber qué mora se
+        declarará. Lanza ErrorRevision como revisar_comprobante."""
         ...
 
 
@@ -55,6 +62,10 @@ class RepositorioComprobantes(Protocol):
         ...
 
     def operacion_usada(self, gerente_id: UUID, huella: bytes) -> bool: ...
+
+    def prueba_usada(self, gerente_id: UUID, huella: bytes) -> bool:
+        """Si un archivo con esa huella ya prueba una mora del espacio."""
+        ...
 
     def del_pago(self, pago_id: UUID) -> list[Comprobante]: ...
 
@@ -81,6 +92,31 @@ class RepositorioPagos(Protocol):
 
     def devoluciones(self, gerente_id: UUID) -> dict[tuple[UUID, int], str]:
         """El motivo de la última devolución de cada cuota que sigue por pagar."""
+        ...
+
+
+class RepositorioMoras(Protocol):
+    def agregar(self, mora: Mora) -> None:
+        """Lanza CuotaNoPagable("MORA_YA_DECLARADA") si la cuota ya tiene una mora vigente y
+        ComprobanteNoUsable("PRUEBA_YA_USADA") si la prueba ya respalda otra."""
+        ...
+
+    def por_id(self, mora_id: UUID, *, bloquear: bool = False) -> Mora | None: ...
+
+    def guardar(self, mora: Mora) -> None:
+        """Guarda el estado y la decisión del gerente."""
+        ...
+
+    def del_espacio(self, gerente_id: UUID, *, estado: EstadoMora | None = None) -> list[Mora]:
+        """Las más recientes primero."""
+        ...
+
+    def de_la_cuota(self, deuda_id: UUID, cuota: int) -> Mora | None:
+        """La vigente (por aprobar o aprobada) o, si no hay, la última rechazada."""
+        ...
+
+    def del_espacio_por_cuota(self, gerente_id: UUID) -> dict[tuple[UUID, int], Mora]:
+        """La de cada cuota, como en de_la_cuota."""
         ...
 
 
@@ -112,6 +148,9 @@ class UnidadPagos(Protocol):
 
     @property
     def pagos(self) -> RepositorioPagos: ...
+
+    @property
+    def moras(self) -> RepositorioMoras: ...
 
     @property
     def deudas(self) -> RepositorioDeudas: ...
