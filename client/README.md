@@ -1,73 +1,51 @@
 # client
 
-This template should help get you started developing with Vue 3 in Vite.
+Interfaz web de Deconsta: Vue 3, Vite, TypeScript, Pinia, Vue Router y Tailwind CSS 4.
 
-## Recommended IDE Setup
+## Estructura
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+El código se organiza por funcionalidades:
 
-## Recommended Browser Setup
+```txt
+src/
+  features/
+    acceso/          inicio de sesión y cambio de contraseña
+      api/             llamadas a la API
+      components/      formularios, medidor de seguridad y marco visual del acceso
+      composables/     lógica reutilizable (indicador de seguridad de la contraseña)
+      stores/          estado de la sesión (Pinia)
+      views/           pantallas enrutadas
+    proximamente/    pantalla temporal tras ingresar
+  shared/
+    api/             cliente HTTP y estructura común de errores
+    components/      componentes base (BaseBoton, BaseCampo, BaseAviso, MarcaDeconsta)
+  router/            rutas y guardas de navegación
+  assets/main.css    Tailwind y los tokens de la identidad (ciruela, rosa mineral, Manrope)
+```
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+Las pantallas siguen los prototipos de `DECONSTA/`. El frontend mejora la experiencia (validación
+de campos, indicador de seguridad, espera tras un 429), pero la autoridad es siempre el backend.
 
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## Desarrollo
 
 ```sh
 pnpm install
+pnpm dev          # http://localhost:5173; /api se reenvía a http://localhost:8000
 ```
 
-### Compile and Hot-Reload for Development
+La sesión viaja en una cookie HttpOnly y SameSite=Strict, así que la API debe servirse en el mismo
+origen: en desarrollo lo resuelve el proxy de Vite y en producción el proxy del despliegue.
+
+## Pruebas y validaciones
 
 ```sh
-pnpm dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
-pnpm build
-```
-
-### Run Unit Tests with [Vitest](https://vitest.dev/)
-
-```sh
-pnpm test:unit
-```
-
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
-
-```sh
-# Install browsers for the first run
-npx playwright install
-
-# When testing on CI, must build the project first
-pnpm build
-
-# Runs the end-to-end tests
-pnpm test:e2e
-# Runs the tests only on Chromium
-pnpm test:e2e --project=chromium
-# Runs the tests of a specific file
-pnpm test:e2e tests/example.spec.ts
-# Runs the tests in debug mode
-pnpm test:e2e --debug
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
+pnpm test:unit    # Vitest
+pnpm type-check
 pnpm lint
+pnpm test:e2e --project=chromium   # Playwright; requiere la API y Postgres en marcha
 ```
+
+Las pruebas de punta a punta crean cuentas nuevas con el comando del server
+(`app.acceso.infraestructura.cli`) en la base de desarrollo. Cada ejecución hace unos 14 ingresos
+desde la misma IP; el límite por defecto es de 20 por minuto, así que conviene esperar un minuto
+entre ejecuciones seguidas.
