@@ -46,6 +46,14 @@ from app.categorias.aplicacion.categorias import (
 from app.categorias.infraestructura.persistencia import UnidadCategoriasSql
 from app.core.config import Settings
 from app.core.database import crear_motor
+from app.notificaciones.aplicacion.notificaciones import (
+    ListarNotificaciones,
+    MarcarLeida,
+    MarcarTodasLeidas,
+)
+from app.notificaciones.dominio.puertos import SuscriptorAvisos
+from app.notificaciones.infraestructura.avisos_redis import SuscriptorRedis
+from app.notificaciones.infraestructura.persistencia import UnidadNotificacionesSql
 from app.reglas.aplicacion.reglas import (
     AgregarTitular,
     CambiarLimite,
@@ -126,6 +134,10 @@ class Contenedor:
     editar_titular: EditarTitular
     quitar_titular: QuitarTitular
     evaluar_documento: EvaluarDocumento
+    listar_notificaciones: ListarNotificaciones
+    marcar_leida: MarcarLeida
+    marcar_todas_leidas: MarcarTodasLeidas
+    suscriptor_avisos: SuscriptorAvisos
 
     @classmethod
     def crear(cls, config: Settings) -> "Contenedor":
@@ -163,6 +175,8 @@ class Contenedor:
             ),
             reloj,
         )
+
+        notificaciones = (lambda: UnidadNotificacionesSql(motor), reloj)
 
         return cls(
             config=config,
@@ -208,6 +222,10 @@ class Contenedor:
             editar_titular=EditarTitular(*reglas),
             quitar_titular=QuitarTitular(*reglas),
             evaluar_documento=EvaluarDocumento(*reglas),
+            listar_notificaciones=ListarNotificaciones(*notificaciones),
+            marcar_leida=MarcarLeida(*notificaciones),
+            marcar_todas_leidas=MarcarTodasLeidas(*notificaciones),
+            suscriptor_avisos=SuscriptorRedis(config.redis_url),
         )
 
     def cerrar(self) -> None:

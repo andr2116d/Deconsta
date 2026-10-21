@@ -15,6 +15,7 @@ from app.core.cuerpo import limitar_cuerpo
 from app.core.errores import registrar_manejadores
 from app.core.migraciones import aplicar_pendientes
 from app.core.registro import configurar_registro, crear_middleware_seguridad
+from app.notificaciones.infraestructura.http.errores import registrar_manejadores_notificaciones
 from app.reglas.infraestructura.http.errores import registrar_manejadores_reglas
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ def crear_app(config: Settings = settings, contenedor: Contenedor | None = None)
     registrar_manejadores_acceso(app)
     registrar_manejadores_categorias(app)
     registrar_manejadores_reglas(app)
+    registrar_manejadores_notificaciones(app)
     # Antes que el de seguridad: así un 413 también lleva sus cabeceras.
     limitar_cuerpo(app)
     app.middleware("http")(crear_middleware_seguridad(hsts=produccion))
