@@ -39,3 +39,72 @@ def test_las_respuestas_llevan_cabeceras_de_seguridad(cliente: TestClient) -> No
     respuesta = cliente.get("/health")
     assert respuesta.headers["x-content-type-options"] == "nosniff"
     assert respuesta.headers["x-frame-options"] == "DENY"
+
+
+INVISIBLES = "Quita los caracteres invisibles o de control que tiene este texto."
+
+
+@pytest.mark.parametrize("usuario", ["ro\x00sa", "rosa‮", "ro​sa"])
+def test_rechaza_caracteres_de_control_sin_llegar_a_la_base(
+    cliente: TestClient, usuario: str
+) -> None:
+    # El carácter nulo hacía fallar a Postgres con un error 500 antes de iniciar sesión.
+    respuesta = cliente.post(
+        "/api/v1/auth/login", json={"nombre_usuario": usuario, "contrasena": "Secreta123"}
+    )
+
+    assert respuesta.status_code == 422
+    assert respuesta.json()["fields"] == {"nombre_usuario": INVISIBLES}
+
+
+def test_rechaza_caracteres_de_control_en_textos_libres(
+    cliente: TestClient, equipo: Equipo
+) -> None:
+    from tests.test_categorias import sesion
+
+    gerente = sesion(cliente, equipo.gerente)
+    descripcion = gerente.post("/api/v1/categorias", json={"nombre": "Luz", "descripcion": "a\x00"})
+    motivo = gerente.post(
+        f"/api/v1/asistentes/{equipo.asistente.id}/bloqueo", json={"motivo": "Vacaciones‮"}
+    )
+
+    assert descripcion.json()["fields"] == {"descripcion": INVISIBLES}
+    assert motivo.json()["fields"] == {"motivo": INVISIBLES}
+
+
+def test_rechaza_un_cuerpo_demasiado_grande(cliente: TestClient) -> None:
+    grande = {"nombre_usuario": "a" * 70_000, "contrasena": "x"}
+    declarado = cliente.post("/api/v1/auth/login", json=grande)
+
+    def por_partes():
+        yield b'{"nombre_usuario": "'
+        for _ in range(80):
+            yield b"a" * 1024
+        yield b'"}'
+
+    sin_tamano = cliente.post(
+        "/api/v1/auth/login", content=por_partes(), headers={"Content-Type": "application/json"}
+    )
+
+    for respuesta in (declarado, sin_tamano):
+        assert respuesta.status_code == 413
+        assert respuesta.json()["code"] == "CUERPO_DEMASIADO_GRANDE"
+        assert respuesta.headers["x-content-type-options"] == "nosniff"
+
+
+def test_los_errores_de_la_base_no_registran_los_valores_de_la_consulta() -> None:
+    from app.core.database import crear_motor
+
+    assert crear_motor("postgresql+psycopg://u:p@localhost/x").hide_parameters is True
+
+
+def test_cerrar_sesion_borra_la_cookie_con_sus_mismos_atributos(
+    cliente: TestClient, equipo: Equipo
+) -> None:
+    from tests.test_contrasena_y_desbloqueo import ingresar
+
+    ingresar(cliente, equipo.gerente.usuario, equipo.gerente.contrasena)
+    cookie = cliente.post("/api/v1/auth/logout").headers["set-cookie"]
+
+    assert "Max-Age=0" in cookie
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Path=/api" in cookie
