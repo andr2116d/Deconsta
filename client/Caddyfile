@@ -1,0 +1,32 @@
+# Sirve la SPA y reenvía /api al server, todo en el mismo dominio: sin CORS y con la cookie
+# SameSite=Strict. Variables: DOMINIO (Caddy obtiene el certificado HTTPS solo) y API_UPSTREAM.
+{
+	admin off
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+
+	# API REST y el flujo de avisos (SSE): Caddy entrega los eventos sin acumularlos.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM} {
+			flush_interval -1
+		}
+	}
+
+	# Todo lo demás es la SPA; /docs y /openapi.json del server no se alcanzan desde fuera.
+	handle {
+		root * /srv
+		@recursos path /assets/*
+		header @recursos Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}
