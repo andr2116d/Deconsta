@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Altas, bloqueos, eliminaciones y recuperaciones de asistentes de un mismo gerente.
     limite_gestion_equipo: int = Field(default=30, ge=1)
     ventana_gestion_equipo_segundos: int = Field(default=3600, ge=1)
+    # Altas, ediciones, archivos y reactivaciones de categorías de un mismo gerente.
+    limite_gestion_categorias: int = Field(default=60, ge=1)
+    ventana_gestion_categorias_segundos: int = Field(default=3600, ge=1)
 
     @field_validator("clave_cifrado_datos", "clave_huella_datos")
     @classmethod

@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.acceso.infraestructura.http.errores import registrar_manejadores_acceso
 from app.api.v1 import router as api_v1
+from app.categorias.infraestructura.http.errores import registrar_manejadores_categorias
 from app.contenedor import Contenedor
 from app.core.config import Settings, settings
 from app.core.errores import registrar_manejadores
@@ -41,6 +42,7 @@ def crear_app(config: Settings = settings, contenedor: Contenedor | None = None)
     app.state.contenedor = contenedor
     registrar_manejadores(app)
     registrar_manejadores_acceso(app)
+    registrar_manejadores_categorias(app)
     app.middleware("http")(crear_middleware_seguridad(hsts=produccion))
     app.add_middleware(
         CORSMiddleware,
