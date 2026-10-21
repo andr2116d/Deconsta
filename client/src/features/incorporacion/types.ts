@@ -23,3 +23,6 @@ export interface DocumentoAceptado {
 export interface Espacio {
   disponible: boolean
 }
+
+/** Etapa de la bienvenida que se muestra: la decide la sesión que devuelve el backend. */
+export type Etapa = 'privacidad' | 'contrasena' | 'datos'

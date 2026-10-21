@@ -7,8 +7,11 @@ export interface Usuario {
   rol: Rol
 }
 
-/** Pasos obligatorios del primer ingreso. La contraseña temporal no es uno: solo se recuerda. */
-export type PasoPendiente = 'aceptar_documentos'
+/**
+ * Pasos obligatorios del primer ingreso, en orden. «completar_datos» solo lo tiene una asistente
+ * registrada (o recuperada) desde Mi equipo. La contraseña temporal no es un paso: se recuerda.
+ */
+export type PasoPendiente = 'aceptar_documentos' | 'completar_datos'
 
 export interface Sesion {
   usuario: Usuario
