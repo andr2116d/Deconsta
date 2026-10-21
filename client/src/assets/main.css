@@ -29,6 +29,12 @@
   --color-error: #a33b40;
   --color-error-fondo: #fcecee;
 
+  /* Acento del rol: ciruela para gerencia; asistencia lo cambia por eucalipto (ver abajo). La
+     marca sigue siempre en ciruela. */
+  --color-acento: #6b304f;
+  --color-acento-hover: #51233d;
+  --color-acento-suave: #f1dde7;
+
   --animate-aparecer: aparecer 220ms ease-out both;
   --animate-flotar: flotar 6s ease-in-out infinite;
   --animate-girar: girar 0.8s linear infinite;
@@ -54,6 +60,12 @@
 }
 
 @layer base {
+  [data-rol='asistente'] {
+    --color-acento: #365c4b;
+    --color-acento-hover: #254436;
+    --color-acento-suave: #e0eae3;
+  }
+
   html {
     /* El lienzo toma el color de la pantalla: en macOS e iOS el rebote al final del scroll lo
        deja ver, y con otro color aparecía una franja blanca. */
@@ -73,7 +85,7 @@
   }
 
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-ciruela;
+    @apply outline-2 outline-offset-2 outline-acento;
   }
 }
 

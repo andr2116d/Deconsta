@@ -60,7 +60,7 @@ defineExpose({ enfocar: () => entrada.value?.focus() })
       <button
         v-if="tipo === 'password'"
         type="button"
-        class="absolute inset-y-1 right-1 rounded-md px-2.5 text-[12px] font-bold text-ciruela hover:bg-rosa"
+        class="absolute inset-y-1 right-1 rounded-md px-2.5 text-[12px] font-bold text-acento hover:bg-acento-suave"
         :aria-pressed="visible"
         :aria-label="
           visible ? `Ocultar ${etiqueta.toLowerCase()}` : `Mostrar ${etiqueta.toLowerCase()}`
