@@ -16,7 +16,7 @@ const props = withDefaults(
     capitalizar?: boolean
     maximo?: number
     /** Teclado del móvil: numérico para documentos y celulares. */
-    modoEntrada?: 'text' | 'numeric' | 'tel' | 'email'
+    modoEntrada?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email'
     /** Texto fijo antes del valor, como el código del país (+51). */
     prefijo?: string
     /** Limpia lo escrito o pegado: lo que nunca sería válido no llega a escribirse. */
