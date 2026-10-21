@@ -102,7 +102,8 @@ def test_una_deuda_vencida_se_registra_en_varios_lugares_y_avisa_la_posible_mora
     )["deuda"]
     # El servidor cuenta los días en la zona del espacio, no en la del cliente.
     calendario = asistente.get(
-        f"{DEUDAS}/calendario", params={"desde": atrasada, "hasta": atrasada}
+        f"{DEUDAS}/calendario",
+        params={"desde": atrasada.isoformat(), "hasta": atrasada.isoformat()},
     ).json()
     vencida_hace = (date.fromisoformat(calendario["hoy"]) - atrasada).days
 

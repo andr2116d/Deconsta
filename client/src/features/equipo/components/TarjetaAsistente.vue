@@ -13,8 +13,10 @@ const props = withDefaults(
     ocupada: boolean
     /** Desde cuándo no puede registrar deudas por documentos repetidos; null si puede. */
     registroBloqueado?: string | null
+    /** Desde cuándo no puede registrar pagos por comprobantes que no correspondían; null si puede. */
+    pagosBloqueados?: string | null
   }>(),
-  { registroBloqueado: null },
+  { registroBloqueado: null, pagosBloqueados: null },
 )
 const emit = defineEmits<{
   bloquear: []
@@ -22,6 +24,7 @@ const emit = defineEmits<{
   eliminar: []
   restablecer: []
   'permitir-registro': []
+  'permitir-pagos': []
 }>()
 
 const nombre = computed(() => `${props.asistente.nombres} ${props.asistente.apellidos}`)
@@ -137,6 +140,26 @@ const ultimoIngreso = computed(() =>
         @click="emit('permitir-registro')"
       >
         Permitir registrar
+      </BaseBoton>
+    </div>
+    <div
+      v-if="pagosBloqueados"
+      class="mt-3 flex flex-col gap-3 rounded-lg bg-aviso-fondo p-3.5 text-[12px] text-aviso sm:flex-row sm:items-center"
+    >
+      <BaseIcono nombre="alerta" class="size-[18px] shrink-0" />
+      <p class="flex-1 leading-snug">
+        <strong class="block"
+          >No puede registrar pagos desde el {{ fecha.format(new Date(pagosBloqueados)) }}</strong
+        >
+        Subió 3 comprobantes que no correspondían a sus cuotas. Puede seguir trabajando en lo demás.
+      </p>
+      <BaseBoton
+        variante="secundario"
+        class="shrink-0"
+        :cargando="ocupada"
+        @click="emit('permitir-pagos')"
+      >
+        Permitir pagos
       </BaseBoton>
     </div>
 

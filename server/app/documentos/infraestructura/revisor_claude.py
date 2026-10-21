@@ -15,7 +15,7 @@ import logging
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 import anthropic
 from PIL import Image, ImageOps
@@ -104,6 +104,8 @@ sin nombres, documentos de identidad ni otros datos personales.
 """
 
 Esfuerzo = Literal["low", "medium", "high", "xhigh", "max"]
+# La salida estructurada que se pide: la de un documento o la de un comprobante de pago.
+Salida = TypeVar("Salida", bound=BaseModel)
 TipoIa = Literal[
     "recibo_servicio",
     "boleta",
@@ -150,7 +152,7 @@ class RespuestaIa(BaseModel):
     motivos: list[str]
 
 
-def _importe(valor: str | None) -> Decimal | None:
+def importe_de(valor: str | None) -> Decimal | None:
     if not valor or not re.fullmatch(r"\d{1,7}(\.\d{1,2})?", valor.strip()):
         return None
     try:
@@ -180,7 +182,7 @@ def datos_de(respuesta: RespuestaIa, categorias: list[CategoriaConocida]) -> Dat
     """Lo que devolvió el modelo, validado: un importe o una fecha mal formados se descartan."""
     cuotas = []
     for cuota in respuesta.cuotas[:MAXIMO_CUOTAS]:
-        vence, importe = _fecha(cuota.vence_el), _importe(cuota.importe)
+        vence, importe = _fecha(cuota.vence_el), importe_de(cuota.importe)
         if vence and importe and 1 <= cuota.numero <= MAXIMO_CUOTAS:
             cuotas.append(CuotaLeida(cuota.numero, vence, importe))
     nombres = {c.nombre for c in categorias}
@@ -197,7 +199,7 @@ def datos_de(respuesta: RespuestaIa, categorias: list[CategoriaConocida]) -> Dat
         codigo_pago=_texto(respuesta.codigo_pago, 40),
         numero_documento=_texto(respuesta.numero_documento, 40),
         periodo=_periodo(respuesta.periodo),
-        importe=_importe(respuesta.importe_total),
+        importe=importe_de(respuesta.importe_total),
         vence_el=_fecha(respuesta.vence_el),
         cuotas=tuple(cuotas) if respuesta.tipo_documento == "cronograma" else (),
         categoria=existente,
@@ -262,15 +264,28 @@ class RevisorClaude:
         lectura: Lectura,
         categorias: list[CategoriaConocida],
     ) -> RevisionIa:
+        respuesta = self.consultar(
+            INSTRUCCIONES, RespuestaIa, contenido, tipo, contexto_de(lectura, categorias)
+        )
+        return revision_de(respuesta, categorias)
+
+    def consultar(
+        self,
+        instrucciones: str,
+        esquema: type[Salida],
+        contenido: bytes,
+        tipo: TipoArchivo,
+        contexto: str,
+    ) -> Salida:
+        """El archivo y su contexto, con las instrucciones y la salida estructurada pedidas."""
         if self._cliente is None:
             logger.warning("Falta ANTHROPIC_API_KEY: la revisión con IA no se ejecuta")
             raise ErrorRevision("Sin clave de API")
-        contexto = contexto_de(lectura, categorias)
         try:
             respuesta = self._cliente.beta.messages.parse(
                 model=self._modelo,
                 max_tokens=16000,
-                system=INSTRUCCIONES,
+                system=instrucciones,
                 messages=[
                     {
                         "role": "user",
@@ -280,7 +295,7 @@ class RevisorClaude:
                         ],
                     }
                 ],
-                output_format=RespuestaIa,
+                output_format=esquema,
                 output_config={"effort": self._esfuerzo},
                 betas=[BETA_FALLBACK],
                 fallbacks="default",
@@ -295,4 +310,4 @@ class RevisorClaude:
         if respuesta.stop_reason == "refusal" or respuesta.parsed_output is None:
             logger.warning("La revisión con IA no devolvió datos (%s)", respuesta.stop_reason)
             raise ErrorRevision("Sin respuesta usable")
-        return revision_de(respuesta.parsed_output, categorias)
+        return respuesta.parsed_output

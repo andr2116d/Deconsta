@@ -2,10 +2,13 @@ export type TipoNotificacion =
   | 'DEUDA_POR_AUTORIZAR'
   | 'DEUDA_REGISTRADA'
   | 'REGISTRO_BLOQUEADO'
+  | 'PAGO_POR_VERIFICAR'
+  | 'REGISTRO_PAGOS_BLOQUEADO'
   | 'DEUDA_AUTORIZADA'
   | 'DEUDA_RECHAZADA'
   | 'DEUDA_ANULADA'
   | 'REGISTRO_DESBLOQUEADO'
+  | 'REGISTRO_PAGOS_DESBLOQUEADO'
 
 export interface Notificacion {
   id: string

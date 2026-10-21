@@ -4,6 +4,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import psycopg
 import pytest
@@ -40,6 +41,8 @@ from app.core.migraciones import aplicar_pendientes, conninfo  # noqa: E402
 from app.documentos.aplicacion.documentos import AnalizarDocumento  # noqa: E402
 from app.documentos.infraestructura.componentes import Componentes  # noqa: E402
 from app.main import crear_app  # noqa: E402
+from app.pagos.aplicacion.pagos import AnalizarComprobante  # noqa: E402
+from app.pagos.infraestructura.persistencia import UnidadPagosSql  # noqa: E402
 from tests.dobles import (  # noqa: E402
     AlmacenEnMemoria,
     ColaInmediata,
@@ -113,6 +116,7 @@ LIMITES_AMPLIOS = {
     "limite_gestion_reglas": 1000,
     "limite_subida_documentos": 1000,
     "limite_gestion_deudas": 1000,
+    "limite_gestion_pagos": 1000,
 }
 
 FabricaCliente = Callable[..., TestClient]
@@ -139,6 +143,7 @@ def crear_cliente(base: str, redis_limpio: Redis) -> Iterator[FabricaCliente]:
             almacen=dobles.almacen,
             lector=dobles.lector,
             revisor=dobles.revisor,
+            revisor_comprobantes=dobles.revisor,
             publicador=dobles.publicador,
         )
         dobles.cola.analizar = AnalizarDocumento(
@@ -151,7 +156,23 @@ def crear_cliente(base: str, redis_limpio: Redis) -> Iterator[FabricaCliente]:
             revisor=componentes.revisor,
             huellero=componentes.cifrador,
         )
-        contenedor = Contenedor.crear(config, componentes=componentes, cola=dobles.cola)
+        dobles.cola_comprobantes.analizar = AnalizarComprobante(
+            lambda: UnidadPagosSql(motor, componentes.cifrador),
+            ahora_utc,
+            componentes.publicador,
+            ZoneInfo(config.timezone),
+            almacen=componentes.almacen,
+            inspector=componentes.inspector,
+            lector=componentes.lector,
+            revisor=dobles.revisor,
+            huellero=componentes.cifrador,
+        )
+        contenedor = Contenedor.crear(
+            config,
+            componentes=componentes,
+            cola=dobles.cola,
+            cola_comprobantes=dobles.cola_comprobantes,
+        )
         contenedores.append(contenedor)
         app = crear_app(config, contenedor)
         app.state.dobles = dobles

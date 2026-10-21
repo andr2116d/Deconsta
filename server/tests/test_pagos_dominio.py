@@ -1,0 +1,131 @@
+from dataclasses import replace
+from datetime import date
+from decimal import Decimal
+
+import pytest
+
+from app.deudas.dominio.modelos import LugarPago
+from app.documentos.dominio.modelos import Lectura
+from app.pagos.dominio.confianza import CONFIANZA_MAXIMA, comprobaciones, confianza
+from app.pagos.dominio.modelos import (
+    AnalisisComprobante,
+    EstadoComprobante,
+    Moneda,
+    ResultadoComprobacion,
+)
+from app.pagos.dominio.reglas import (
+    CuotaEsperada,
+    cuenta_para_bloqueo,
+    estado_tras_analisis,
+    evaluar,
+)
+from tests.dobles import TEXTO_VOUCHER, VOUCHER
+
+HOY = date(2026, 10, 21)
+LECTURA = Lectura(TEXTO_VOUCHER, 0.97, 1)
+ESPERADA = CuotaEsperada(
+    importe=Decimal("182.40"),
+    codigo_pago="54871236",
+    empresa="Hidrandina S.A.",
+    titular="Valentina Ramos Díaz",
+    lugares=(LugarPago.AGENTE,),
+    registrada_el=date(2026, 10, 18),
+    vencida=False,
+)
+
+
+def revisar(
+    lectura: Lectura = LECTURA, esperada: CuotaEsperada = ESPERADA, **cambios: object
+) -> tuple[EstadoComprobante, set[str], bool]:
+    senales = evaluar(replace(VOUCHER, **cambios), lectura, esperada, HOY)  # type: ignore[arg-type]
+    estado = estado_tras_analisis(AnalisisComprobante(VOUCHER, tuple(senales)))
+    return estado, {s.codigo for s in senales}, cuenta_para_bloqueo(senales)
+
+
+def test_un_voucher_de_la_cuota_pasa_sin_reparos() -> None:
+    assert revisar() == (EstadoComprobante.LISTO, set(), False)
+
+
+def test_por_menos_que_la_cuota_solo_vale_en_un_agente_que_cobra_por_partes() -> None:
+    parte = Lectura(TEXTO_VOUCHER.replace("182.40", "100.00"), 0.97, 1)
+    assert revisar(parte, importe=Decimal("100.00")) == (
+        EstadoComprobante.LISTO,
+        {"PAGO_PARCIAL"},
+        False,
+    )
+    estado, codigos, cuenta = revisar(parte, importe=Decimal("100.00"), lugar=LugarPago.BILLETERA)
+    assert (estado, cuenta) == (EstadoComprobante.RECHAZADO, True)
+    assert "MONTO_MENOR" in codigos
+
+
+def test_por_mas_que_la_cuota_vencida_es_posible_mora_y_no_castiga() -> None:
+    vencida = replace(ESPERADA, vencida=True)
+    assert revisar(esperada=vencida, importe=Decimal("190.00")) == (
+        EstadoComprobante.RECHAZADO,
+        {"POSIBLE_MORA", "IMPORTE_NO_CONFIRMADO"},
+        False,
+    )
+    estado, codigos, cuenta = revisar(importe=Decimal("190.00"))
+    assert (estado, cuenta, "MONTO_MAYOR" in codigos) == (EstadoComprobante.RECHAZADO, True, True)
+
+
+@pytest.mark.parametrize(
+    ("pagado_el", "codigo"),
+    [(date(2026, 10, 22), "FECHA_FUTURA"), (date(2026, 10, 17), "FECHA_ANTERIOR_A_LA_DEUDA")],
+)
+def test_la_fecha_no_puede_ser_futura_ni_anterior_al_registro_de_la_deuda(
+    pagado_el: date, codigo: str
+) -> None:
+    estado, codigos, cuenta = revisar(pagado_el=pagado_el)
+    assert (estado, codigo in codigos, cuenta) == (EstadoComprobante.RECHAZADO, True, True)
+
+
+def test_otro_codigo_de_pago_se_rechaza_salvo_que_el_texto_traiga_el_de_la_deuda() -> None:
+    otra = Lectura(TEXTO_VOUCHER.replace("54871236", "99990000"), 0.97, 1)
+    estado, codigos, _ = revisar(lectura=otra, codigo_pago="99990000")
+    assert (estado, "CODIGO_DISTINTO" in codigos) == (EstadoComprobante.RECHAZADO, True)
+    # La IA leyó mal un dígito, pero el texto trae el suministro de la deuda: vale.
+    assert revisar(codigo_pago="54871286")[0] is EstadoComprobante.LISTO
+    # Un voucher que muestra el suministro con su dígito verificador también vale.
+    con_digito = Lectura(TEXTO_VOUCHER.replace("54871236", "54871236-0"), 0.97, 1)
+    assert revisar(lectura=con_digito, codigo_pago="54871236-0")[0] is EstadoComprobante.LISTO
+
+
+def test_lo_que_no_es_un_comprobante_en_soles_no_sirve() -> None:
+    assert revisar(es_comprobante=False)[:2] == (
+        EstadoComprobante.RECHAZADO,
+        {"NO_ES_COMPROBANTE"},
+    )
+    assert revisar(moneda=Moneda.DOLARES)[:2] == (EstadoComprobante.RECHAZADO, {"OTRA_MONEDA"})
+
+
+def test_sin_importe_o_sin_fecha_se_pide_otra_foto_sin_castigo() -> None:
+    assert revisar(importe=None)[0] is EstadoComprobante.ILEGIBLE
+    assert revisar(pagado_el=None)[0] is EstadoComprobante.ILEGIBLE
+
+
+def test_otro_lugar_otra_empresa_o_sin_operacion_pasan_con_menos_confianza() -> None:
+    estado, codigos, cuenta = revisar(
+        lugar=LugarPago.BILLETERA, empresa="Movistar", numero_operacion=None
+    )
+    assert (estado, cuenta) == (EstadoComprobante.LISTO, False)
+    assert codigos == {"LUGAR_NO_ACEPTADO", "EMPRESA_DISTINTA", "SIN_OPERACION"}
+
+
+def test_la_confianza_baja_con_cada_aviso_y_nunca_llega_a_cien() -> None:
+    def puntaje(**cambios: object) -> int:
+        datos = replace(VOUCHER, **cambios)  # type: ignore[arg-type]
+        senales = evaluar(datos, LECTURA, ESPERADA, HOY)
+        return confianza(comprobaciones([(datos, senales)], ESPERADA))
+
+    limpio = puntaje(titular="RAMOS DIAZ VALENTINA")
+    assert limpio == CONFIANZA_MAXIMA
+    # Sin titular en el voucher, ese criterio vale la mitad.
+    assert puntaje() < limpio
+    con_avisos = puntaje(lugar=LugarPago.BILLETERA, numero_operacion=None)
+    assert con_avisos < limpio
+    # Sin código en la deuda no se pudo comparar: la mitad de ese criterio.
+    sin_codigo = comprobaciones([(VOUCHER, [])], replace(ESPERADA, codigo_pago=None))
+    codigo = next(c for c in sin_codigo if c.codigo == "codigo_pago")
+    assert codigo.resultado is ResultadoComprobacion.SIN_DATO
+    assert confianza(sin_codigo) < limpio

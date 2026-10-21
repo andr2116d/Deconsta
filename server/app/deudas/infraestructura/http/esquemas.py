@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.acceso.infraestructura.http.esquemas import enmascarar, exigir
 from app.core.esquemas import Entrada
 from app.deudas.aplicacion.deudas import Calendario, DeudaConDetalle, NuevaDeuda, Vencimiento
-from app.deudas.dominio.modelos import Deuda, EstadoDeuda, LugarPago, MotivoEspera
+from app.deudas.dominio.modelos import Deuda, EstadoDeuda, EstadoPago, LugarPago, MotivoEspera
 from app.deudas.dominio.registro import CuotaEnviada
 from app.documentos.dominio.modelos import TipoDocumento
 from app.documentos.infraestructura.http.esquemas import DocumentoSalida
@@ -61,6 +61,8 @@ class CuotaSalida(BaseModel):
     numero: int
     vence_el: date
     importe: str
+    # El pago vigente de la cuota; null si falta pagarla.
+    pago: EstadoPago | None
 
 
 class RegistradaPor(BaseModel):
@@ -107,7 +109,9 @@ class DeudaSalida(BaseModel):
             importe=str(deuda.importe),
             vence_el=deuda.vence_el,
             cuotas=[
-                CuotaSalida(numero=c.numero, vence_el=c.vence_el, importe=str(c.importe))
+                CuotaSalida(
+                    numero=c.numero, vence_el=c.vence_el, importe=str(c.importe), pago=c.pago
+                )
                 for c in deuda.cuotas
             ],
             lugares_pago=list(deuda.lugares_pago),
@@ -151,6 +155,8 @@ class VencimientoSalida(BaseModel):
     cuota: int
     # Cuántas cuotas tiene la deuda: 1 en un recibo.
     cuotas: int
+    # El pago vigente de esta cuota; null si falta pagarla.
+    pago: EstadoPago | None
     registrada_por: str
 
     @classmethod
@@ -168,6 +174,7 @@ class VencimientoSalida(BaseModel):
             importe=str(cuota.importe),
             cuota=cuota.numero,
             cuotas=len(deuda.cuotas),
+            pago=cuota.pago,
             registrada_por=vencimiento.registrada_por,
         )
 

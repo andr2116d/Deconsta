@@ -29,26 +29,35 @@ const ICONOS: Record<Notificacion['tipo'], NombreIcono> = {
   DEUDA_POR_AUTORIZAR: 'escudo',
   DEUDA_REGISTRADA: 'documento',
   REGISTRO_BLOQUEADO: 'alerta',
+  PAGO_POR_VERIFICAR: 'archivo',
+  REGISTRO_PAGOS_BLOQUEADO: 'alerta',
   DEUDA_AUTORIZADA: 'check',
   DEUDA_RECHAZADA: 'cerrar',
   DEUDA_ANULADA: 'cerrar',
   REGISTRO_DESBLOQUEADO: 'check',
+  REGISTRO_PAGOS_DESBLOQUEADO: 'check',
 }
 
 /** El siguiente paso de cada aviso, según el rol. */
 function destino(n: Notificacion): { etiqueta: string; ruta: RouteLocationRaw } | null {
   const gerente = sesion.usuario?.rol === 'gerente'
+  if (gerente && n.tipo === 'PAGO_POR_VERIFICAR') {
+    return { etiqueta: 'Verificar el pago', ruta: { name: 'por-verificar' } }
+  }
   if (gerente && n.deuda_id) {
     return {
       etiqueta: 'Revisar la deuda',
       ruta: { name: 'por-autorizar', query: { deuda: n.deuda_id } },
     }
   }
-  if (gerente && n.tipo === 'REGISTRO_BLOQUEADO') {
+  if (gerente && (n.tipo === 'REGISTRO_BLOQUEADO' || n.tipo === 'REGISTRO_PAGOS_BLOQUEADO')) {
     return { etiqueta: 'Ir a Mi equipo', ruta: { name: 'equipo' } }
   }
   if (n.tipo === 'REGISTRO_DESBLOQUEADO') {
     return { etiqueta: 'Registrar una deuda', ruta: { name: 'registrar-deuda' } }
+  }
+  if (n.tipo === 'REGISTRO_PAGOS_DESBLOQUEADO') {
+    return { etiqueta: 'Ver lo que falta pagar', ruta: { name: 'pagos-por-completar' } }
   }
   return null
 }

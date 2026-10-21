@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.documentos.dominio.modelos import Lectura, TipoArchivo
 from app.documentos.dominio.puertos import CategoriaConocida, ErrorRevision, RevisionIa
@@ -26,6 +26,7 @@ from app.documentos.infraestructura.revisor_claude import (
     INSTRUCCIONES,
     Esfuerzo,
     RespuestaIa,
+    Salida,
     bloque_documento,
     contexto_de,
     revision_de,
@@ -34,12 +35,24 @@ from app.documentos.infraestructura.revisor_claude import (
 logger = logging.getLogger(__name__)
 
 ESPERA_SEGUNDOS = 180
-ESQUEMA = json.dumps(RespuestaIa.model_json_schema(), ensure_ascii=False)
+
+
+def esquema_de(modelo: type[BaseModel]) -> str:
+    return json.dumps(modelo.model_json_schema(), ensure_ascii=False)
+
+
+ESQUEMA = esquema_de(RespuestaIa)
 # La sesión de Claude Code es la que autoriza; una clave en el entorno la reemplazaría.
 VARIABLES_EXCLUIDAS = {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}
 
 
-def argumentos(comando: str, modelo: str, esfuerzo: Esfuerzo) -> list[str]:
+def argumentos(
+    comando: str,
+    modelo: str,
+    esfuerzo: Esfuerzo,
+    instrucciones: str = INSTRUCCIONES,
+    esquema: str = ESQUEMA,
+) -> list[str]:
     return [
         comando,
         "-p",
@@ -60,9 +73,9 @@ def argumentos(comando: str, modelo: str, esfuerzo: Esfuerzo) -> list[str]:
         "--disable-slash-commands",
         "--no-session-persistence",
         "--system-prompt",
-        INSTRUCCIONES,
+        instrucciones,
         "--json-schema",
-        ESQUEMA,
+        esquema,
     ]
 
 
@@ -91,13 +104,27 @@ class RevisorClaudeCode:
         lectura: Lectura,
         categorias: list[CategoriaConocida],
     ) -> RevisionIa:
+        respuesta = self.consultar(
+            INSTRUCCIONES, RespuestaIa, contenido, tipo, contexto_de(lectura, categorias)
+        )
+        return revision_de(respuesta, categorias)
+
+    def consultar(
+        self,
+        instrucciones: str,
+        esquema: type[Salida],
+        contenido: bytes,
+        tipo: TipoArchivo,
+        contexto: str,
+    ) -> Salida:
+        """El archivo y su contexto, con las instrucciones y la salida estructurada pedidas."""
         mensaje = {
             "type": "user",
             "message": {
                 "role": "user",
                 "content": [
                     bloque_documento(contenido, tipo),
-                    {"type": "text", "text": contexto_de(lectura, categorias)},
+                    {"type": "text", "text": contexto},
                 ],
             },
         }
@@ -105,7 +132,13 @@ class RevisorClaudeCode:
         try:
             with tempfile.TemporaryDirectory(prefix="deconsta-revision-") as carpeta:
                 proceso = subprocess.run(
-                    argumentos(self._comando, self._modelo, self._esfuerzo),
+                    argumentos(
+                        self._comando,
+                        self._modelo,
+                        self._esfuerzo,
+                        instrucciones,
+                        esquema_de(esquema),
+                    ),
                     input=json.dumps(mensaje) + "\n",
                     capture_output=True,
                     text=True,
@@ -128,8 +161,7 @@ class RevisorClaudeCode:
             logger.warning("Claude Code no completó la revisión: %s", detalle)
             raise ErrorRevision("Claude Code no completó la revisión")
         try:
-            respuesta = RespuestaIa.model_validate(resultado.get("structured_output"))
+            return esquema.model_validate(resultado.get("structured_output"))
         except ValidationError as error:
             logger.warning("Claude Code devolvió una revisión que no cumple el esquema")
             raise ErrorRevision("Respuesta fuera del esquema") from error
-        return revision_de(respuesta, categorias)

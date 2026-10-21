@@ -1,4 +1,4 @@
-import type { EstadoDeuda, LugarPago, TipoDocumento } from '@/features/deudas/types'
+import type { EstadoDeuda, EstadoPago, LugarPago, TipoDocumento } from '@/features/deudas/types'
 
 /** Día sin hora, «AAAA-MM-DD». */
 export type Dia = string
@@ -13,6 +13,8 @@ export interface Vencimiento {
   categoria_id: string | null
   tipo_documento: TipoDocumento
   lugares_pago: LugarPago[]
+  /** El pago vigente de esta cuota; null si falta pagarla. */
+  pago: EstadoPago | null
   estado: EstadoDeuda
   revision_pendiente: boolean
   vence_el: Dia

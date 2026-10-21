@@ -6,7 +6,14 @@ import pytest
 
 from app.acceso.dominio.modelos import Rol
 from app.deudas.dominio.errores import DeudaInvalida, TransicionInvalida
-from app.deudas.dominio.modelos import Cuota, Deuda, EstadoDeuda, LugarPago, MotivoEspera
+from app.deudas.dominio.modelos import (
+    Cuota,
+    Deuda,
+    EstadoDeuda,
+    EstadoPago,
+    LugarPago,
+    MotivoEspera,
+)
 from app.deudas.dominio.registro import (
     CuotaEnviada,
     DatosDeuda,
@@ -232,3 +239,42 @@ def test_una_deuda_vencida_cuenta_sus_dias_mientras_se_pueda_pagar() -> None:
     # Una anulada o rechazada ya no se paga: no está vencida.
     assert deuda(EstadoDeuda.ANULADA, vence_el=atrasada).vencida_hace(HOY) is None
     assert deuda(EstadoDeuda.RECHAZADA, vence_el=atrasada).vencida_hace(HOY) is None
+
+
+def cronograma(*pagos: EstadoPago | None) -> Deuda:
+    return Deuda(
+        id=uuid4(),
+        gerente_id=uuid4(),
+        registrada_por=uuid4(),
+        documento_id=uuid4(),
+        concepto="Préstamo",
+        categoria_id=None,
+        tipo_documento=TipoDocumento.CRONOGRAMA,
+        cuotas=tuple(
+            Cuota(i + 1, date(2026, 9 + i, 15), Decimal("350.00"), pago)
+            for i, pago in enumerate(pagos)
+        ),
+        lugares_pago=(LugarPago.AGENTE,),
+        titular_nombre=None,
+        titular_documento=None,
+        codigo_pago=None,
+        estado=EstadoDeuda.REGISTRADA,
+        creado_en=datetime(2026, 9, 1, tzinfo=UTC),
+    )
+
+
+def test_la_deuda_vencida_se_cuenta_desde_su_primera_cuota_sin_pagar() -> None:
+    assert cronograma(None, None).vencida_hace(HOY) == 36
+    # Pagada la de setiembre, la de octubre vence el 15: lleva 6 días.
+    assert cronograma(EstadoPago.CONFIRMADO, None).vencida_hace(HOY) == 6
+    assert cronograma(EstadoPago.CONFIRMADO, EstadoPago.POR_VERIFICAR).vencida_hace(HOY) is None
+
+
+def test_no_se_anula_una_deuda_con_un_pago_por_verificar_ni_una_ya_pagada() -> None:
+    with pytest.raises(TransicionInvalida, match="esperando tu verificación"):
+        cronograma(EstadoPago.POR_VERIFICAR, None).anular(uuid4(), datetime.now(UTC), "No")
+    with pytest.raises(TransicionInvalida, match="ya está pagada"):
+        cronograma(EstadoPago.CONFIRMADO).anular(uuid4(), datetime.now(UTC), "No")
+    pendiente = cronograma(EstadoPago.CONFIRMADO, None)
+    pendiente.anular(uuid4(), datetime.now(UTC), "Se canceló el préstamo")
+    assert pendiente.estado is EstadoDeuda.ANULADA

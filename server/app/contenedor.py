@@ -75,6 +75,19 @@ from app.notificaciones.aplicacion.notificaciones import (
 from app.notificaciones.dominio.puertos import SuscriptorAvisos
 from app.notificaciones.infraestructura.avisos_redis import SuscriptorRedis
 from app.notificaciones.infraestructura.persistencia import UnidadNotificacionesSql
+from app.pagos.aplicacion.pagos import (
+    ConsultarComprobante,
+    LeerComprobante,
+    LevantarBloqueoPagos,
+    ListarBloqueosPagos,
+    ListarPagos,
+    ListarPorPagar,
+    RegistrarPago,
+    SubirComprobante,
+)
+from app.pagos.dominio.puertos import ColaComprobantes
+from app.pagos.infraestructura.cola_celery import ColaComprobantesCelery
+from app.pagos.infraestructura.persistencia import UnidadPagosSql
 from app.reglas.aplicacion.reglas import (
     AgregarTitular,
     CambiarLimite,
@@ -173,6 +186,14 @@ class Contenedor:
     marcar_leida: MarcarLeida
     marcar_todas_leidas: MarcarTodasLeidas
     suscriptor_avisos: SuscriptorAvisos
+    listar_por_pagar: ListarPorPagar
+    subir_comprobante: SubirComprobante
+    consultar_comprobante: ConsultarComprobante
+    leer_comprobante: LeerComprobante
+    registrar_pago: RegistrarPago
+    listar_pagos: ListarPagos
+    listar_bloqueos_pagos: ListarBloqueosPagos
+    levantar_bloqueo_pagos: LevantarBloqueoPagos
 
     @classmethod
     def crear(
@@ -181,17 +202,19 @@ class Contenedor:
         *,
         componentes: Componentes | None = None,
         cola: ColaAnalisis | None = None,
+        cola_comprobantes: ColaComprobantes | None = None,
     ) -> "Contenedor":
-        """`componentes` y `cola` reemplazan los adaptadores de los documentos (las pruebas los
-        cambian por unos en memoria)."""
+        """`componentes` y las colas reemplazan los adaptadores de los documentos y de los
+        comprobantes (las pruebas los cambian por unos en memoria)."""
         motor = crear_motor(config.database_url)
         cifrador = CifradorDatos(config.clave_cifrado, config.clave_huella)
         redis = Redis.from_url(config.redis_url, socket_timeout=2, socket_connect_timeout=2)
         componentes = componentes or Componentes.crear(config, motor, redis)
-        if cola is None:
+        if cola is None or cola_comprobantes is None:
             from app.workers.celery_app import celery_app
 
-            cola = ColaCelery(celery_app)
+            cola = cola or ColaCelery(celery_app)
+            cola_comprobantes = cola_comprobantes or ColaComprobantesCelery(celery_app)
         limitador = LimitadorRedis(redis, cifrador)
         contrasenas = ProtectorArgon2()
         limites = limites_de(config)
@@ -238,6 +261,18 @@ class Contenedor:
             zona,
         )
         notificaciones = (lambda: UnidadNotificacionesSql(motor), reloj)
+        pagos = (
+            lambda: UnidadPagosSql(motor, cifrador),
+            reloj,
+            componentes.publicador,
+            limitador,
+            Limite(
+                "gestion_pagos",
+                config.limite_gestion_pagos,
+                config.ventana_gestion_pagos_segundos,
+            ),
+            zona,
+        )
 
         return cls(
             config=config,
@@ -313,6 +348,20 @@ class Contenedor:
             marcar_leida=MarcarLeida(*notificaciones),
             marcar_todas_leidas=MarcarTodasLeidas(*notificaciones),
             suscriptor_avisos=SuscriptorRedis(config.redis_url),
+            listar_por_pagar=ListarPorPagar(*pagos),
+            subir_comprobante=SubirComprobante(
+                *pagos,
+                almacen=componentes.almacen,
+                inspector=componentes.inspector,
+                huellero=componentes.cifrador,
+                cola=cola_comprobantes,
+            ),
+            consultar_comprobante=ConsultarComprobante(*pagos),
+            leer_comprobante=LeerComprobante(*pagos, almacen=componentes.almacen),
+            registrar_pago=RegistrarPago(*pagos),
+            listar_pagos=ListarPagos(*pagos),
+            listar_bloqueos_pagos=ListarBloqueosPagos(*pagos),
+            levantar_bloqueo_pagos=LevantarBloqueoPagos(*pagos),
         )
 
     def cerrar(self) -> None:

@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # Registros y decisiones sobre deudas de una misma cuenta.
     limite_gestion_deudas: int = Field(default=120, ge=1)
     ventana_gestion_deudas_segundos: int = Field(default=3600, ge=1)
+    # Subir comprobantes y registrar pagos: un pago por partes sube varios vouchers.
+    limite_gestion_pagos: int = Field(default=120, ge=1)
+    ventana_gestion_pagos_segundos: int = Field(default=3600, ge=1)
 
     @field_validator("clave_cifrado_datos", "clave_huella_datos", "clave_cifrado_archivos")
     @classmethod

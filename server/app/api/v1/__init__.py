@@ -7,6 +7,7 @@ from app.categorias.infraestructura.http.rutas import router as categorias
 from app.deudas.infraestructura.http.rutas import router as deudas
 from app.documentos.infraestructura.http.rutas import router as documentos
 from app.notificaciones.infraestructura.http.rutas import router as notificaciones
+from app.pagos.infraestructura.http.rutas import router as pagos
 from app.reglas.infraestructura.http.rutas import router as reglas
 
 router = APIRouter()
@@ -17,4 +18,5 @@ router.include_router(categorias)
 router.include_router(reglas)
 router.include_router(documentos)
 router.include_router(deudas)
+router.include_router(pagos)
 router.include_router(notificaciones)

@@ -21,6 +21,9 @@ export type LugarPago =
 
 export type EstadoDeuda = 'por_autorizar' | 'registrada' | 'rechazada' | 'anulada'
 
+/** El pago vigente de una cuota. */
+export type EstadoPago = 'por_verificar' | 'confirmado'
+
 export type MotivoEspera =
   'IMPORTE_SOBRE_LIMITE' | 'TITULAR_DISTINTO' | 'DOCUMENTO_DUDOSO' | 'DATOS_CORREGIDOS'
 
@@ -86,6 +89,8 @@ export interface Cuota {
   numero: number
   vence_el: string
   importe: string
+  /** Sin pago vigente, la cuota falta pagarse. */
+  pago: EstadoPago | null
 }
 
 export interface Deuda {

@@ -35,6 +35,11 @@ class RepositorioDeudas(Protocol):
         """Las más recientes primero."""
         ...
 
+    def por_pagar(self, gerente_id: UUID) -> list[Deuda]:
+        """Las registradas del espacio con alguna cuota sin pago vigente, las que vencen antes
+        primero."""
+        ...
+
     def con_vencimientos_entre(self, gerente_id: UUID, desde: date, hasta: date) -> list[Deuda]:
         """Las deudas vigentes (por autorizar o registradas) con alguna cuota que vence en el
         rango, ambos días incluidos."""
