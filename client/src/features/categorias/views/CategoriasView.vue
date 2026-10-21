@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 
 import { useSesionStore } from '@/features/acceso/stores/sesion'
 import { ErrorApi } from '@/shared/api/http'
@@ -112,17 +112,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <section aria-labelledby="titulo-seccion">
-    <header class="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+  <section aria-labelledby="titulo-categorias">
+    <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1
-          id="titulo-seccion"
-          tabindex="-1"
-          class="text-[26px] leading-tight font-extrabold tracking-[-0.03em] focus:outline-none sm:text-[32px]"
+        <h2
+          id="titulo-categorias"
+          class="text-[20px] leading-tight font-extrabold tracking-[-0.02em]"
         >
           Un lugar para cada gasto.
-        </h1>
-        <p class="mt-2 max-w-[60ch] text-[13px] text-secundario">
+        </h2>
+        <p class="mt-1.5 max-w-[60ch] text-[13px] text-secundario">
           Tus categorías ordenan las deudas para filtrarlas, resumirlas y exportarlas. Las comparte
           todo tu equipo.
         </p>
@@ -238,9 +237,9 @@ onMounted(() => {
             aria-labelledby="titulo-sugerencias"
             class="mt-6"
           >
-            <h2 id="titulo-sugerencias" class="text-[15px] font-extrabold">
+            <h3 id="titulo-sugerencias" class="text-[15px] font-extrabold">
               Sugerencias para empezar
-            </h2>
+            </h3>
             <p class="mt-1 text-[12px] text-secundario">
               Elige una para revisarla antes de crearla.
             </p>
@@ -267,18 +266,24 @@ onMounted(() => {
       <aside class="flex flex-col gap-4 self-start">
         <div class="rounded-[14px] border border-borde bg-white p-5">
           <BaseIcono nombre="documento" class="size-6 text-acento" />
-          <h2 class="mt-3 text-[15px] font-extrabold">Describe qué va en cada una.</h2>
+          <h3 class="mt-3 text-[15px] font-extrabold">Describe qué va en cada una.</h3>
           <p class="mt-1.5 text-[13px] text-secundario">
             Con la descripción, Deconsta podrá sugerir la categoría de cada recibo que subas. Al
             exportar las deudas, la categoría saldrá en su propia columna para filtrarla.
           </p>
         </div>
         <div class="rounded-[14px] bg-fondo p-5 text-[13px] text-secundario">
-          <h2 class="text-[15px] font-extrabold text-tinta">Límite de autorización</h2>
+          <h3 class="text-[15px] font-extrabold text-tinta">¿Y lo que necesita tu autorización?</h3>
           <p class="mt-1.5">
-            Pronto podrás definir aquí el importe en soles desde el que una deuda necesita tu
-            autorización.
+            El límite en soles y los titulares autorizados están en las reglas de autorización.
           </p>
+          <RouterLink
+            :to="{ name: 'configuracion' }"
+            class="mt-3 inline-flex min-h-8 items-center gap-1 text-[12px] font-bold text-acento hover:underline"
+          >
+            Ver reglas de autorización
+            <BaseIcono nombre="derecha" class="size-3.5" />
+          </RouterLink>
         </div>
       </aside>
     </div>

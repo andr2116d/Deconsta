@@ -38,6 +38,15 @@ describe('secciones del espacio', () => {
     ])
   })
 
+  it('agrupa las reglas y las categorías en las pestañas de Límites y categorías', () => {
+    const configuracion = rutasDelEspacio().find((r) => r.path === 'configuracion')
+    expect(configuracion?.children?.map((r) => [r.path, r.name])).toEqual([
+      ['', 'configuracion'],
+      ['categorias', 'categorias'],
+    ])
+    expect(etiquetas('gerente', 'cuenta').filter((e) => e === 'Categorías')).toEqual([])
+  })
+
   it('registrar asistente es una pantalla interna de Mi equipo, sin pestaña propia', () => {
     const pestanas = seccionesDe('gerente', 'pestana').map((s) => s.nombre)
     expect(pestanas).not.toContain('registrar-asistente')

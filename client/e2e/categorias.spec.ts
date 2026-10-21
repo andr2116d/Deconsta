@@ -15,7 +15,7 @@ async function entrarComoGerente(page: Page) {
   await page.request.post('/api/v1/documentos-legales/aceptacion', {
     data: { documentos: vigentes.map(({ tipo, version }) => ({ tipo, version })) },
   })
-  await page.goto('/configuracion')
+  await page.goto('/configuracion/categorias')
   await page.getByRole('button', { name: 'Ahora no' }).click()
 }
 
