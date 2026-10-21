@@ -1,10 +1,11 @@
 """Casos de uso de las categorías del espacio.
 
-El espacio es el del gerente: él crea, edita, archiva y reactiva sus categorías; sus asistentes solo
-consultan las activas. El espacio sale siempre de la sesión, nunca de lo que envía el cliente, y una
-categoría de otro espacio responde igual que una inexistente. Cada escritura toma la fila del
-gerente con FOR UPDATE, así el tope de categorías y la unicidad del nombre se comprueban sin
-carreras, y deja constancia en la auditoría.
+El espacio es el del gerente: él crea, edita, archiva y reactiva sus categorías; sus asistentes
+consultan las activas y también crean nuevas (al registrar una deuda que no encaja en ninguna),
+pero no las editan, archivan ni reactivan. El espacio sale siempre de la sesión, nunca de lo que
+envía el cliente, y una categoría de otro espacio responde igual que una inexistente. Cada
+escritura toma la fila del gerente con FOR UPDATE, así el tope de categorías y la unicidad del
+nombre se comprueban sin carreras, y deja constancia en la auditoría.
 """
 
 from dataclasses import dataclass
@@ -69,6 +70,11 @@ class _OperacionCategorias:
         exigir_cupo(self._limitador, (self._limite, str(sesion.usuario.id)))
         return sesion.usuario.id
 
+    def _exigir_cupo(self, sesion: SesionActiva) -> UUID:
+        """Cualquier cuenta del espacio, con su propio cupo de intentos."""
+        exigir_cupo(self._limitador, (self._limite, str(sesion.usuario.id)))
+        return espacio_de(sesion)
+
     @staticmethod
     def _bloquear(uow: UnidadCategorias, gerente_id: UUID) -> None:
         if not uow.categorias.bloquear_espacio(gerente_id):
@@ -125,7 +131,7 @@ class ListarCategorias(_OperacionCategorias):
 
 class CrearCategoria(_OperacionCategorias):
     def ejecutar(self, sesion: SesionActiva, nueva: NuevaCategoria) -> Categoria:
-        gerente_id = self._exigir_gerente(sesion)
+        gerente_id = self._exigir_cupo(sesion)
         with self._unidad() as uow:
             self._bloquear(uow, gerente_id)
             datos = DatosCategoria.crear(
