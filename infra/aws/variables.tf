@@ -11,11 +11,17 @@ variable "entorno" {
 variable "tipo_instancia" {
   description = "CPU dedicada (sin créditos que se agoten) para el OCR; 8 GB de memoria como mínimo."
   type        = string
-  default     = "c7i.xlarge"
+  default     = "c7i.2xlarge"
 }
 
 variable "ocr_concurrencia" {
-  description = "Archivos que el worker analiza a la vez: un proceso de PaddleOCR por cada uno."
+  description = "Documentos de deudas que se analizan a la vez: un proceso de PaddleOCR por cada uno."
+  type        = number
+  default     = 2
+}
+
+variable "pagos_concurrencia" {
+  description = "Vouchers de pago que se analizan a la vez, en su propio worker."
   type        = number
   default     = 2
 }

@@ -38,18 +38,30 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  # Documentos de deudas (cola ocr) y vouchers de pago (cola pagos), cada uno con su worker: un
+  # voucher nunca espera detrás de un recibo largo. Un proceso de PaddleOCR por archivo en curso.
   worker:
     image: deconsta-server
     restart: unless-stopped
     env_file: .env
-    environment:
+    environment: &entorno_worker
       MIGRAR_AL_INICIAR: "false"
       OCR_PRECARGAR: "true"
       FORKED_BY_MULTIPROCESSING: "1"
       PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
       HOME: /home/app
-    # Varios archivos a la vez: un proceso de PaddleOCR por cada uno (OCR_CONCURRENCIA en .env).
-    command: celery -A app.workers.celery_app:celery_app worker -Q ocr --concurrency=${OCR_CONCURRENCIA:-2} --loglevel=INFO
+    command: celery -A app.workers.celery_app:celery_app worker -n documentos@%h -Q ocr --concurrency=${OCR_CONCURRENCIA:-2} --loglevel=INFO
+    volumes:
+      - modelos_ocr:/home/app/.paddlex
+    depends_on:
+      server: { condition: service_started }
+
+  worker-pagos:
+    image: deconsta-server
+    restart: unless-stopped
+    env_file: .env
+    environment: *entorno_worker
+    command: celery -A app.workers.celery_app:celery_app worker -n pagos@%h -Q pagos --concurrency=${PAGOS_CONCURRENCIA:-2} --loglevel=INFO
     volumes:
       - modelos_ocr:/home/app/.paddlex
     depends_on:

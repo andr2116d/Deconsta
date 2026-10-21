@@ -64,19 +64,22 @@ locals {
   dominio = "${replace(aws_eip.web.public_ip, ".", "-")}.sslip.io"
 
   entorno = templatefile("${path.module}/plantillas/env.tftpl", {
-    dominio           = local.dominio
-    postgres          = random_password.postgres.result
-    clave_datos       = random_bytes.clave_datos.base64
-    clave_huella      = random_bytes.clave_huella.base64
-    clave_archivos    = random_bytes.clave_archivos.base64
-    region            = var.region
-    bucket            = aws_s3_bucket.archivos.id
-    s3_access_key     = aws_iam_access_key.aplicacion.id
-    s3_secret_key     = aws_iam_access_key.aplicacion.secret
-    anthropic_api_key = var.anthropic_api_key
-    ocr_concurrencia  = var.ocr_concurrencia
-    # Los núcleos de la instancia repartidos entre los procesos del worker.
-    ocr_hilos = max(1, floor(data.aws_ec2_instance_type.web.default_vcpus / var.ocr_concurrencia))
+    dominio            = local.dominio
+    postgres           = random_password.postgres.result
+    clave_datos        = random_bytes.clave_datos.base64
+    clave_huella       = random_bytes.clave_huella.base64
+    clave_archivos     = random_bytes.clave_archivos.base64
+    region             = var.region
+    bucket             = aws_s3_bucket.archivos.id
+    s3_access_key      = aws_iam_access_key.aplicacion.id
+    s3_secret_key      = aws_iam_access_key.aplicacion.secret
+    anthropic_api_key  = var.anthropic_api_key
+    ocr_concurrencia   = var.ocr_concurrencia
+    pagos_concurrencia = var.pagos_concurrencia
+    # Los núcleos de la instancia repartidos entre los procesos de los dos workers.
+    ocr_hilos = max(1, floor(
+      data.aws_ec2_instance_type.web.default_vcpus / (var.ocr_concurrencia + var.pagos_concurrencia)
+    ))
   })
 }
 
