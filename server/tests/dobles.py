@@ -3,12 +3,15 @@ Claude. La base, Redis y el cifrado son los reales."""
 
 import io
 from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+from typing import Protocol
 from uuid import UUID
 
 from PIL import Image, ImageDraw
 from pypdf import PdfWriter
 
-from app.documentos.aplicacion.documentos import AnalizarDocumento
+from app.deudas.dominio.modelos import LugarPago
 from app.documentos.dominio.modelos import DatosLeidos, Lectura, TipoArchivo
 from app.documentos.dominio.puertos import (
     CategoriaConocida,
@@ -18,6 +21,8 @@ from app.documentos.dominio.puertos import (
 )
 from app.documentos.infraestructura.almacen_s3 import CifradorArchivos
 from app.notificaciones.dominio.modelos import Notificacion
+from app.pagos.dominio.modelos import DatosComprobante, Moneda
+from app.pagos.dominio.puertos import RevisionComprobante
 
 TEXTO_RECIBO = """HIDRANDINA S.A. RUC 20132023540
 RECIBO N. S001-00451236
@@ -26,6 +31,25 @@ Titular: VALENTINA RAMOS DIAZ
 Periodo: SETIEMBRE 2026
 Fecha de vencimiento: 28/10/2026
 TOTAL A PAGAR S/ 182.40"""
+
+TEXTO_VOUCHER = """AGENTE BCP - PAGO DE SERVICIOS
+HIDRANDINA S.A.
+Suministro: 54871236
+Nro. Operacion: 0458213
+Fecha: 21/10/2026 10:42
+Importe: S/ 182.40"""
+
+VOUCHER = DatosComprobante(
+    lugar=LugarPago.AGENTE,
+    medio="Agente BCP",
+    empresa="HIDRANDINA",
+    codigo_pago="54871236",
+    numero_operacion="0458213",
+    pagado_el=date(2026, 10, 21),
+    moneda=Moneda.SOLES,
+    importe=Decimal("182.40"),
+    total=Decimal("182.40"),
+)
 
 
 class AlmacenEnMemoria:
@@ -64,6 +88,20 @@ class RevisorDePrueba:
     falla: bool = False
     revisiones: int = 0
     categorias: list[CategoriaConocida] = field(default_factory=list)
+    # Lo que lee de un comprobante de pago.
+    comprobante: DatosComprobante = VOUCHER
+    veredicto_comprobante: str = "autentico"
+    comprobantes_revisados: int = 0
+
+    def revisar_comprobante(
+        self, contenido: bytes, tipo: TipoArchivo, lectura: Lectura
+    ) -> RevisionComprobante:
+        self.comprobantes_revisados += 1
+        if self.falla:
+            raise ErrorRevision("Sin conexión")
+        return RevisionComprobante(
+            self.legible, self.comprobante, self.veredicto_comprobante, self.motivos
+        )
 
     def revisar(
         self,
@@ -87,11 +125,15 @@ class PublicadorEnMemoria:
         self.avisos.append(notificacion)
 
 
+class Analizador(Protocol):
+    def ejecutar(self, identificador: UUID, /) -> object: ...
+
+
 class ColaInmediata:
-    """Analiza en el acto, como lo haría el worker. Pausada, deja los documentos «analizando»."""
+    """Analiza en el acto, como lo haría el worker. Pausada, deja los archivos «analizando»."""
 
     def __init__(self) -> None:
-        self.analizar: AnalizarDocumento | None = None
+        self.analizar: Analizador | None = None
         self.pausada = False
         self.pendientes: list[UUID] = []
 
@@ -110,6 +152,7 @@ class Dobles:
     revisor: RevisorDePrueba
     publicador: PublicadorEnMemoria
     cola: ColaInmediata
+    cola_comprobantes: ColaInmediata = field(default_factory=ColaInmediata)
 
 
 def imagen(semilla: int = 0, formato: str = "PNG") -> bytes:
