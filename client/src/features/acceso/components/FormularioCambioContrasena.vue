@@ -28,6 +28,13 @@ const { requisitos, puntaje, nivel } = useSeguridadContrasena(
   () => sesion.usuario?.nombre_usuario ?? '',
 )
 const escribiendo = computed(() => datos.contrasena_nueva.length > 0)
+// Se advierte mientras se escribe, antes de enviar. El backend también la rechaza
+// (CONTRASENA_REPETIDA), porque solo él conoce la contraseña guardada.
+const repetida = computed(
+  () => escribiendo.value && datos.contrasena_nueva === datos.contrasena_actual,
+)
+const MENSAJE_REPETIDA = 'La nueva contraseña debe ser distinta de la actual.'
+const errorNueva = computed(() => (repetida.value ? MENSAJE_REPETIDA : errores.contrasena_nueva))
 
 function validar(): boolean {
   errores.contrasena_actual = datos.contrasena_actual ? undefined : 'Ingresa tu contraseña actual.'
@@ -57,8 +64,12 @@ function mostrarError(error: unknown) {
     : error.message
 }
 
+function limpiar() {
+  Object.assign(datos, { contrasena_actual: '', contrasena_nueva: '', confirmacion: '' })
+}
+
 async function enviar() {
-  if (enviando.value) return
+  if (enviando.value || repetida.value) return
   aviso.value = null
   if (!validar()) return
   enviando.value = true
@@ -67,6 +78,7 @@ async function enviar() {
       contrasena_actual: datos.contrasena_actual,
       contrasena_nueva: datos.contrasena_nueva,
     })
+    limpiar()
     emit('cambiada')
   } catch (error) {
     mostrarError(error)
@@ -90,7 +102,7 @@ async function enviar() {
       etiqueta="Nueva contraseña"
       tipo="password"
       autocompletar="new-password"
-      :error="errores.contrasena_nueva"
+      :error="errorNueva"
     >
       <MedidorSeguridad
         :puntaje="puntaje"
@@ -112,7 +124,7 @@ async function enviar() {
     </BaseAviso>
 
     <div class="mt-4 flex flex-col gap-2">
-      <BaseBoton tipo="submit" ancho="completo" :cargando="enviando">
+      <BaseBoton tipo="submit" ancho="completo" :cargando="enviando" :deshabilitado="repetida">
         {{ enviando ? 'Guardando…' : 'Guardar contraseña' }}
       </BaseBoton>
       <BaseBoton
