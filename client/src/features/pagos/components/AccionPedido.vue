@@ -22,7 +22,7 @@ const props = defineProps<{
   concepto: string
   importe: string
   venceEl: string
-  pedido: PedidoResumen | null
+  pedido: Pick<PedidoResumen, 'id' | 'asistente' | 'nota'> | null
 }>()
 const emit = defineEmits<{ cambio: [] }>()
 

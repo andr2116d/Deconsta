@@ -101,6 +101,8 @@ from app.pagos.aplicacion.pagos import (
 from app.pagos.dominio.puertos import ColaComprobantes
 from app.pagos.infraestructura.cola_celery import ColaComprobantesCelery
 from app.pagos.infraestructura.persistencia import UnidadPagosSql
+from app.panel.aplicacion.panel import ConsultarPanel
+from app.panel.infraestructura.persistencia import UnidadPanelSql
 from app.reglas.aplicacion.reglas import (
     AgregarTitular,
     CambiarLimite,
@@ -220,6 +222,7 @@ class Contenedor:
     listar_pedidos: ListarPedidos
     consultar_historial: ConsultarHistorial
     exportar_historial: ExportarHistorial
+    consultar_panel: ConsultarPanel
 
     @classmethod
     def crear(
@@ -402,6 +405,7 @@ class Contenedor:
             listar_pedidos=ListarPedidos(*pagos),
             consultar_historial=ConsultarHistorial(*historial),
             exportar_historial=ExportarHistorial(*historial),
+            consultar_panel=ConsultarPanel(lambda: UnidadPanelSql(motor, cifrador), reloj, zona),
         )
 
     def cerrar(self) -> None:
