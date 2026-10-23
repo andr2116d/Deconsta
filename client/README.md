@@ -1,153 +1,190 @@
-# client
+<div align="center">
 
-Interfaz web de Deconsta: Vue 3, Vite, TypeScript, Pinia, Vue Router y Tailwind CSS 4.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../.github/assets/marca/logo-oscuro.svg">
+  <img alt="Deconsta" src="../.github/assets/marca/logo-claro.svg" height="56">
+</picture>
+
+### Client · interfaz web
+
+Vue 3 · TypeScript · Vite · Pinia · Vue Router · Tailwind CSS 4
+
+[Estructura](#estructura) ·
+[Identidad visual](#identidad-visual) ·
+[Espacio y pestañas](#espacio-y-pestañas) ·
+[Pantallas](#pantallas) ·
+[Desarrollo](#desarrollo) ·
+[Pruebas](#pruebas)
+
+</div>
+
+---
+
+Una SPA con dos experiencias sobre la misma base: **gerencia** decide y **asistencia** ejecuta. El
+frontend mejora la experiencia (validación mientras se escribe, prellenado desde el documento,
+avisos en tiempo real, espera tras un 429), pero **la autoridad es siempre el backend**: cada
+pantalla muestra junto al campo lo que la API responde.
+
+<img src="../.github/assets/capturas/asistencia-registro-de-deuda.webp" alt="Registro de una deuda desde su documento">
 
 ## Estructura
 
-El código se organiza por funcionalidades:
+El código se organiza **por funcionalidad**, no por tipo de archivo. Cada carpeta de `features/`
+trae lo suyo: `api/`, `components/`, `composables/`, `stores/`, `views/`, `types.ts` y
+`__tests__/`.
 
 ```txt
 src/
   features/
-    acceso/          inicio de sesión y cambio de contraseña
-      api/             llamadas a la API
-      components/      formularios, medidor de seguridad y marco visual del acceso
-      composables/     lógica reutilizable (indicador de seguridad de la contraseña)
-      stores/          estado de la sesión (Pinia)
-      views/           pantallas enrutadas
-    incorporacion/   primer ingreso: aceptación de términos y privacidad, la ventana de la
-                     contraseña temporal y, para una asistente nueva, la confirmación de sus datos
-    equipo/          Mi equipo: lista, registro, bloqueo, eliminación y recuperación de asistentes
-    categorias/      categorías del espacio: catálogo de colores, íconos y sugerencias
-    reglas/          reglas de autorización: límite en soles, titulares autorizados y su prueba
-    espacio/         espacio de trabajo: cabecera, pestañas por rol y tarjeta de la cuenta
-      layouts/         EspacioLayout, ruta padre de todas las secciones, y ConfiguracionLayout
-      secciones.ts     secciones de cada rol; de aquí salen rutas, pestañas y menú. Una sección con
-                       `pestana` es una pestaña de su página («Mi cuenta», «Límites y categorías»)
-      views/           EnDesarrolloView, lugar de cada sección mientras se construye
-    deudas/          registro de deudas desde su documento y la mesa «Por autorizar» del gerente
-      composables/     useAnalisisDocumento: sube el documento y espera su análisis
-      cuotas.ts        cuotas en céntimos y por mes, solo para llenar el formulario
-    notificaciones/  avisos guardados de la cuenta, su flujo en tiempo real (SSE) y la campana
-    cuenta/          Mi cuenta: datos personales, usuario y contraseña, rol y permisos, privacidad
-      layouts/         CuentaLayout: encabezado, pestañas y tarjeta lateral que se quedan al
-                       cambiar de pestaña
-      datos.ts         normalización igual a la del backend para detectar cambios reales
+    acceso/          inicio de sesión, contraseña y medidor de seguridad
+    incorporacion/   primer ingreso: términos y privacidad, contraseña temporal y confirmación de datos
+    espacio/         cabecera, pestañas por rol, tarjeta de la cuenta y secciones.ts
+    panel/           Resumen de la gerencia y Mi jornada de la asistencia
+    deudas/          registro desde el documento, cuotas y la mesa «Por autorizar»
+    pagos/           por pagar, vouchers, verificación, moras y pedidos de pago
+    calendario/      vencimientos por día, mes y próximos 14 días
+    historial/       filtros, auditoría por deuda y exportación CSV
+    notificaciones/  avisos guardados, flujo SSE y campana
+    equipo/          alta, bloqueo, restablecimiento y eliminación de asistentes
+    reglas/          límite en soles, titulares autorizados y su prueba
+    categorias/      catálogo de colores e íconos, sugerencias y archivado
+    cuenta/          datos personales, usuario y contraseña, permisos y privacidad
   shared/
     api/             cliente HTTP y estructura común de errores
-    validaciones/    filtros y avisos de DNI, carné, celular, correo y nombres
-    composables/     copiar al portapapeles y limpiar el error de un campo al editarlo
-    components/      componentes base (BaseBoton, BaseCampo, BaseAviso, BaseDialogo, BaseIcono,
-                     BaseAvatar, MarcaDeconsta, CampoDocumento, DialogoFalloGuardado)
+    validaciones/    DNI, carné, celular, correo y nombres (mismas reglas que el backend)
+    composables/     copiar al portapapeles, limpiar el error de un campo al editarlo
+    components/      BaseBoton, BaseCampo, BaseAviso, BaseDialogo, BaseIcono, BaseAvatar,
+                     MarcaDeconsta, CampoDocumento, DialogoFalloGuardado
   router/            rutas y guardas de navegación
-  assets/main.css    Tailwind y los tokens de la identidad (ciruela, rosa mineral, Manrope)
+  assets/main.css    Tailwind y los tokens de la identidad
 ```
 
-Tras ingresar, la guarda lleva a `/bienvenida` mientras la sesión tenga `pasos_pendientes` (la
-aceptación de los documentos vigentes). Con la contraseña temporal (`debe_cambiar_contrasena`), el
-espacio abre una ventana cerrable en cada ingreso; cerrarla la pospone hasta el siguiente ingreso y
-la tarjeta de la cuenta la sigue recordando.
+## Identidad visual
+
+Los tokens viven en `src/assets/main.css` como variables de Tailwind 4 (`@theme`), así que se usan
+como clases (`bg-ciruela`, `text-tinta`, `border-borde`).
+
+| Token                       | Color                                                                                                                                                                                                                         | Uso                             |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `ciruela`                   | ![#6B304F](https://img.shields.io/badge/%20-%20-6B304F?style=flat-square) `#6B304F`                                                                                                                                           | Marca y acento de la gerencia   |
+| `eucalipto` (acento)        | ![#365C4B](https://img.shields.io/badge/%20-%20-365C4B?style=flat-square) `#365C4B`                                                                                                                                           | Acento de la asistencia         |
+| `rosa`                      | ![#F1DDE7](https://img.shields.io/badge/%20-%20-F1DDE7?style=flat-square) `#F1DDE7`                                                                                                                                           | Fondos suaves del acento        |
+| `tinta`                     | ![#302330](https://img.shields.io/badge/%20-%20-302330?style=flat-square) `#302330`                                                                                                                                           | Texto principal                 |
+| `fondo`                     | ![#F7F5F7](https://img.shields.io/badge/%20-%20-F7F5F7?style=flat-square) `#F7F5F7`                                                                                                                                           | Fondo de la aplicación          |
+| `exito` · `aviso` · `error` | ![#286849](https://img.shields.io/badge/%20-%20-286849?style=flat-square) ![#885D16](https://img.shields.io/badge/%20-%20-885D16?style=flat-square) ![#A33B40](https://img.shields.io/badge/%20-%20-A33B40?style=flat-square) | Estados, con su fondo `*-fondo` |
+
+- **Tipografía:** Manrope variable (200–800), servida desde `public/fonts/` con su licencia OFL.
+- **El acento sigue al rol:** `data-rol` en `<html>` cambia `--color-acento` a eucalipto para la asistencia. La marca siempre es ciruela.
+- **La marca:** dos trazos inclinados de distinto largo, una obligación y su comprobación (`MarcaDeconsta.vue`). Los SVG del logotipo, el banner y los íconos están en [`.github/assets/marca/`](../.github/assets/marca/).
+- **Íconos de la app:** `favicon.svg`, `favicon.ico` (16/32/48), `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` e `icon-maskable-512.png`, declarados en `site.webmanifest`.
 
 ## Espacio y pestañas
 
-Cada rol tiene sus pestañas: gerencia (Resumen, Por autorizar, Por verificar, Calendario,
-Historial, Mi equipo) y asistencia (Mi jornada, Pagos por completar, Mis registros, Calendario).
-Registrar deuda es una acción de la cabecera, y los datos de la cuenta viven en la tarjeta que se
-abre desde el avatar. Para agregar o mover una sección se edita `features/espacio/secciones.ts`;
-al construirla, se le asigna su `vista` y deja de usar `EnDesarrolloView`. Ocultar una sección a un rol solo ordena
-la interfaz: el backend autoriza cada operación.
-El acento de color sigue al rol (`data-rol` en `<html>`): ciruela para gerencia y eucalipto para
-asistencia; la marca siempre es ciruela.
+| Gerencia                                                                                 | Asistencia                                                    |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Resumen · Por autorizar · Por verificar · Por pagar · Calendario · Historial · Mi equipo | Mi jornada · Pagos por completar · Mis registros · Calendario |
 
-## Mi equipo
+**Registrar deuda** es una acción de la cabecera y los datos de la cuenta viven en la tarjeta que se
+abre desde el avatar. `features/espacio/secciones.ts` es la única fuente de las secciones de cada
+rol: de ahí salen las rutas, las pestañas y el menú. Para agregar una, se declara ahí con su `vista`;
+mientras se construye usa `EnDesarrolloView`. Una sección con `pestana` es una pestaña dentro de
+su página («Mi cuenta», «Límites y categorías»).
 
-Solo para gerencia. «Registrar asistente» (`/equipo/nueva`) es una pantalla interna que mantiene
-marcada la pestaña Mi equipo. El gerente escribe nombres, apellidos, celular y documento (el cargo
-es opcional) y elige o deja generar el usuario y la contraseña; al crear, una ventana los muestra
-una sola vez para copiarlos. Si esa persona ya fue eliminada del equipo, se ofrece recuperar su
-cuenta o crear otra. Cada asistente se puede bloquear (con motivo), desbloquear, eliminar y
-restablecer su contraseña (la temporal nueva se muestra una sola vez para copiarla); las acciones
-actualizan la lista al momento.
+**Guardas.** Tras ingresar, la guarda lleva a `/bienvenida` mientras la sesión tenga
+`pasos_pendientes` (aceptar los documentos vigentes o, para una asistente nueva, confirmar sus
+datos). Con la contraseña temporal (`debe_cambiar_contrasena`), el espacio abre una ventana cerrable
+en cada ingreso que la tarjeta de la cuenta sigue recordando.
 
-En su primer ingreso, la asistente acepta las políticas, puede cambiar su contraseña o posponerlo
-y, como paso obligatorio, confirma sus datos (completa su correo y revisa lo que registró su
-gerente). Hasta entonces no entra a su espacio.
+## Pantallas
 
-## Límites y categorías
+<details open>
+<summary><b>Registrar deuda</b></summary>
+<br>
 
-Solo para gerencia, desde el menú de la cuenta. Es una página con dos pestañas.
+El documento (foto o PDF de hasta 10 MB) se suelta o se elige, se muestra tal cual y se sube;
+mientras el backend lo analiza, `useAnalisisDocumento` consulta su estado. «Lo que comprobamos»
+resume las capas del análisis y si el documento ya respalda otra deuda.
 
-**Reglas de autorización** (`/configuracion`):
+- **Ilegible, alterado o repetido:** no se llenan datos. El repetido dice en qué deuda se usó y, al tercer intento de la asistente, que su registro quedó en pausa hasta que su gerente lo permita.
+- **Listo:** el formulario llega prellenado y todo se corrige a mano. «Se paga en cuotas» abre las cuotas de un cronograma, con un generador mensual y cada cuota editable (`cuotas.ts` trabaja en céntimos). Si el análisis sugiere una categoría nueva, se crea ahí mismo.
+- **Varios lugares de pago:** se marcan todos los que acepta la empresa; el voucher deberá ser de uno de ellos.
+- Si la asistente corrige el importe o el código de pago, se le avisa que la deuda esperará autorización.
 
-- El límite en soles se escribe como en Perú («2,900.50»): la coma separa los miles y un aviso dice
-  cómo se guardará. «Guardar límite» solo se activa con un importe distinto; «Quitar límite» pide
-  confirmación.
-- Los titulares autorizados (tu esposa, tu empresa) llevan nombre, relación y documento opcional
-  (DNI, carné o RUC), y exigen confirmar que esa persona te autorizó. El documento solo se ve
-  enmascarado. Tú apareces siempre como titular reconocido.
-- «Prueba tus reglas» envía un importe y un titular de ejemplo, y muestra si esperaría tu
-  autorización y por qué, con la evaluación del backend.
+</details>
 
-**Categorías** (`/configuracion/categorias`): el gerente crea categorías desde cero o a partir de una sugerencia (agua, luz, tarjetas…), con nombre,
-descripción opcional (qué recibos van ahí), color e ícono, y ve una vista previa. Puede editarlas,
-archivarlas con un motivo y reactivarlas desde «Archivadas». El formulario avisa mientras se
-escribe si el nombre es muy corto o ya existe, y no deja escribir signos inválidos; el backend
-vuelve a validar todo y su respuesta (por ejemplo, un nombre repetido de una categoría archivada,
-con la opción de reactivarla) se muestra junto al campo.
+<details>
+<summary><b>Por autorizar y Por verificar</b></summary>
+<br>
 
-## Registrar deuda
+Mesas de decisión de la gerencia: lista a la izquierda y detalle a la derecha. Cada deuda muestra su
+documento (descargado con la sesión, sin enlaces públicos), las comprobaciones, los motivos y lo
+corregido frente a lo leído. Cada pago muestra el voucher, lo leído, la **confianza** con su anillo y
+los diez criterios con su resultado. Rechazar, anular y devolver piden un motivo.
 
-Se llega desde la acción de la cabecera. El documento (foto o PDF de hasta 10 MB) se suelta o se
-elige, se muestra tal cual y se sube; mientras el backend lo analiza, la pantalla consulta su
-estado. «Lo que comprobamos» resume las tres capas (lectura, revisión del contenido y archivo
-original) y si el documento ya respalda otra deuda.
+<img src="../.github/assets/capturas/gerencia-por-verificar.webp" alt="Verificación de un pago">
 
-- Ilegible, con señales de alteración (de una asistente) o repetido: no se llenan datos. El
-  repetido dice en qué deuda se usó y, al tercer intento de la asistente, que su registro quedó en
-  pausa hasta que su gerente lo permita desde Mi equipo.
-- Listo: el formulario llega prellenado con lo leído y todo se corrige a mano. «Se paga en cuotas»
-  abre las cuotas de un cronograma, con un generador mensual y cada cuota editable. Si el análisis
-  sugiere una categoría nueva, se crea ahí mismo o se deja en «Otros».
-- Si la asistente corrige el importe o el código de pago, se le avisa que su gerente deberá
-  autorizar la deuda. El backend decide y su respuesta se muestra junto a cada campo.
+</details>
 
-## Por autorizar y notificaciones
+<details>
+<summary><b>Pagos, moras y pedidos</b></summary>
+<br>
 
-Solo para gerencia. Lista lo que espera su autorización y lo que aguarda su visto bueno; cada deuda
-muestra su documento (descargado con la sesión, sin enlaces públicos), las comprobaciones, los
-motivos y lo corregido frente a lo leído. Rechazar y anular piden un motivo.
+«Pagos por completar» separa lo vencido de lo que viene. Registrar un pago sube uno o varios
+vouchers (un agente puede cobrar por partes), espera su análisis y, si la lectura falla, permite
+escribir los datos a mano (`VoucherAMano`), con la confianza limitada. Una cuota vencida que se pagó
+con más se declara como mora con su prueba. El gerente puede **pedir** a una asistente que pague una
+cuota concreta, con una nota, y retirar el pedido.
 
-Las notificaciones se guardan en el backend. Al entrar al espacio se abre su flujo de eventos:
-cada aviso nuevo recarga la lista, la campana muestra cuántos faltan leer y un aviso en pantalla lo
-anuncia sin quitar el foco. Las pantallas que dependen de los avisos (Por autorizar) se refrescan
-solas. La asistente ve y crea categorías desde el menú de su cuenta («Categorías»).
+</details>
 
-## Validación de datos personales
+<details>
+<summary><b>Calendario e historial</b></summary>
+<br>
 
-`shared/validaciones/persona.ts` filtra lo que se escribe o pega y avisa lo que falta mientras se
-escribe: DNI de 8 dígitos, carné de 9 a 12 letras o dígitos, celular peruano de 9 dígitos que
-empieza con 9 (con +51 fijo), correo con usuario, @ y dominio con extensión, y nombres solo con
-letras. El backend aplica las mismas reglas y es la autoridad.
+El calendario muestra cada cuota en su día, con totales del mes, lo vencido y lo que espera
+autorización, y se navega con el teclado. El historial filtra por texto, estado, categoría, fechas,
+lugar, quién registró y quién pagó, despliega la auditoría de cada deuda y exporta CSV.
 
-## Mi cuenta
+<img src="../.github/assets/capturas/historial-auditoria.webp" alt="Auditoría en el historial">
 
-Se abre desde la tarjeta del avatar. Sus cuatro pestañas (`/cuenta`, `/cuenta/acceso`,
-`/cuenta/permisos` y `/cuenta/privacidad`) son rutas hijas de `CuentaLayout`, así que cambiar de
-pestaña no recarga los datos. Los datos viven en el store `cuenta`; al guardar, la tarjeta lateral,
-la cabecera y el menú se actualizan sin recargar.
+</details>
 
-- «Guardar» solo se activa con un cambio real: se compara con la misma normalización del backend.
-- El número de documento no se cambia. Pasar de DNI a carné de extranjería pide dos advertencias
-  al elegirlo y una confirmación final al guardar.
-- Cambiar el correo, el documento o el usuario pide la contraseña actual. El usuario se cambia
-  hasta 3 veces por mes y el cupo restante está a la vista.
-- La nueva contraseña igual a la actual se advierte mientras se escribe.
-- Si un guardado falla, una ventana explica qué pasó y qué campos revisar; reintentar solo se
-  ofrece cuando el fallo no depende de los datos.
-- `/cambiar-contrasena` redirige a la pestaña de usuario y contraseña.
+<details>
+<summary><b>Notificaciones en tiempo real</b></summary>
+<br>
 
-Las pantallas siguen los prototipos de `DECONSTA/`. El frontend mejora la experiencia (validación
-de campos, indicador de seguridad, espera tras un 429), pero la autoridad es siempre el backend.
+Al entrar al espacio se abre un `EventSource` a `/api/v1/notificaciones/flujo`. Cada aviso nuevo
+recarga la lista, la campana muestra cuántos faltan leer y un aviso en pantalla lo anuncia sin
+quitar el foco. Las pantallas que dependen de los avisos (Por autorizar, Por verificar, el Resumen)
+se refrescan solas.
+
+</details>
+
+<details>
+<summary><b>Mi equipo, reglas y categorías</b></summary>
+<br>
+
+- **Mi equipo:** el gerente registra asistentes y elige o deja generar el usuario y la contraseña, que se muestran una sola vez para copiarlos. Si esa persona fue eliminada antes, se ofrece recuperar su cuenta.
+- **Reglas:** el límite se escribe como en Perú («2,900.50») y un aviso dice cómo se guardará. Los titulares autorizados exigen confirmar que esa persona lo autorizó y su documento solo se ve enmascarado. «Prueba tus reglas» consulta la evaluación del backend sin guardar nada.
+- **Categorías:** desde cero o desde una sugerencia, con color, ícono y vista previa; se archivan con motivo y se reactivan.
+
+</details>
+
+<details>
+<summary><b>Mi cuenta y validaciones</b></summary>
+<br>
+
+Cuatro pestañas (`/cuenta`, `/cuenta/acceso`, `/cuenta/permisos`, `/cuenta/privacidad`) hijas de
+`CuentaLayout`: cambiar de pestaña no recarga los datos.
+
+- «Guardar» solo se activa con un cambio real: `datos.ts` normaliza igual que el backend.
+- Cambiar el correo, el documento o el usuario pide la contraseña actual. El usuario se cambia hasta 3 veces por mes y el cupo restante está a la vista.
+- Si un guardado falla, una ventana explica qué pasó; reintentar solo se ofrece cuando el fallo no depende de los datos.
+
+`shared/validaciones/persona.ts` filtra lo que se escribe o pega: DNI de 8 dígitos, carné de 9 a 12
+caracteres, celular peruano de 9 dígitos que empieza con 9, correo y nombres solo con letras.
+
+</details>
 
 ## Desarrollo
 
@@ -156,20 +193,29 @@ pnpm install
 pnpm dev          # http://localhost:5173; /api se reenvía a http://localhost:8000
 ```
 
-La sesión viaja en una cookie HttpOnly y SameSite=Strict, así que la API debe servirse en el mismo
-origen: en desarrollo lo resuelve el proxy de Vite y en producción el proxy del despliegue.
+La sesión viaja en una cookie `HttpOnly` y `SameSite=Strict`, así que la API debe servirse en el
+mismo origen: en desarrollo lo resuelve el proxy de Vite y en producción Caddy (`Caddyfile`), que
+también sirve los estáticos con caché inmutable y entrega el flujo SSE sin acumularlo.
 
-## Pruebas y validaciones
+| Comando           | Qué hace                                                                 |
+| ----------------- | ------------------------------------------------------------------------ |
+| `pnpm dev`        | Servidor de desarrollo con recarga en caliente                           |
+| `pnpm build`      | Revisión de tipos y construcción para producción                         |
+| `pnpm type-check` | `vue-tsc` sobre toda la aplicación                                       |
+| `pnpm lint`       | oxlint y ESLint con corrección automática (la CI no admite advertencias) |
+| `pnpm format`     | Prettier sobre `src/`                                                    |
+
+## Pruebas
 
 ```sh
-pnpm test:unit    # Vitest
-pnpm type-check
-pnpm lint
-pnpm test:e2e --project=chromium   # Playwright; requiere la API y Postgres en marcha
+pnpm test:unit                       # Vitest + Vue Test Utils (jsdom)
+pnpm test:e2e --project=chromium     # Playwright; requiere la API y Postgres en marcha
 ```
 
-`e2e/deudas.spec.ts` además necesita el worker de la cola ocr (`pnpm worker:ocr`). Las pruebas de
-punta a punta crean cuentas nuevas con el comando del server
-(`app.acceso.infraestructura.cli`) en la base de desarrollo. La suite completa hace más de 20
-ingresos desde la misma IP y el límite por defecto es de 20 por minuto: al ejecutarla entera, la
-última prueba puede recibir 429. Conviene correr los archivos por separado o esperar un minuto.
+- **Unitarias:** cada funcionalidad trae sus pruebas en `__tests__/`. La CI exige 70 % de cobertura de líneas.
+- **De punta a punta:** `e2e/` crea cuentas nuevas con el comando del server y prueba flujos completos entre dos navegadores (la asistente registra, la gerencia autoriza en tiempo real). `e2e/deudas.spec.ts` necesita además el worker (`pnpm worker:ocr`).
+
+> [!NOTE]
+> La suite e2e completa hace más de 20 ingresos desde la misma IP y el límite por defecto es de 20
+> por minuto: la última prueba puede recibir 429. Conviene correr los archivos por separado o
+> esperar un minuto.
