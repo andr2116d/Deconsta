@@ -296,13 +296,11 @@ cuenta bancario y una app móvil para la asistencia.
 
 ## Equipo
 
-Proyecto desarrollado en la Universidad Privada Antenor Orrego (UPAO), Trujillo, Perú.
-
-| | Rol |
+| Integrante | GitHub |
 |---|---|
-| **[Johel Andreé Vargas Villanueva](https://github.com/andr2116d)** | Desarrollo principal: arquitectura, backend, frontend, análisis de documentos, diseño de la interfaz e infraestructura |
-| **[Hrid Arav Sigüeñas Loja](https://github.com/Hrid1402)** | Desarrollo |
-| **Nicolás Romero Castillo** | Desarrollo |
+| **Johel Andreé Vargas Villanueva** | [@andr2116d](https://github.com/andr2116d) |
+| **Hrid Arav Sigüeñas Loja** | [@Hrid1402](https://github.com/Hrid1402) |
+| **Nicolás Romero Castillo** | [@nicF17](https://github.com/nicF17) |
 
 ## Licencia
 
